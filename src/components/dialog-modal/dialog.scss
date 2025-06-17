@@ -1,0 +1,143 @@
+// .upumi-modal,
+// .upumi-overlay {
+//   width: 100vw;
+//   height: 100vh;
+//   top: 0;
+//   left: 0;
+//   right: 0;
+//   bottom: 0;
+//   position: fixed;
+//   z-index: 1000;
+// }
+
+// .upumi-overlay {
+//   background: rgba(78, 78, 78, 0.8);
+// }
+
+// .upumi-modal-content {
+//   position: absolute;
+//   top: 50%;
+//   left: 50%;
+//   transform: translate(-50%, -50%);
+//   line-height: 1.4;
+//   background: var(--white);
+//   padding: 20px;
+//   border-radius: 8px;
+//   max-width: 90%; // More responsive approach
+//   width: 600px; // Default width
+//   min-width: 280px; // Slightly smaller min-width for very small devices
+//   box-shadow: rgba(0, 0, 0, 0.19) 0px 10px 20px, rgba(0, 0, 0, 0.23) 0px 6px 6px;
+//   z-index: 1000;
+  
+//   .upumi-modal-heading {
+//     color: var(--dark-blue);
+//   }
+  
+//   p {
+//     color: #475467;
+//     margin-bottom: 0.5rem;
+//   }
+
+//   .upumi-close-modal-section {
+//     display: flex;
+//     align-items: center;
+//     justify-content: space-between;
+//     margin-bottom: 1rem;
+
+//     .upumi-event-card {
+//       display: flex;
+//       align-items: flex-start;
+//       gap: 1.5rem;
+      
+//       .upumi-event-image {
+//         width: 45%;
+//         border-radius: 0.75rem;
+//         img {
+//           width: 100%;
+//           height: auto;
+//           border-radius: 0.625rem;
+//           object-fit: cover;
+//         }
+//       }
+
+//       .upumi-event-details {
+//         width: 55%;
+//         h3 {
+//           font-weight: 600;
+//           font-size: 1.5rem;
+//           line-height: 1.75rem;
+//           color: var(--black);
+//           margin-bottom: 1rem;
+//         }
+
+//         p {
+//           font-family: Montserrat;
+//           font-weight: 450;
+//           font-size: 0.9375rem;
+//           line-height: 1.375rem;
+//           color: var(--black);
+//           text-align: left;
+//         }
+//       }
+//     }
+//   }
+
+//   .upumi-close-modal {
+//     background: transparent;
+//     border: none;
+//     font-size: 1.5rem;
+//     cursor: pointer;
+//     position: absolute;
+//     top: 0.5rem;
+//     right: 0.5rem;
+//     color: #666;
+//     transition: color 0.2s;
+    
+  //   &:hover {
+  //     color: #333;
+  //   }
+  // }
+
+//   // Responsive adjustments
+//   @media (max-width: 768px) {
+//     width: 90%;
+//     padding: 1.5rem;
+    
+//     .upumi-close-modal-section {
+//       .upumi-event-card {
+//         flex-direction: column;
+//         gap: 1rem;
+        
+//         .upumi-event-image,
+//         .upumi-event-details {
+//           width: 100%;
+//         }
+        
+//         .upumi-event-image {
+//           margin-top: 0;
+//         }
+//       }
+//     }
+//   }
+
+//   @media (max-width: 480px) {
+//     padding: 1rem;
+    
+//     .upumi-close-modal-section {
+//       .upumi-event-card {
+//         .upumi-event-details {
+//           h3 {
+//             font-size: 1.25rem;
+//             line-height: 1.5rem;
+//             margin-bottom: 0.75rem;
+//           }
+          
+//           p {
+//             font-size: 0.875rem;
+//             line-height: 1.25rem;
+//           }
+//         }
+//       }
+//     }
+//   }
+// }

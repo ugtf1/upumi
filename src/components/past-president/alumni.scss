@@ -1,0 +1,88 @@
+.alumni-section{
+    width: 100%;
+
+    .alumni-container{
+        max-width: 700px;
+        width: 100%;
+        margin: 0 auto;
+        text-align: center;
+        margin-top: 5rem;
+        padding-top: 4rem;
+        @media(max-width:786px){
+            margin-top: 2rem;
+        }
+        .alumni-title{
+            font-weight: 600;
+            font-size: 48px;
+            font-family: sans-serif;
+            margin-bottom: 1rem;
+            color: #003E53;
+           
+            span{
+                color:var(--green);
+            }
+            @media(max-width:786px){
+                font-size: 28px;
+                margin-top: 3rem;
+            }
+        }
+        .alumni-text{
+            font-family: Inter;
+            font-weight: 400;
+            font-size: 20px;
+            line-height: 30px;
+            letter-spacing: 0%;
+            text-align: center;
+            color:#475467;
+
+        }
+        
+    }
+    .past-president-section{
+        width: 100%;
+        padding: 0 4rem;
+        margin-top: 3rem;
+        .card-title{
+            font-family: Montserrat;
+            font-weight: 700;
+            font-size: 48px;
+            line-height: 100%;
+            letter-spacing: 0%;
+            color: #052D3B;
+            margin-bottom: 0.80rem;
+            @media (max-width:786px){
+                font-size: 25px;
+            }
+        }
+        @media(max-width:786px){
+            padding: 0.34rem;
+        }
+        .past-container{
+            display: grid;
+            grid-template-columns: repeat(4,1fr);
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            @media(max-width:786px){
+                grid-template-columns: 1fr;
+            }
+            .past-image{
+                margin: 0 auto;
+                border-radius: 20px;
+                object-fit: cover;
+                width: 100%;
+                margin-top: 2rem;
+            }
+            .title-name{
+                color: #101828;
+                font-weight: 600;
+                font-size: 20px;
+            }
+            .text-year{
+            color: #175CD3;
+            font-size: 18px;
+            font-family: inter;
+            }
+        }
+    }
+}
