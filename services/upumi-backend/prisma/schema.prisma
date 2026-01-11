@@ -1,0 +1,71 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(USER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberRecord MemberRecord?
+}
+
+model MemberRecord {
+  id        String   @id @default(cuid())
+  // If a user claims/links this record, we connect it here.
+  userId    String?  @unique
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  status    String?
+  title     String?
+  firstName String?
+  lastName  String?
+  joined    String?
+  phone     String?
+  email     String?  @unique
+  whatsapp  String?
+  facebook  String?
+
+  // Quick access membership fields (kept denormalized for speed)
+  goodStanding String?
+  financialGoodStanding String?
+  voter     String?
+  insurance String?
+  attendancePct String?
+
+  // Everything else from the workbook row lives here to preserve fidelity.
+  rawJson   Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  monthlyDues MonthlyDue[]
+}
+
+model MonthlyDue {
+  id             String   @id @default(cuid())
+  memberRecordId String
+  member         MemberRecord @relation(fields: [memberRecordId], references: [id], onDelete: Cascade)
+
+  year   Int
+  month  Int // 1-12
+  present Boolean?
+  duesPaid Decimal? @db.Numeric(12,2)
+
+  createdAt DateTime @default(now())
+
+  @@unique([memberRecordId, year, month])
+}
