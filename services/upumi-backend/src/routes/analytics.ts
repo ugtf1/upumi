@@ -76,7 +76,7 @@ export async function analyticsRoutes(app: FastifyInstance) {
 
     const duesSeries = MONTH_NAMES.map((name, idx) => {
       const m = idx + 1;
-      const md = member.monthlyDues.find(d => d.month === m);
+      const md = member.monthlyDues.find((d: { month: number }) => d.month === m);
       return {
         month: name,
         present: md?.present ?? null,
@@ -165,7 +165,7 @@ export async function analyticsRoutes(app: FastifyInstance) {
 
     const duesByMonth = MONTH_NAMES.map((name, idx) => {
       const m = idx + 1;
-      const found = duesAgg.find(a => a.month === m);
+      const found = duesAgg.find((a: { month: number }) => a.month === m);
       const sum = found?._sum?.duesPaid as any;
       const total = sum ? (sum.toNumber?.() ?? Number(sum)) : 0;
       return {

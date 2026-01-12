@@ -63,7 +63,7 @@ model MonthlyDue {
   year   Int
   month  Int // 1-12
   present Boolean?
-  duesPaid Decimal? @db.Numeric(12,2)
+  duesPaid Decimal? @db.Decimal(12,2)
 
   createdAt DateTime @default(now())
 

@@ -68,11 +68,11 @@ export async function trafficRoutes(app: FastifyInstance) {
 
     if (p === "plausible") {
       // KPIs
-      const agg = await plausibleFetch("/stats/aggregate", { site_id: siteId, period, metrics: "visitors,pageviews,visit_duration,bounce_rate" });
+      const agg: any = await plausibleFetch("/stats/aggregate", { site_id: siteId, period, metrics: "visitors,pageviews,visit_duration,bounce_rate" });
       // Timeseries (visitors/pageviews per day)
-      const ts = await plausibleFetch("/stats/timeseries", { site_id: siteId, period, metrics: "visitors,pageviews" });
+      const ts: any = await plausibleFetch("/stats/timeseries", { site_id: siteId, period, metrics: "visitors,pageviews" });
       // Top pages
-      const pages = await plausibleFetch("/stats/breakdown", { site_id: siteId, period, property: "event:page", metrics: "pageviews", limit: "10" });
+      const pages: any = await plausibleFetch("/stats/breakdown", { site_id: siteId, period, property: "event:page", metrics: "pageviews", limit: "10" });
 
       return {
         provider: "plausible",

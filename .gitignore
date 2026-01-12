@@ -25,3 +25,5 @@ tmp*
 *.sln
 *.sw?
 .qodo
+.vite/
+web/.vite/
