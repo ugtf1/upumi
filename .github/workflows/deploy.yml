@@ -2,7 +2,7 @@ name: UPUMI CI/CD to Cloud Run (web + api) - path filtered
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
     paths:
       - "web/**"
       - "services/upumi-backend/**"
@@ -127,6 +127,10 @@ jobs:
           service: ${{ env.API_SERVICE_NAME }}
           region: ${{ env.REGION }}
           image: ${{ steps.build_api.outputs.image }}
+          flags: >
+            --add-cloudsql-instances=${{ env.PROJECT_ID }}:${{ env.REGION }}:upumi-postgres
+            --set-env-vars=NODE_ENV=production,PORT=8080
+            --set-secrets=DATABASE_URL=UPUMI_DATABASE_URL:latest,JWT_SECRET=UPUMI_JWT_SECRET:latest,ADMIN_BOOTSTRAP_SECRET=UPUMI_ADMIN_BOOTSTRAP_SECRET:latest,DB_PASSWORD=UPUMI_DB_PASSWORD:latest
           wait: true
 
       - name: Fetch API URL
