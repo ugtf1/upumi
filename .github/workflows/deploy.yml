@@ -31,8 +31,10 @@ jobs:
           filters: |
             web:
               - 'web/**'
+              - '.github/workflows/deploy.yml'
             api:
               - 'services/upumi-backend/**'
+              - '.github/workflows/deploy.yml'
 
   # 1) Build + Deploy WEB (only if web changed)
   deploy-web:
