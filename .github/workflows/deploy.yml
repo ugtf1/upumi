@@ -129,7 +129,7 @@ jobs:
           image: ${{ steps.build_api.outputs.image }}
           flags: >
             --add-cloudsql-instances=${{ env.PROJECT_ID }}:${{ env.REGION }}:upumi-postgres
-            --set-env-vars=NODE_ENV=production,PORT=8080
+            --set-env-vars=NODE_ENV=production
             --set-secrets=DATABASE_URL=UPUMI_DATABASE_URL:latest,JWT_SECRET=UPUMI_JWT_SECRET:latest,ADMIN_BOOTSTRAP_SECRET=UPUMI_ADMIN_BOOTSTRAP_SECRET:latest,DB_PASSWORD=UPUMI_DB_PASSWORD:latest
           wait: true
 
