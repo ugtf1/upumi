@@ -10,7 +10,7 @@ This backend adds:
 ## Tech choices (fast + simple)
 - Fastify (high-perf Node API)
 - Prisma ORM + PostgreSQL
-- JWT auth
+- JWT(JSON Web Token) auth
 - CSV import script (idempotent upserts)
 
 ## Quickstart (local)
