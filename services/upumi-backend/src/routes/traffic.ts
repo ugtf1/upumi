@@ -1,6 +1,6 @@
 
 import { FastifyInstance } from "fastify";
-import { requireAuth } from "../services/auth";
+import { requireAuth } from '../services/auth.js';
 
 type Provider = "plausible" | "umami" | "none";
 
