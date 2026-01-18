@@ -133,7 +133,8 @@ jobs:
             --add-cloudsql-instances=${{ env.PROJECT_ID }}:${{ env.REGION }}:upumi-postgres
             --set-env-vars=NODE_ENV=production
             --set-secrets=DATABASE_URL=UPUMI_DATABASE_URL:latest,JWT_SECRET=UPUMI_JWT_SECRET:latest,ADMIN_BOOTSTRAP_SECRET=UPUMI_ADMIN_BOOTSTRAP_SECRET:latest,DB_PASSWORD=UPUMI_DB_PASSWORD:latest
-          wait: true
+            --allow-unauthenticated          
+            wait: true
 
       - name: Fetch API URL
         id: urls
