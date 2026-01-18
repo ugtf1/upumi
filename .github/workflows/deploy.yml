@@ -14,9 +14,6 @@ env:
   PROJECT_NUMBER: 30228073381
   REGION: us-east1
 
-  WIF_PROVIDER: projects/${{ env.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/ugtf-github-pool/providers/github-actions
-  DEPLOY_SA: github-runner-ugtf@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
-
   WEB_SERVICE_NAME: upumi
   API_SERVICE_NAME: upumi-api
 
@@ -57,8 +54,8 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           project_id: ${{ env.PROJECT_ID }}
-          workload_identity_provider: ${{ env.WIF_PROVIDER }}
-          service_account: ${{ env.DEPLOY_SA }}
+          workload_identity_provider: projects/${{ env.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/ugtf-github-pool/providers/github-actions
+          service_account: github-runner-ugtf@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
@@ -108,8 +105,8 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           project_id: ${{ env.PROJECT_ID }}
-          workload_identity_provider: ${{ env.WIF_PROVIDER }}
-          service_account: ${{ env.DEPLOY_SA }}
+          workload_identity_provider: projects/${{ env.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/ugtf-github-pool/providers/github-actions
+          service_account: github-runner-ugtf@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
@@ -135,7 +132,7 @@ jobs:
           flags: >
             --add-cloudsql-instances=${{ env.PROJECT_ID }}:${{ env.REGION }}:upumi-postgres
             --set-env-vars=NODE_ENV=production
-            --set-secrets=DATABASE_URL=UPUMI_DATABASE_URL:latest,JWT_SECRET=UPUMI_JWT_SECRET:latest,ADMIN_BOOTSTRAP_SECRET=UPUMI_ADMIN_BOOTSTRAP_SECRET:latest,DB_PASSWORD=UPUMI_DB_PASSWORD:latest        
+            --set-secrets=DATABASE_URL=UPUMI_DATABASE_URL:latest,JWT_SECRET=UPUMI_JWT_SECRET:latest,ADMIN_BOOTSTRAP_SECRET=UPUMI_ADMIN_BOOTSTRAP_SECRET:latest,DB_PASSWORD=UPUMI_DB_PASSWORD:latest
           wait: true
 
       - name: Fetch API URL
@@ -167,7 +164,7 @@ jobs:
           echo "❌ WEB did not become healthy"
           exit 1
 
-  # 2) Health check API (only if api deployed)
+  # 2) Health check API (only if api deployed) - AUTHENTICATED (no public allUsers)
   health-check-api:
     needs: deploy-api
     if: always() && needs.deploy-api.result == 'success'
@@ -180,8 +177,8 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           project_id: ${{ env.PROJECT_ID }}
-          workload_identity_provider: ${{ env.WIF_PROVIDER }}
-          service_account: ${{ env.DEPLOY_SA }}
+          workload_identity_provider: projects/${{ env.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/ugtf-github-pool/providers/github-actions
+          service_account: github-runner-ugtf@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
@@ -192,22 +189,18 @@ jobs:
         run: |
           API_URL="${{ needs.deploy-api.outputs.api_url }}"
           echo "Checking API at $API_URL/health (authenticated)..."
-
           for i in {1..12}; do
             TOKEN="$(gcloud auth print-identity-token)"
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
               -H "Authorization: Bearer $TOKEN" \
               "$API_URL/health")
-
             if [ "$STATUS" = "200" ]; then
               echo "✅ API healthy"
               exit 0
             fi
-
             echo "Waiting for API... status=$STATUS"
             sleep 5
           done
-
           echo "❌ API did not become healthy"
           exit 1
 
