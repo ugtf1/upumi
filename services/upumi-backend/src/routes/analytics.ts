@@ -1,7 +1,7 @@
 
 import { FastifyInstance } from "fastify";
-import { prisma } from "../services/prisma";
-import { requireAuth } from "../services/auth";
+import { prisma } from '../services/prisma.js';
+import { requireAuth } from '../services/auth.js';
 import { Decimal } from "@prisma/client/runtime/library";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
