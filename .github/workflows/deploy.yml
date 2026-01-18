@@ -132,8 +132,7 @@ jobs:
           flags: >
             --add-cloudsql-instances=${{ env.PROJECT_ID }}:${{ env.REGION }}:upumi-postgres
             --set-env-vars=NODE_ENV=production
-            --set-secrets=DATABASE_URL=UPUMI_DATABASE_URL:latest,JWT_SECRET=UPUMI_JWT_SECRET:latest,ADMIN_BOOTSTRAP_SECRET=UPUMI_ADMIN_BOOTSTRAP_SECRET:latest,DB_PASSWORD=UPUMI_DB_PASSWORD:latest
-            --allow-unauthenticated          
+            --set-secrets=DATABASE_URL=UPUMI_DATABASE_URL:latest,JWT_SECRET=UPUMI_JWT_SECRET:latest,ADMIN_BOOTSTRAP_SECRET=UPUMI_ADMIN_BOOTSTRAP_SECRET:latest,DB_PASSWORD=UPUMI_DB_PASSWORD:latest        
           wait: true
 
       - name: Fetch API URL
@@ -171,19 +170,35 @@ jobs:
     if: always() && needs.deploy-api.result == 'success'
     runs-on: ubuntu-latest
     steps:
-      - name: Health check API (/health)
+      - name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SA }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Health check API (/health) (authenticated)
         run: |
           API_URL="${{ needs.deploy-api.outputs.api_url }}"
-          echo "Checking API at $API_URL/health..."
+          echo "Checking API at $API_URL/health (authenticated)..."
+
           for i in {1..12}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$API_URL/health")
+            TOKEN="$(gcloud auth print-identity-token)"
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              -H "Authorization: Bearer $TOKEN" \
+              "$API_URL/health")
+
             if [ "$STATUS" = "200" ]; then
               echo "✅ API healthy"
               exit 0
             fi
+
             echo "Waiting for API... status=$STATUS"
             sleep 5
           done
+
           echo "❌ API did not become healthy"
           exit 1
 
