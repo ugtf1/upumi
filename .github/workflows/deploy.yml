@@ -181,7 +181,7 @@ jobs:
           workload_identity_provider: projects/${{ env.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/ugtf-github-pool/providers/github-actions
           service_account: github-runner-ugtf@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
           token_format: "id_token"
-          audience: "${{ needs.deploy-api.outputs.api_url }}"
+          id_token_audience: "${{ needs.deploy-api.outputs.api_url }}"
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
