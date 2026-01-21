@@ -175,10 +175,13 @@ jobs:
     steps:
       - name: Authenticate to Google Cloud (WIF)
         uses: google-github-actions/auth@v2
+        id: auth
         with:
           project_id: ${{ env.PROJECT_ID }}
           workload_identity_provider: projects/${{ env.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/ugtf-github-pool/providers/github-actions
           service_account: github-runner-ugtf@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
+          token_format: "id_token"
+          audience: "${{ needs.deploy-api.outputs.api_url }}"
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
@@ -189,18 +192,22 @@ jobs:
         run: |
           API_URL="${{ needs.deploy-api.outputs.api_url }}"
           echo "Checking API at $API_URL/health (authenticated)..."
+
           for i in {1..12}; do
-            TOKEN="$(gcloud auth print-identity-token)"
+            TOKEN="${{ steps.auth.outputs.id_token }}"
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
               -H "Authorization: Bearer $TOKEN" \
               "$API_URL/health")
+
             if [ "$STATUS" = "200" ]; then
               echo "✅ API healthy"
               exit 0
             fi
+
             echo "Waiting for API... status=$STATUS"
             sleep 5
           done
+
           echo "❌ API did not become healthy"
           exit 1
 
