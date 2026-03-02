@@ -6,7 +6,7 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
   app.get('/', { preHandler: requireAuth }, async (req) => {
     const user = await prisma.user.findUnique({
       where: { id: req.user.sub },
-      select: { id: true, email: true, role: true, createdAt: true },
+      select: { id: true, role: true, createdAt: true },
     });
 
     const memberRecord = await prisma.memberRecord.findFirst({
@@ -18,8 +18,6 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
         firstName: true,
         lastName: true,
         joined: true,
-        phone: true,
-        email: true,
         goodStanding: true,
         financialGoodStanding: true,
         voter: true,

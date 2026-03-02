@@ -87,8 +87,8 @@ jobs:
           echo "web_url=$WEB_URL" >> $GITHUB_OUTPUT
           echo "WEB URL: $WEB_URL"
 
-  # 1) Build + Deploy API (only if api changed)
-  deploy-api:
+  # 1) Build + Push API image (only if api changed)
+  build-api-image:
     needs: detect-changes
     if: needs.detect-changes.outputs.api == 'true'
     runs-on: ubuntu-latest
@@ -96,7 +96,7 @@ jobs:
       contents: "read"
       id-token: "write"
     outputs:
-      api_url: ${{ steps.urls.outputs.api_url }}
+      image: ${{ steps.build_api.outputs.image }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -120,19 +120,118 @@ jobs:
           echo "Building API image: $IMAGE_TAG"
           gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
           docker build -t "$IMAGE_TAG" ./services/upumi-backend
+
+          echo "Smoke-testing API container on /health..."
+          CID=$(docker run -d --rm \
+            -p 18080:8080 \
+            -e PORT=8080 \
+            -e JWT_SECRET=ci-smoke-test-secret \
+            "$IMAGE_TAG")
+
+          cleanup() {
+            docker rm -f "$CID" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          for i in {1..12}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:18080/health || true)
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ API container smoke test passed"
+              break
+            fi
+            if [ "$i" = "12" ]; then
+              echo "❌ API container smoke test failed"
+              docker logs "$CID" || true
+              exit 1
+            fi
+            sleep 2
+          done
+
           docker push "$IMAGE_TAG"
           echo "image=$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+  # 1b) Run API DB migrations as a dedicated Cloud Run Job (only if api changed)
+  migrate-api:
+    needs: [detect-changes, build-api-image]
+    if: needs.detect-changes.outputs.api == 'true' && needs.build-api-image.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: "read"
+      id-token: "write"
+    steps:
+      - name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          workload_identity_provider: projects/${{ env.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/ugtf-github-pool/providers/github-actions
+          service_account: github-runner-ugtf@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Deploy Migration Job Definition
+        run: |
+          JOB_NAME="${{ env.API_SERVICE_NAME }}-migrate"
+          IMAGE_TAG="${{ needs.build-api-image.outputs.image }}"
+
+          gcloud run jobs deploy "$JOB_NAME" \
+            --image="$IMAGE_TAG" \
+            --region="${{ env.REGION }}" \
+            --set-cloudsql-instances="${{ env.PROJECT_ID }}:${{ env.REGION }}:upumi-postgres" \
+            --set-env-vars=NODE_ENV=production,PORT=8080 \
+            --set-secrets=DATABASE_URL=UPUMI_DATABASE_URL:latest \
+            --command=npx \
+            --args=prisma \
+            --args=migrate \
+            --args=deploy
+
+      - name: Execute Migration Job
+        run: |
+          JOB_NAME="${{ env.API_SERVICE_NAME }}-migrate"
+          gcloud run jobs execute "$JOB_NAME" --region="${{ env.REGION }}" --wait
+
+  # 1c) Deploy API service (only if api changed)
+  deploy-api:
+    needs: [detect-changes, build-api-image, migrate-api]
+    if: needs.detect-changes.outputs.api == 'true' && needs.build-api-image.result == 'success' && needs.migrate-api.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: "read"
+      id-token: "write"
+    outputs:
+      api_url: ${{ steps.urls.outputs.api_url }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          workload_identity_provider: projects/${{ env.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/ugtf-github-pool/providers/github-actions
+          service_account: github-runner-ugtf@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
 
       - name: Deploy API to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v2
         with:
           service: ${{ env.API_SERVICE_NAME }}
           region: ${{ env.REGION }}
-          image: ${{ steps.build_api.outputs.image }}
+          image: ${{ needs.build-api-image.outputs.image }}
           flags: >
             --add-cloudsql-instances=${{ env.PROJECT_ID }}:${{ env.REGION }}:upumi-postgres
-            --set-env-vars=NODE_ENV=production
-            --set-secrets=DATABASE_URL=UPUMI_DATABASE_URL:latest,JWT_SECRET=UPUMI_JWT_SECRET:latest,ADMIN_BOOTSTRAP_SECRET=UPUMI_ADMIN_BOOTSTRAP_SECRET:latest,DB_PASSWORD=UPUMI_DB_PASSWORD:latest
+            --set-env-vars=NODE_ENV=production,PORT=8080
+            --set-secrets=DATABASE_URL=UPUMI_DATABASE_URL:latest,JWT_SECRET=UPUMI_JWT_SECRET:latest,ADMIN_BOOTSTRAP_SECRET=UPUMI_ADMIN_BOOTSTRAP_SECRET:latest,CORS_ORIGIN=UPUMI_CORS_ORIGIN:latest
+            --set-secrets=GOOGLE_SHEET_URL=UPUMI_GOOGLE_SHEET_URL:latest,GOOGLE_SHEET_GID=UPUMI_GOOGLE_SHEET_GID:latest,GOOGLE_SHEET_YEAR=UPUMI_GOOGLE_SHEET_YEAR:latest,SCHEDULER_IMPORT_SECRET=UPUMI_SCHEDULER_IMPORT_SECRET:latest
+            --command=npm
+            --args=run
+            --args=start:prod
           wait: true
 
       - name: Fetch API URL
@@ -322,7 +421,7 @@ jobs:
 
   # 5) Notify via Email (runs when either service changed)
   notify:
-    needs: [detect-changes, deploy-web, deploy-api, health-check-web, health-check-api, lighthouse-audit, seo-audit]
+    needs: [detect-changes, deploy-web, build-api-image, migrate-api, deploy-api, health-check-web, health-check-api, lighthouse-audit, seo-audit]
     if: always() && (needs.detect-changes.outputs.web == 'true' || needs.detect-changes.outputs.api == 'true')
     runs-on: ubuntu-latest
     steps:
@@ -349,6 +448,8 @@ jobs:
               - url: ${{ needs.deploy-web.outputs.web_url || 'skipped' }}
 
             API:
+              - image: ${{ needs.build-api-image.result }}
+              - migrate: ${{ needs.migrate-api.result }}
               - deploy: ${{ needs.deploy-api.result }}
               - health: ${{ needs.health-check-api.result }}
               - url: ${{ needs.deploy-api.outputs.api_url || 'skipped' }}
