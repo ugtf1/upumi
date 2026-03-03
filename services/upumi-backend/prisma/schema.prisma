@@ -24,10 +24,14 @@ model User {
 }
 
 model MemberRecord {
-  id        String   @id @default(cuid())
-  // If a user claims/links this record, we connect it here.
-  userId    String?  @unique
-  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id String @id @default(cuid())
+
+  // NEW: stable identity for CSV imports
+  memberKey String @unique
+
+  // Optional linkage to a login account
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   status    String?
   title     String?
@@ -35,19 +39,21 @@ model MemberRecord {
   lastName  String?
   joined    String?
   phone     String?
-  email     String?  @unique
-  whatsapp  String?
-  facebook  String?
 
-  // Quick access membership fields (kept denormalized for speed)
-  goodStanding String?
+  // Email is useful metadata but NOT a stable member identity
+  email String?
+
+  whatsapp String?
+  facebook String?
+
+  // Denormalized quick-access fields
+  goodStanding          String?
   financialGoodStanding String?
-  voter     String?
-  insurance String?
-  attendancePct String?
+  voter                 String?
+  insurance             String?
+  attendancePct         String?
 
-  // Everything else from the workbook row lives here to preserve fidelity.
-  rawJson   Json
+  rawJson Json
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -55,15 +61,34 @@ model MemberRecord {
   monthlyDues MonthlyDue[]
 }
 
+model WorkbookRow {
+  id        String   @id @default(cuid())
+  sourceYear Int?
+  rowOrder  Int
+  rowType   String?
+  title     String?
+  firstName String?
+  lastName  String?
+  email     String?
+  hosting   String?
+  rawJson   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([rowType])
+  @@index([hosting])
+  @@index([rowOrder])
+}
+
 model MonthlyDue {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   memberRecordId String
   member         MemberRecord @relation(fields: [memberRecordId], references: [id], onDelete: Cascade)
 
-  year   Int
-  month  Int // 1-12
-  present Boolean?
-  duesPaid Decimal? @db.Decimal(12,2)
+  year     Int
+  month    Int // 1-12
+  present  Boolean?
+  duesPaid Decimal?
 
   createdAt DateTime @default(now())
 
