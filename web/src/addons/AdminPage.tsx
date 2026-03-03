@@ -64,6 +64,12 @@ export default function AdminPage() {
     defaultValue: "",
     rowType: "all",
   });
+  const [sheetUrl, setSheetUrl] = useState<string>(
+    String((import.meta as any)?.env?.VITE_GOOGLE_SHEET_URL ?? "").trim()
+  );
+  const [sheetGid, setSheetGid] = useState<string>(
+    String((import.meta as any)?.env?.VITE_GOOGLE_SHEET_GID ?? "0").trim() || "0"
+  );
 
   async function loadAll() {
     setLoading(true);
@@ -102,7 +108,11 @@ export default function AdminPage() {
     setMsg(null);
     setErr(null);
     try {
-      const res = await apiPost<{ workbookRows: number; importedMembers: number; duesRows: number }>("/admin/sync-google-sheet", { year });
+      const payload: Record<string, unknown> = { year };
+      if (sheetUrl.trim()) payload.sheetUrl = sheetUrl.trim();
+      if (sheetGid.trim()) payload.gid = sheetGid.trim();
+
+      const res = await apiPost<{ workbookRows: number; importedMembers: number; duesRows: number }>("/admin/sync-google-sheet", payload);
       setMsg(`Google Sheet sync complete: ${res.workbookRows} rows, ${res.importedMembers} members, ${res.duesRows} dues rows`);
       await loadAll();
     } catch (e: any) {
@@ -279,6 +289,18 @@ export default function AdminPage() {
             Year{" "}
             <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} style={{ width: 100, padding: 6 }} />
           </label>
+          <input
+            value={sheetUrl}
+            onChange={(e) => setSheetUrl(e.target.value)}
+            placeholder="Google Sheet URL (optional override)"
+            style={{ minWidth: 360, padding: 6 }}
+          />
+          <input
+            value={sheetGid}
+            onChange={(e) => setSheetGid(e.target.value)}
+            placeholder="gid"
+            style={{ width: 90, padding: 6 }}
+          />
           <input
             type="file"
             accept=".csv,text/csv"

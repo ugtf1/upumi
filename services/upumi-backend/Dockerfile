@@ -1,5 +1,5 @@
 # ---------- Build stage ----------
-FROM node:20-alpine AS build
+FROM node:20-bookworm-slim AS build
 WORKDIR /app
 
 # Install deps first (cache-friendly)
@@ -18,7 +18,7 @@ RUN npx prisma generate
 RUN npm run build
 
 # ---------- Runtime stage ----------
-FROM node:20-alpine AS runtime
+FROM node:20-bookworm-slim AS runtime
 WORKDIR /app
 
 ENV NODE_ENV=production
