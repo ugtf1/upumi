@@ -122,11 +122,13 @@ jobs:
           docker build -t "$IMAGE_TAG" ./services/upumi-backend
 
           echo "Smoke-testing API container on /health..."
-          CID=$(docker run -d --rm \
+          CID=$(docker run -d \
             -p 18080:8080 \
             -e PORT=8080 \
             -e JWT_SECRET=ci-smoke-test-secret \
-            "$IMAGE_TAG")
+            -e DATABASE_URL='postgresql://ci:ci@127.0.0.1:5432/upumi?schema=public' \
+            "$IMAGE_TAG" \
+            node dist/server.js)
 
           cleanup() {
             docker rm -f "$CID" >/dev/null 2>&1 || true
@@ -141,6 +143,7 @@ jobs:
             fi
             if [ "$i" = "12" ]; then
               echo "❌ API container smoke test failed"
+              docker ps -a --filter "id=$CID" || true
               docker logs "$CID" || true
               exit 1
             fi
