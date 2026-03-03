@@ -183,7 +183,7 @@ jobs:
             --image="$IMAGE_TAG" \
             --region="${{ env.REGION }}" \
             --set-cloudsql-instances="${{ env.PROJECT_ID }}:${{ env.REGION }}:upumi-postgres" \
-            --set-env-vars=NODE_ENV=production,PORT=8080 \
+            --set-env-vars=NODE_ENV=production \
             --set-secrets=DATABASE_URL=UPUMI_DATABASE_URL:latest \
             --command=npx \
             --args=prisma \
