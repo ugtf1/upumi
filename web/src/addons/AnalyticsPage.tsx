@@ -205,7 +205,7 @@ export default function AnalyticsPage() {
       if (!amt) continue;
       const name = cleanName(d.member?.lastName, d.member?.firstName);
       rows.push({
-        grouping: "Member",
+        grouping: "Member dues",
         last: name.last,
         first: name.first,
         amount: amt,

@@ -350,23 +350,15 @@ export async function analyticsRoutes(app: FastifyInstance) {
     const year = toInt(req.query?.year, new Date().getFullYear());
     const month = Math.max(1, Math.min(12, toInt(req.query?.month, new Date().getMonth() + 1)));
 
-    const duesPayments = await prisma.monthlyDue.findMany({
-      where: {
-        year,
-        month,
-        duesPaid: { gt: 0 as any },
-      },
-      orderBy: { duesPaid: "desc" },
-      include: {
-        member: {
-          select: { id: true, firstName: true, lastName: true, status: true },
-        },
-      },
-    });
-
     const workbookRows = await fetchWorkbookLikeRows();
 
     const periodLabel = `${monthNames[month - 1]} ${year}`;
+    const duesPayments: Array<{
+      id: string;
+      amount: number;
+      present: boolean | null;
+      member: { id: string; firstName?: string | null; lastName?: string | null; status?: string | null } | null;
+    }> = [];
     const incomeRows: any[] = [];
     const expenseRows: any[] = [];
     const balanceRows: any[] = [];
@@ -401,7 +393,19 @@ export async function analyticsRoutes(app: FastifyInstance) {
       const matchesMonthByHosting = !!period && period.year === year && period.month === month;
       const hasMonthAmount = monthAmount != null && monthAmount !== 0;
 
-      if (rowType.includes("other income") && (matchesMonthByHosting || hasMonthAmount)) {
+      if (rowType === "member" && hasMonthAmount && Number(monthAmount) > 0) {
+        duesPayments.push({
+          id: r.id,
+          amount: Number(monthAmount),
+          present: null,
+          member: {
+            id: r.id,
+            firstName: r.firstName ?? strCell(raw["First"]),
+            lastName: r.lastName ?? strCell(raw["Last"]),
+            status: r.rowType ?? strCell(raw["Status"]),
+          },
+        });
+      } else if (rowType.includes("other income") && (matchesMonthByHosting || hasMonthAmount)) {
         incomeRows.push(payload);
       } else if (rowType.includes("expense") && (matchesMonthByHosting || hasMonthAmount)) {
         expenseRows.push(payload);
@@ -414,19 +418,7 @@ export async function analyticsRoutes(app: FastifyInstance) {
       year,
       month,
       periodLabel,
-      duesPayments: duesPayments.map((d: any) => ({
-        id: d.id,
-        amount: decimalToNumber(d.duesPaid) ?? 0,
-        present: d.present ?? null,
-        member: d.member
-          ? {
-              id: d.member.id,
-              firstName: d.member.firstName,
-              lastName: d.member.lastName,
-              status: d.member.status,
-            }
-          : null,
-      })),
+      duesPayments: duesPayments.sort((a, b) => b.amount - a.amount),
       incomeRows,
       expenseRows,
       balanceRows,
