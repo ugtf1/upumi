@@ -229,7 +229,7 @@ jobs:
           image: ${{ needs.build-api-image.outputs.image }}
           flags: >
             --add-cloudsql-instances=${{ env.PROJECT_ID }}:${{ env.REGION }}:upumi-postgres
-            --set-env-vars=NODE_ENV=production,PORT=8080
+            --set-env-vars=NODE_ENV=production
             --set-secrets=DATABASE_URL=UPUMI_DATABASE_URL:latest,JWT_SECRET=UPUMI_JWT_SECRET:latest,ADMIN_BOOTSTRAP_SECRET=UPUMI_ADMIN_BOOTSTRAP_SECRET:latest,CORS_ORIGIN=UPUMI_CORS_ORIGIN:latest
             --set-secrets=GOOGLE_SHEET_URL=UPUMI_GOOGLE_SHEET_URL:latest,GOOGLE_SHEET_GID=UPUMI_GOOGLE_SHEET_GID:latest,GOOGLE_SHEET_YEAR=UPUMI_GOOGLE_SHEET_YEAR:latest,SCHEDULER_IMPORT_SECRET=UPUMI_SCHEDULER_IMPORT_SECRET:latest
             --command=npm
