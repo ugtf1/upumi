@@ -1,6 +1,10 @@
 const rawBase = (import.meta as any)?.env?.VITE_API_BASE as string | undefined;
-const normalizedBase = (rawBase ?? "/api").trim().replace(/\/+$/, "");
-export const API_BASE = normalizedBase || "/api";
+const isLocalhost =
+  typeof window !== "undefined" &&
+  (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+const defaultBase = isLocalhost ? "/api" : "https://upumi-api-30228073381.us-east1.run.app/api";
+const normalizedBase = (rawBase ?? defaultBase).trim().replace(/\/+$/, "");
+export const API_BASE = normalizedBase || defaultBase;
 
 const TOKEN_KEY = "upumi_token";
 type Role = "ADMIN" | "USER";
