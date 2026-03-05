@@ -19,6 +19,10 @@ import { trafficRoutes } from './routes/traffic.js';
 const PORT = Number(process.env.PORT ?? 8080);
 const JWT_SECRET = process.env.JWT_SECRET ?? '';
 const CORS_ORIGIN = process.env.CORS_ORIGIN ?? ''; // optional in BFF mode
+const CORS_ORIGINS = CORS_ORIGIN
+  .split(',')
+  .map((v) => v.trim())
+  .filter(Boolean);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -36,8 +40,8 @@ async function main() {
   await app.register(cors, {
     origin: (origin, cb) => {
       if (!origin) return cb(null, true);
-      if (!CORS_ORIGIN) return cb(null, true);
-      cb(null, origin === CORS_ORIGIN);
+      if (!CORS_ORIGINS.length) return cb(null, true);
+      cb(null, CORS_ORIGINS.includes(origin));
     },
     credentials: true,
   });
