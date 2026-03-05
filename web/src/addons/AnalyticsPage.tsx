@@ -33,7 +33,7 @@ type LedgerSummaryResponse = {
     duesPaidAmount: number;
   }[];
   accountBalances?: { title: string; amount: number }[];
-  ytd?: { income: number; expense: number; net: number; memberBalance: number; memberDues?: number };
+  ytd?: { income: number; expense: number; net: number };
 };
 
 type MonthlyReportResponse = {
@@ -139,7 +139,7 @@ export default function AnalyticsPage() {
         const [meRes, summaryRes, ledgerRes, reportRes] = await Promise.all([
           apiGet<MeResponse>(`/analytics/me?year=${year}`),
           apiGet<SummaryResponse>(`/analytics/summary?year=${year}`),
-          apiGet<LedgerSummaryResponse>(`/analytics/ledger-summary?year=${year}`),
+          apiGet<LedgerSummaryResponse>(`/analytics/ledger-summary?year=${year}&month=${reportMonth}`),
           apiGet<MonthlyReportResponse>(`/analytics/monthly-report?year=${year}&month=${reportMonth}`),
         ]);
         if (!active) return;
@@ -294,10 +294,10 @@ export default function AnalyticsPage() {
         <section style={cardStyle()}>
           <h3 style={{ marginTop: 0 }}>Year-to-date financial summary</h3>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 8, marginBottom: 10 }}>
-            <Field label="Income YTD (dues + other income)" value={money(ledgerSummary?.ytd?.income ?? 0)} />
+            <Field label="Income YTD" value={money(ledgerSummary?.ytd?.income ?? 0)} />
             <Field label="Expense YTD" value={money(ledgerSummary?.ytd?.expense ?? 0)} />
-            <Field label="Net (P&L)" value={money(ledgerSummary?.ytd?.net ?? 0)} />
-            <Field label="Member Balance YTD" value={money(ledgerSummary?.ytd?.memberBalance ?? 0)} />
+            <Field label="Business acct" value={money((ledgerSummary?.accountBalances ?? []).find((a) => a.title.toLowerCase() === "business")?.amount ?? null)} />
+            <Field label="FundRaiser acct" value={money((ledgerSummary?.accountBalances ?? []).find((a) => a.title.toLowerCase() === "fundraiser")?.amount ?? null)} />
           </div>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 520 }}>

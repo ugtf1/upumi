@@ -270,6 +270,7 @@ export async function analyticsRoutes(app: FastifyInstance) {
 
   app.get("/ledger-summary", { preHandler: [requireAuth] }, async (req: any) => {
     const year = toInt(req.query?.year, new Date().getFullYear());
+    const month = Math.max(1, Math.min(12, toInt(req.query?.month, new Date().getMonth() + 1)));
     const workbookRows = await fetchWorkbookLikeRows();
 
     const byTypeMap: Record<string, { rowType: string; count: number; totalAmount: number; balanceAmount: number; duesPaidAmount: number }> = {};
@@ -311,26 +312,43 @@ export async function analyticsRoutes(app: FastifyInstance) {
     }
 
     const byType = Object.values(byTypeMap).sort((a, b) => a.rowType.localeCompare(b.rowType));
-    const incomeYtd = byType
-      .filter((r) => r.rowType.includes("other income"))
-      .reduce((s, r) => s + (r.totalAmount || 0), 0);
-    const memberDuesYtd = byType
-      .filter((r) => r.rowType.includes("member"))
-      .reduce((s, r) => s + (r.duesPaidAmount || 0), 0);
-    const expenseYtd = byType
-      .filter((r) => r.rowType.includes("expense"))
-      .reduce((s, r) => s + (r.totalAmount || 0), 0);
-    const memberBalanceYtd = byType
-      .filter((r) => r.rowType.includes("member"))
-      .reduce((s, r) => s + (r.balanceAmount || 0), 0);
-    const accountBalances = balanceRows
-      .filter((r) => String(r.last ?? "").trim().toLowerCase() === "account")
-      .map((r) => ({
-        title: String(r.first ?? r.title ?? "Account").trim() || "Account",
-        amount: Number(r.balanceYear ?? r.total ?? 0),
+
+    const balanceRowsMonthly: Array<{
+      rowType: string;
+      last: string | null;
+      first: string | null;
+      monthAmount: number | null;
+      total: number | null;
+      balanceYear: number | null;
+    }> = workbookRows
+      .filter((r: any) => normalizeRowType(r.rowType).includes("balance"))
+      .map((r: any) => {
+        const raw = (r.rawJson ?? {}) as RawRow;
+        return {
+          rowType: normalizeRowType(r.rowType),
+          last: strCell(raw["Last"]) ?? r.lastName ?? null,
+          first: strCell(raw["First"]) ?? r.firstName ?? null,
+          monthAmount: workbookMonthAmount(raw, month),
+          total: moneyFromCell(raw["Total"]),
+          balanceYear: moneyFromCell(raw[`${year} balance`]),
+        };
+      });
+
+    const incomeYtd = balanceRowsMonthly
+      .filter((r: any) => String(r.last ?? "").trim().toLowerCase() === "total" && String(r.first ?? "").trim().toLowerCase() === "income")
+      .reduce((s: number, r: any) => s + Number(r.monthAmount ?? r.total ?? 0), 0);
+    const expenseYtd = balanceRowsMonthly
+      .filter((r: any) => String(r.last ?? "").trim().toLowerCase() === "total" && String(r.first ?? "").trim().toLowerCase() === "expense")
+      .reduce((s: number, r: any) => s + Math.abs(Number(r.monthAmount ?? r.total ?? 0)), 0);
+
+    const accountBalances = balanceRowsMonthly
+      .filter((r: any) => String(r.last ?? "").trim().toLowerCase() === "account")
+      .map((r: any) => ({
+        title: String(r.first ?? "Account").trim() || "Account",
+        amount: Number(r.monthAmount ?? r.balanceYear ?? r.total ?? 0),
       }))
-      .filter((r) => r.amount !== 0)
-      .sort((a, b) => a.title.localeCompare(b.title));
+      .filter((r: any) => r.amount !== 0)
+      .sort((a: any, b: any) => a.title.localeCompare(b.title));
 
     return {
       year,
@@ -339,11 +357,9 @@ export async function analyticsRoutes(app: FastifyInstance) {
       balanceRows,
       accountBalances,
       ytd: {
-        income: incomeYtd + memberDuesYtd,
+        income: incomeYtd,
         expense: expenseYtd,
-        net: incomeYtd + memberDuesYtd - expenseYtd,
-        memberBalance: memberBalanceYtd,
-        memberDues: memberDuesYtd,
+        net: incomeYtd - expenseYtd,
       },
     };
   });
@@ -378,7 +394,6 @@ export async function analyticsRoutes(app: FastifyInstance) {
       const raw = (r.rawJson ?? {}) as RawRow;
       const period = parseHostingPeriod(r.hosting ?? strCell(raw["Hosting"]));
       const amounts = workbookMoneyFields(raw, year, month);
-      const monthlyDueCol = amounts.monthlyDuesCol ?? 0;
       const monthAmount = workbookMonthAmount(raw, month);
 
       const payload = {
@@ -402,15 +417,13 @@ export async function analyticsRoutes(app: FastifyInstance) {
       };
 
       const matchesMonthByHosting = !!period && period.year === year && period.month === month;
-      const hasMonthFinancials =
-        [monthlyDueCol, amounts.raffleUpumi, amounts.raffleUpuaConvention, amounts.sswContribution, amounts.anambraContribution, amounts.upua25Raffle, monthAmount]
-          .some((n) => n != null && n !== 0);
+      const hasMonthAmount = monthAmount != null && monthAmount !== 0;
 
-      if (rowType.includes("other income") && (matchesMonthByHosting || hasMonthFinancials)) {
+      if (rowType.includes("other income") && (matchesMonthByHosting || hasMonthAmount)) {
         incomeRows.push(payload);
-      } else if (rowType.includes("expense") && (matchesMonthByHosting || hasMonthFinancials)) {
+      } else if (rowType.includes("expense") && (matchesMonthByHosting || hasMonthAmount)) {
         expenseRows.push(payload);
-      } else if (rowType.includes("balance") && (hasMonthFinancials || matchesMonthByHosting)) {
+      } else if (rowType.includes("balance") && (hasMonthAmount || matchesMonthByHosting)) {
         balanceRows.push(payload);
       }
     }
