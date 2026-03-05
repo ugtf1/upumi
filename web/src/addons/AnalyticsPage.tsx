@@ -223,7 +223,7 @@ export default function AnalyticsPage() {
       });
     }
 
-    const order: Record<string, number> = { Balance: 1, Expense: 2, Member: 3, Income: 4 };
+    const order: Record<string, number> = { Balance: 1, Expense: 2, "Member dues": 3, Member: 3, Income: 4 };
     return rows.sort((a, b) => {
       const oa = order[a.grouping] ?? 99;
       const ob = order[b.grouping] ?? 99;

@@ -359,6 +359,7 @@ export async function analyticsRoutes(app: FastifyInstance) {
       present: boolean | null;
       member: { id: string; firstName?: string | null; lastName?: string | null; status?: string | null } | null;
     }> = [];
+    const duesSeen = new Set<string>();
     const incomeRows: any[] = [];
     const expenseRows: any[] = [];
     const balanceRows: any[] = [];
@@ -394,14 +395,18 @@ export async function analyticsRoutes(app: FastifyInstance) {
       const hasMonthAmount = monthAmount != null && monthAmount !== 0;
 
       if (rowType === "member" && hasMonthAmount && Number(monthAmount) > 0) {
+        const last = (r.lastName ?? strCell(raw["Last"]) ?? "").trim();
+        const first = (r.firstName ?? strCell(raw["First"]) ?? "").trim();
+        const key = `${last.toLowerCase()}|${first.toLowerCase()}`;
+        duesSeen.add(key);
         duesPayments.push({
           id: r.id,
           amount: Number(monthAmount),
           present: null,
           member: {
             id: r.id,
-            firstName: r.firstName ?? strCell(raw["First"]),
-            lastName: r.lastName ?? strCell(raw["Last"]),
+            firstName: first || null,
+            lastName: last || null,
             status: r.rowType ?? strCell(raw["Status"]),
           },
         });
@@ -412,6 +417,43 @@ export async function analyticsRoutes(app: FastifyInstance) {
       } else if (rowType.includes("balance") && (hasMonthAmount || matchesMonthByHosting)) {
         balanceRows.push(payload);
       }
+    }
+
+    // Fallback/merge source: monthlyDue table (dedupe against workbook rows)
+    const duesFromMonthlyDue = await prisma.monthlyDue.findMany({
+      where: {
+        year,
+        month,
+        duesPaid: { gt: 0 as any },
+      },
+      orderBy: { duesPaid: "desc" },
+      include: {
+        member: {
+          select: { id: true, firstName: true, lastName: true, status: true },
+        },
+      },
+    });
+    for (const d of duesFromMonthlyDue) {
+      const amount = decimalToNumber(d.duesPaid) ?? 0;
+      if (amount <= 0) continue;
+      const last = String(d.member?.lastName ?? "").trim();
+      const first = String(d.member?.firstName ?? "").trim();
+      const key = `${last.toLowerCase()}|${first.toLowerCase()}`;
+      if (duesSeen.has(key)) continue;
+      duesSeen.add(key);
+      duesPayments.push({
+        id: d.id,
+        amount,
+        present: d.present ?? null,
+        member: d.member
+          ? {
+              id: d.member.id,
+              firstName: d.member.firstName,
+              lastName: d.member.lastName,
+              status: d.member.status,
+            }
+          : null,
+      });
     }
 
     return {
