@@ -82,13 +82,14 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       process.env.GOOGLE_SHEET_CSV_URL ??
       ''
     ).trim();
-    const gid = String(req.body?.gid ?? process.env.GOOGLE_SHEET_GID ?? '0');
+    const gid = String(req.body?.gid ?? process.env.GOOGLE_SHEET_GID ?? '').trim();
+    const sheetTab = String(req.body?.sheetTab ?? process.env.GOOGLE_SHEET_TAB ?? 'member_status').trim();
 
     if (!source) {
       return reply.code(400).send({ message: 'Missing GOOGLE_SHEET_URL or GOOGLE_SHEET_CSV_URL' });
     }
 
-    const url = toSheetCsvExportUrl(source, gid);
+    const url = toSheetCsvExportUrl(source, { gid, sheetTab });
     const res = await fetch(url);
     if (!res.ok) {
       return reply.code(502).send({ message: `Google Sheet fetch failed (${res.status})` });
@@ -110,12 +111,13 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
     const year = Number(process.env.GOOGLE_SHEET_YEAR ?? new Date().getFullYear());
     const source = String(process.env.GOOGLE_SHEET_URL ?? process.env.GOOGLE_SHEET_CSV_URL ?? '').trim();
-    const gid = String(process.env.GOOGLE_SHEET_GID ?? '0');
+    const gid = String(process.env.GOOGLE_SHEET_GID ?? '').trim();
+    const sheetTab = String(process.env.GOOGLE_SHEET_TAB ?? 'member_status').trim();
     if (!source) {
       return reply.code(500).send({ message: 'Missing GOOGLE_SHEET_URL or GOOGLE_SHEET_CSV_URL' });
     }
 
-    const url = toSheetCsvExportUrl(source, gid);
+    const url = toSheetCsvExportUrl(source, { gid, sheetTab });
     const res = await fetch(url);
     if (!res.ok) {
       return reply.code(502).send({ message: `Google Sheet fetch failed (${res.status})` });
@@ -147,7 +149,17 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
             .includes(search)
         );
 
+    const columnSet = new Set<string>();
+    for (const r of filtered) {
+      for (const k of Object.keys((r.rawJson ?? {}) as Record<string, unknown>)) {
+        const norm = k.trim().toLowerCase();
+        if (SENSITIVE_RAW_KEYS.has(norm)) continue;
+        columnSet.add(k);
+      }
+    }
+
     return {
+      columns: Array.from(columnSet).sort((a, b) => a.localeCompare(b)),
       rows: filtered.map((r: any) => ({
         id: r.id,
         sourceYear: r.sourceYear,

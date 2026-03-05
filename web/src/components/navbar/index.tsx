@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { BiSolidHeart } from "react-icons/bi";
 import { CiMenuBurger } from "react-icons/ci";
 import { IoMdClose } from "react-icons/io";
@@ -12,6 +12,7 @@ const Navbar = () => {
   const [isNavShowing, setIsNavShowing] = useState(false);
   const [portalOpen, setPortalOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   const [openModal, setOpenModal] = useState(false);
   const token = getToken();
   const claims = getAuthClaims();
@@ -117,7 +118,7 @@ const Navbar = () => {
                     clearToken();
                     setIsNavShowing(false);
                     setPortalOpen(false);
-                    window.location.href = "/login";
+                    navigate("/login", { replace: true });
                   }}
                 >
                   Logout

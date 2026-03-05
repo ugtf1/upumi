@@ -81,6 +81,22 @@ function monthlyPresenceKey(month: number): string {
   return monthNames[Math.max(1, Math.min(12, month)) - 1];
 }
 
+function workbookMonthAmount(raw: RawRow, month: number): number | null {
+  const label = monthNames[Math.max(1, Math.min(12, month)) - 1];
+  const candidates = [
+    `${label}$`,
+    `${label} $`,
+    `${label.toLowerCase()}$`,
+    `${label.toLowerCase()} $`,
+    label,
+  ];
+  for (const key of candidates) {
+    const amt = moneyFromCell(raw[key]);
+    if (amt != null) return amt;
+  }
+  return null;
+}
+
 function workbookMoneyFields(raw: RawRow, year: number, month?: number) {
   const result = {
     total: moneyFromCell(raw["Total"]),
@@ -298,23 +314,36 @@ export async function analyticsRoutes(app: FastifyInstance) {
     const incomeYtd = byType
       .filter((r) => r.rowType.includes("other income"))
       .reduce((s, r) => s + (r.totalAmount || 0), 0);
+    const memberDuesYtd = byType
+      .filter((r) => r.rowType.includes("member"))
+      .reduce((s, r) => s + (r.duesPaidAmount || 0), 0);
     const expenseYtd = byType
       .filter((r) => r.rowType.includes("expense"))
       .reduce((s, r) => s + (r.totalAmount || 0), 0);
     const memberBalanceYtd = byType
       .filter((r) => r.rowType.includes("member"))
       .reduce((s, r) => s + (r.balanceAmount || 0), 0);
+    const accountBalances = balanceRows
+      .filter((r) => String(r.last ?? "").trim().toLowerCase() === "account")
+      .map((r) => ({
+        title: String(r.first ?? r.title ?? "Account").trim() || "Account",
+        amount: Number(r.balanceYear ?? r.total ?? 0),
+      }))
+      .filter((r) => r.amount !== 0)
+      .sort((a, b) => a.title.localeCompare(b.title));
 
     return {
       year,
       byType,
       monthly: Object.values(monthlyMap).sort((a, b) => (a.year - b.year) || (a.month - b.month)),
       balanceRows,
+      accountBalances,
       ytd: {
-        income: incomeYtd,
+        income: incomeYtd + memberDuesYtd,
         expense: expenseYtd,
-        net: incomeYtd - expenseYtd,
+        net: incomeYtd + memberDuesYtd - expenseYtd,
         memberBalance: memberBalanceYtd,
+        memberDues: memberDuesYtd,
       },
     };
   });
@@ -350,6 +379,7 @@ export async function analyticsRoutes(app: FastifyInstance) {
       const period = parseHostingPeriod(r.hosting ?? strCell(raw["Hosting"]));
       const amounts = workbookMoneyFields(raw, year, month);
       const monthlyDueCol = amounts.monthlyDuesCol ?? 0;
+      const monthAmount = workbookMonthAmount(raw, month);
 
       const payload = {
         id: r.id,
@@ -368,18 +398,19 @@ export async function analyticsRoutes(app: FastifyInstance) {
         sswContribution: amounts.sswContribution,
         anambraContribution: amounts.anambraContribution,
         upua25Raffle: amounts.upua25Raffle,
+        monthAmount,
       };
 
       const matchesMonthByHosting = !!period && period.year === year && period.month === month;
       const hasMonthFinancials =
-        [monthlyDueCol, amounts.raffleUpumi, amounts.raffleUpuaConvention, amounts.sswContribution, amounts.anambraContribution, amounts.upua25Raffle]
+        [monthlyDueCol, amounts.raffleUpumi, amounts.raffleUpuaConvention, amounts.sswContribution, amounts.anambraContribution, amounts.upua25Raffle, monthAmount]
           .some((n) => n != null && n !== 0);
 
-      if (rowType.includes("other income") && (matchesMonthByHosting || hasMonthFinancials || (amounts.total ?? 0) !== 0)) {
+      if (rowType.includes("other income") && (matchesMonthByHosting || hasMonthFinancials)) {
         incomeRows.push(payload);
-      } else if (rowType.includes("expense") && (matchesMonthByHosting || hasMonthFinancials || (amounts.total ?? 0) !== 0)) {
+      } else if (rowType.includes("expense") && (matchesMonthByHosting || hasMonthFinancials)) {
         expenseRows.push(payload);
-      } else if (rowType.includes("balance")) {
+      } else if (rowType.includes("balance") && (hasMonthFinancials || matchesMonthByHosting)) {
         balanceRows.push(payload);
       }
     }
@@ -436,7 +467,7 @@ export async function analyticsRoutes(app: FastifyInstance) {
           last: strCell(raw["Last"]) ?? r.lastName,
           first: strCell(raw["First"]) ?? r.firstName,
           duesPaidYear: m.duesPaidYear,
-          balanceYear: m.balanceYear ?? m.total,
+          balanceYear: m.total ?? m.balanceYear,
           financialGoodStanding: strCell(raw["Financial GoodStanding"]),
           goodStanding: strCell(raw["GoodStanding"]),
           voter: strCell(raw["Voter"]),

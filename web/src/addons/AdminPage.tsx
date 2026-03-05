@@ -21,6 +21,11 @@ type WorkbookRow = {
   rawJson?: Record<string, unknown>;
 };
 
+type WorkbookRowsResponse = {
+  rows: WorkbookRow[];
+  columns?: string[];
+};
+
 function moneyFrom(v: unknown): number | null {
   if (v == null) return null;
   const s = String(v).trim();
@@ -38,6 +43,7 @@ function fmtMoney(v: number | null | undefined) {
 export default function AdminPage() {
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [workbookRows, setWorkbookRows] = useState<WorkbookRow[]>([]);
+  const [availableColumns, setAvailableColumns] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -70,6 +76,10 @@ export default function AdminPage() {
   const [sheetGid, setSheetGid] = useState<string>(
     String((import.meta as any)?.env?.VITE_GOOGLE_SHEET_GID ?? "0").trim() || "0"
   );
+  const [sheetTab, setSheetTab] = useState<string>(
+    String((import.meta as any)?.env?.VITE_GOOGLE_SHEET_TAB ?? "member_status").trim() || "member_status"
+  );
+  const [selectedEditColumn, setSelectedEditColumn] = useState<string>("Total");
 
   async function loadAll() {
     setLoading(true);
@@ -77,10 +87,11 @@ export default function AdminPage() {
     try {
       const [m, w] = await Promise.all([
         apiGet<MemberRow[]>("/admin/members"),
-        apiGet<{ rows: WorkbookRow[] }>(`/admin/workbook-rows?year=${year}`),
+        apiGet<WorkbookRowsResponse>(`/admin/workbook-rows?year=${year}`),
       ]);
       setMembers(m);
       setWorkbookRows(w.rows ?? []);
+      setAvailableColumns(w.columns ?? []);
     } catch (e: any) {
       setErr(e?.message ?? "Failed to load admin data");
     } finally {
@@ -111,6 +122,7 @@ export default function AdminPage() {
       const payload: Record<string, unknown> = { year };
       if (sheetUrl.trim()) payload.sheetUrl = sheetUrl.trim();
       if (sheetGid.trim()) payload.gid = sheetGid.trim();
+      if (sheetTab.trim()) payload.sheetTab = sheetTab.trim();
 
       const res = await apiPost<{ workbookRows: number; importedMembers: number; duesRows: number }>("/admin/sync-google-sheet", payload);
       setMsg(`Google Sheet sync complete: ${res.workbookRows} rows, ${res.importedMembers} members, ${res.duesRows} dues rows`);
@@ -148,6 +160,12 @@ export default function AdminPage() {
         title: editDraft.title,
         firstName: editDraft.firstName,
         lastName: editDraft.lastName,
+        rawJson:
+          selectedEditColumn.trim() && editDraft.rawJson
+            ? {
+                [selectedEditColumn]: (editDraft.rawJson as any)[selectedEditColumn] ?? "",
+              }
+            : undefined,
       });
       setMsg("Row updated");
       setEditId(null);
@@ -248,15 +266,64 @@ export default function AdminPage() {
     [workbookRows]
   );
 
+  const columnOptions = useMemo(() => {
+    const fallback = ["Total", `${year} balance`, `${year} dues paid`];
+    return Array.from(new Set([...fallback, ...availableColumns])).sort((a, b) => a.localeCompare(b));
+  }, [availableColumns, year]);
+
+  useEffect(() => {
+    if (!selectedEditColumn || !columnOptions.includes(selectedEditColumn)) {
+      setSelectedEditColumn(columnOptions[0] ?? "Total");
+    }
+  }, [columnOptions, selectedEditColumn]);
+
+  function rowFinancialAmount(r: WorkbookRow) {
+    const rowType = String(r.rowType ?? "").toLowerCase();
+    if (rowType.includes("balance")) {
+      return moneyFrom(r.rawJson?.[`${year} balance`]) ?? moneyFrom(r.rawJson?.Total);
+    }
+    if (selectedEditColumn) {
+      const selected = moneyFrom(r.rawJson?.[selectedEditColumn]);
+      if (selected != null) return selected;
+    }
+    return moneyFrom(r.rawJson?.Total);
+  }
+
+  function rowHasVisibleData(r: WorkbookRow) {
+    const amount = rowFinancialAmount(r);
+    const item = String(r.rawJson?.First ?? r.rawJson?.Title ?? r.firstName ?? "").trim();
+    const host = String(r.rawJson?.Hosting ?? r.hosting ?? "").trim();
+    return (amount != null && amount !== 0) || !!item || !!host;
+  }
+
+  const filteredOtherIncomeRows = useMemo(
+    () => otherIncomeRows.filter((r) => rowHasVisibleData(r) && (rowFinancialAmount(r) ?? 0) !== 0),
+    [otherIncomeRows, year, selectedEditColumn]
+  );
+  const filteredExpenseRows = useMemo(
+    () => expenseRows.filter((r) => rowHasVisibleData(r) && (rowFinancialAmount(r) ?? 0) !== 0),
+    [expenseRows, year, selectedEditColumn]
+  );
+  const filteredBalanceRows = useMemo(
+    () =>
+      balanceRows.filter((r) => {
+        const amount = rowFinancialAmount(r);
+        if (amount == null || amount === 0) return false;
+        const last = String(r.rawJson?.Last ?? r.lastName ?? "").trim().toLowerCase();
+        const title = String(r.rawJson?.Title ?? r.title ?? "").trim().toLowerCase();
+        const first = String(r.rawJson?.First ?? r.firstName ?? "").trim().toLowerCase();
+        return last === "account" || title === "account" || first === "account";
+      }),
+    [balanceRows, year, selectedEditColumn]
+  );
   const ledgerAggregate = useMemo(() => {
-    const total = (rows: WorkbookRow[]) =>
-      rows.reduce((sum, r) => sum + (moneyFrom(r.rawJson?.Total) ?? 0), 0);
+    const total = (rows: WorkbookRow[]) => rows.reduce((sum, r) => sum + Number(rowFinancialAmount(r) ?? 0), 0);
     return {
-      otherIncome: { rows: otherIncomeRows.length, total: total(otherIncomeRows) },
-      expense: { rows: expenseRows.length, total: total(expenseRows) },
-      balance: { rows: balanceRows.length, total: total(balanceRows) },
+      otherIncome: { rows: filteredOtherIncomeRows.length, total: total(filteredOtherIncomeRows) },
+      expense: { rows: filteredExpenseRows.length, total: total(filteredExpenseRows) },
+      balance: { rows: filteredBalanceRows.length, total: total(filteredBalanceRows) },
     };
-  }, [otherIncomeRows, expenseRows, balanceRows]);
+  }, [filteredOtherIncomeRows, filteredExpenseRows, filteredBalanceRows, year, selectedEditColumn]);
 
   const editableRows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -300,6 +367,12 @@ export default function AdminPage() {
             onChange={(e) => setSheetGid(e.target.value)}
             placeholder="gid"
             style={{ width: 90, padding: 6 }}
+          />
+          <input
+            value={sheetTab}
+            onChange={(e) => setSheetTab(e.target.value)}
+            placeholder="Sheet tab name (default: member_status)"
+            style={{ minWidth: 230, padding: 6 }}
           />
           <input
             type="file"
@@ -396,14 +469,14 @@ export default function AdminPage() {
               </tr>
             </thead>
             <tbody>
-              {otherIncomeRows.map((r) => (
+              {filteredOtherIncomeRows.map((r) => (
                 <tr key={r.id}>
                   <td style={td}>{String(r.rawJson?.First ?? r.rawJson?.Title ?? "—")}</td>
                   <td style={td}>{String(r.rawJson?.Hosting ?? "—")}</td>
-                  <td style={td}>{fmtMoney(moneyFrom(r.rawJson?.Total))}</td>
+                  <td style={td}>{fmtMoney(rowFinancialAmount(r))}</td>
                 </tr>
               ))}
-              {!otherIncomeRows.length && (
+              {!filteredOtherIncomeRows.length && (
                 <tr><td style={td} colSpan={3}>No other income rows.</td></tr>
               )}
             </tbody>
@@ -440,15 +513,15 @@ export default function AdminPage() {
               </tr>
             </thead>
             <tbody>
-              {[...expenseRows, ...balanceRows].map((r) => (
+              {[...filteredExpenseRows, ...filteredBalanceRows].map((r) => (
                 <tr key={r.id}>
                   <td style={td}>{String(r.rowType ?? "—")}</td>
                   <td style={td}>{String(r.rawJson?.First ?? r.rawJson?.Title ?? r.firstName ?? "—")}</td>
                   <td style={td}>{String(r.rawJson?.Hosting ?? "—")}</td>
-                  <td style={td}>{fmtMoney(moneyFrom(r.rawJson?.Total))}</td>
+                  <td style={td}>{fmtMoney(rowFinancialAmount(r))}</td>
                 </tr>
               ))}
-              {!expenseRows.length && !balanceRows.length && (
+              {!filteredExpenseRows.length && !filteredBalanceRows.length && (
                 <tr><td style={td} colSpan={4}>No expense or balance rows.</td></tr>
               )}
             </tbody>
@@ -476,6 +549,14 @@ export default function AdminPage() {
         </div>
 
         <div style={{ border: "1px solid #e5e5e5", borderRadius: 8, padding: 10, marginBottom: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <div style={{ fontWeight: 700 }}>Editable value column:</div>
+            <select value={selectedEditColumn} onChange={(e) => setSelectedEditColumn(e.target.value)} style={{ padding: 6, minWidth: 220 }}>
+              {columnOptions.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
           <div style={{ fontWeight: 700, marginBottom: 6 }}>Add Row</div>
           <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr 1fr 1fr 1fr auto", gap: 8 }}>
             <input
@@ -563,6 +644,7 @@ export default function AdminPage() {
                 <th style={th}>Last</th>
                 <th style={th}>First</th>
                 <th style={th}>Title</th>
+                <th style={th}>{selectedEditColumn || "Column value"}</th>
                 <th style={th}>Order</th>
                 <th style={th}>Actions</th>
               </tr>
@@ -578,6 +660,22 @@ export default function AdminPage() {
                     <td style={td}><input value={val("lastName")} onChange={(e) => setEditDraft((p) => ({ ...p, lastName: e.target.value }))} disabled={!editing} style={cellInput(editing)} /></td>
                     <td style={td}><input value={val("firstName")} onChange={(e) => setEditDraft((p) => ({ ...p, firstName: e.target.value }))} disabled={!editing} style={cellInput(editing)} /></td>
                     <td style={td}><input value={val("title")} onChange={(e) => setEditDraft((p) => ({ ...p, title: e.target.value }))} disabled={!editing} style={cellInput(editing)} /></td>
+                    <td style={td}>
+                      <input
+                        value={editing ? String((editDraft.rawJson as any)?.[selectedEditColumn] ?? "") : String(r.rawJson?.[selectedEditColumn] ?? "")}
+                        onChange={(e) =>
+                          setEditDraft((p) => ({
+                            ...p,
+                            rawJson: {
+                              ...((p.rawJson as Record<string, unknown>) ?? r.rawJson ?? {}),
+                              [selectedEditColumn]: e.target.value,
+                            },
+                          }))
+                        }
+                        disabled={!editing}
+                        style={cellInput(editing)}
+                      />
+                    </td>
                     <td style={td}>{r.rowOrder}</td>
                     <td style={td}>
                       {!editing ? (
@@ -607,7 +705,7 @@ export default function AdminPage() {
                 );
               })}
               {!editableRows.length && (
-                <tr><td style={td} colSpan={7}>No workbook rows found for this filter.</td></tr>
+                <tr><td style={td} colSpan={8}>No workbook rows found for this filter.</td></tr>
               )}
             </tbody>
           </table>

@@ -32,7 +32,8 @@ type LedgerSummaryResponse = {
     balanceAmount: number;
     duesPaidAmount: number;
   }[];
-  ytd?: { income: number; expense: number; net: number; memberBalance: number };
+  accountBalances?: { title: string; amount: number }[];
+  ytd?: { income: number; expense: number; net: number; memberBalance: number; memberDues?: number };
 };
 
 type MonthlyReportResponse = {
@@ -66,6 +67,7 @@ type ReportRow = {
   sswContribution?: number | null;
   anambraContribution?: number | null;
   upua25Raffle?: number | null;
+  monthAmount?: number | null;
 };
 
 type MonthlyStatementRow = {
@@ -101,6 +103,7 @@ function cleanName(last?: string | null, first?: string | null) {
 }
 
 function rowActivityAmount(r: ReportRow) {
+  if (r.monthAmount != null && r.monthAmount !== 0) return Number(r.monthAmount);
   return (
     Number(r.total ?? 0) +
     Number(r.monthDueAmount ?? 0) +
@@ -161,29 +164,14 @@ export default function AnalyticsPage() {
     [me]
   );
 
-  const ytdRows = useMemo(() => {
-    return (ledgerSummary?.byType ?? [])
-      .map((r) => {
-        let activity = r.totalAmount ?? 0;
-        if (r.rowType.toLowerCase().includes("expense")) {
-          activity = Math.abs(activity);
-        }
-        return {
-          rowType: toTitleCase(r.rowType || "Unknown"),
-          count: r.count,
-          activity,
-          balance: Number(r.balanceAmount ?? 0),
-          dues: Number(r.duesPaidAmount ?? 0),
-        };
-      })
-      .sort((a, b) => a.rowType.localeCompare(b.rowType));
-  }, [ledgerSummary]);
-
   const ytdPie = useMemo(() => {
-    return ytdRows
-      .map((r) => ({ name: r.rowType, value: Math.abs(r.activity || 0) }))
+    return [
+      { name: "Income YTD", value: Math.abs(Number(ledgerSummary?.ytd?.income ?? 0)) },
+      { name: "Expense YTD", value: Math.abs(Number(ledgerSummary?.ytd?.expense ?? 0)) },
+      { name: "Net", value: Math.abs(Number(ledgerSummary?.ytd?.net ?? 0)) },
+    ]
       .filter((r) => r.value > 0);
-  }, [ytdRows]);
+  }, [ledgerSummary]);
 
   const monthlyStatementRows = useMemo<MonthlyStatementRow[]>(() => {
     if (!monthlyReport) return [];
@@ -191,7 +179,7 @@ export default function AnalyticsPage() {
     const rows: MonthlyStatementRow[] = [];
 
     for (const r of monthlyReport.balanceRows ?? []) {
-      const amount = Number(r.total ?? r.balanceYear ?? 0);
+      const amount = Number(r.monthAmount ?? r.total ?? r.balanceYear ?? 0);
       if (!amount) continue;
       rows.push({
         grouping: "Balance",
@@ -202,7 +190,7 @@ export default function AnalyticsPage() {
     }
 
     for (const r of monthlyReport.expenseRows ?? []) {
-      const amount = Math.abs(Number(r.total ?? rowActivityAmount(r)));
+      const amount = Math.abs(Number(r.monthAmount ?? r.total ?? rowActivityAmount(r)));
       if (!amount) continue;
       rows.push({
         grouping: "Expense",
@@ -249,8 +237,8 @@ export default function AnalyticsPage() {
   const monthlyPie = useMemo(() => {
     const duesTotal = (monthlyReport?.duesPayments ?? []).reduce((s, d) => s + Number(d.amount ?? 0), 0);
     const incomeTotal = (monthlyReport?.incomeRows ?? []).reduce((s, r) => s + Math.max(0, rowActivityAmount(r)), 0);
-    const expenseTotal = (monthlyReport?.expenseRows ?? []).reduce((s, r) => s + Math.abs(Number(r.total ?? rowActivityAmount(r))), 0);
-    const balanceTotal = (monthlyReport?.balanceRows ?? []).reduce((s, r) => s + Math.abs(Number(r.total ?? r.balanceYear ?? 0)), 0);
+    const expenseTotal = (monthlyReport?.expenseRows ?? []).reduce((s, r) => s + Math.abs(rowActivityAmount(r)), 0);
+    const balanceTotal = (monthlyReport?.balanceRows ?? []).reduce((s, r) => s + Math.abs(Number(r.monthAmount ?? r.total ?? r.balanceYear ?? 0)), 0);
 
     return [
       { name: "Member dues", value: duesTotal },
@@ -306,36 +294,30 @@ export default function AnalyticsPage() {
         <section style={cardStyle()}>
           <h3 style={{ marginTop: 0 }}>Year-to-date financial summary</h3>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 8, marginBottom: 10 }}>
-            <Field label="Income YTD" value={money(ledgerSummary?.ytd?.income ?? 0)} />
+            <Field label="Income YTD (dues + other income)" value={money(ledgerSummary?.ytd?.income ?? 0)} />
             <Field label="Expense YTD" value={money(ledgerSummary?.ytd?.expense ?? 0)} />
             <Field label="Net (P&L)" value={money(ledgerSummary?.ytd?.net ?? 0)} />
             <Field label="Member Balance YTD" value={money(ledgerSummary?.ytd?.memberBalance ?? 0)} />
           </div>
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 520 }}>
               <thead>
                 <tr style={{ background: "#f2f4f6", textAlign: "left" }}>
-                  <th style={th}>Grouping</th>
-                  <th style={th}>Rows</th>
-                  <th style={th}>Activity</th>
-                  <th style={th}>YTD Balance</th>
-                  <th style={th}>YTD Dues</th>
+                  <th style={th}>Account</th>
+                  <th style={thRight}>Balance</th>
                 </tr>
               </thead>
               <tbody>
-                {ytdRows.map((r) => (
-                  <tr key={r.rowType}>
-                    <td style={td}>{r.rowType}</td>
-                    <td style={td}>{r.count}</td>
-                    <td style={tdRight}>{money(r.activity)}</td>
-                    <td style={tdRight}>{money(r.balance)}</td>
-                    <td style={tdRight}>{money(r.dues)}</td>
+                {(ledgerSummary?.accountBalances ?? []).map((r) => (
+                  <tr key={r.title}>
+                    <td style={td}>{toTitleCase(r.title)}</td>
+                    <td style={tdRight}>{money(r.amount)}</td>
                   </tr>
                 ))}
-                {!ytdRows.length && (
+                {!(ledgerSummary?.accountBalances ?? []).length && (
                   <tr>
-                    <td style={td} colSpan={5}>
-                      No YTD ledger rows found.
+                    <td style={td} colSpan={2}>
+                      No account balances found.
                     </td>
                   </tr>
                 )}

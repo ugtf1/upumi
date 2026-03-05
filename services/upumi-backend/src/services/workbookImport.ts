@@ -30,14 +30,27 @@ function buildMemberKey(firstName: unknown, lastName: unknown) {
   return `${ln}.${fn}`.replace(/\.+/g, '.');
 }
 
-export function toSheetCsvExportUrl(input: string, gid = '0') {
+export function toSheetCsvExportUrl(input: string, opts?: { gid?: string; sheetTab?: string }) {
   const trimmed = String(input ?? '').trim();
   if (!trimmed) return '';
-  if (trimmed.includes('/export?format=csv')) return trimmed;
+  const gid = String(opts?.gid ?? '').trim();
+  const sheetTab = String(opts?.sheetTab ?? '').trim();
+
+  if (trimmed.includes('/export?format=csv')) {
+    if (gid) return `${trimmed}${trimmed.includes('?') ? '&' : '?'}gid=${encodeURIComponent(gid)}`;
+    if (sheetTab) return `${trimmed}${trimmed.includes('?') ? '&' : '?'}sheet=${encodeURIComponent(sheetTab)}`;
+    return trimmed;
+  }
 
   const idMatch = trimmed.match(/\/spreadsheets\/d\/([^/]+)/);
   if (!idMatch) return trimmed;
-  return `https://docs.google.com/spreadsheets/d/${idMatch[1]}/export?format=csv&gid=${gid}`;
+  if (gid) {
+    return `https://docs.google.com/spreadsheets/d/${idMatch[1]}/export?format=csv&gid=${encodeURIComponent(gid)}`;
+  }
+  if (sheetTab) {
+    return `https://docs.google.com/spreadsheets/d/${idMatch[1]}/export?format=csv&sheet=${encodeURIComponent(sheetTab)}`;
+  }
+  return `https://docs.google.com/spreadsheets/d/${idMatch[1]}/export?format=csv`;
 }
 
 export async function importWorkbookCsv(csvText: string, year: number) {
@@ -151,4 +164,3 @@ export async function importWorkbookCsv(csvText: string, year: number) {
     duesRows,
   };
 }
-

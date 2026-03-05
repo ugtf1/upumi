@@ -18,9 +18,8 @@ RUN if [ -f yarn.lock ]; then yarn build; \
 # Runtime stage (serve static)
 FROM nginx:alpine
 COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Cloud Run listens on 8080; nginx default is 80, so we adjust.
-RUN sed -i 's/listen       80;/listen 8080;/' /etc/nginx/conf.d/default.conf
 EXPOSE 8080
 
 CMD ["nginx", "-g", "daemon off;"]
