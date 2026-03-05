@@ -1,6 +1,8 @@
 # Build stage
 FROM node:20-slim AS build
 WORKDIR /app
+ARG VITE_API_BASE
+ENV VITE_API_BASE=$VITE_API_BASE
 
 COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* ./
 RUN if [ -f yarn.lock ]; then yarn install --frozen-lockfile; \

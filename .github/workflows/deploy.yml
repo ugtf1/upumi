@@ -66,9 +66,17 @@ jobs:
         id: build_web
         run: |
           IMAGE_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.WEB_SERVICE_NAME }}/${{ env.WEB_SERVICE_NAME }}:${{ github.sha }}"
+          API_URL=$(gcloud run services describe ${{ env.API_SERVICE_NAME }} --region ${{ env.REGION }} --format='value(status.url)' || true)
+          if [ -z "$API_URL" ]; then
+            echo "API service URL not found; using relative /api"
+            API_BASE="/api"
+          else
+            API_BASE="${API_URL}/api"
+          fi
           echo "Building WEB image: $IMAGE_TAG"
+          echo "Using VITE_API_BASE=$API_BASE"
           gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
-          docker build -t "$IMAGE_TAG" ./web
+          docker build --build-arg VITE_API_BASE="$API_BASE" -t "$IMAGE_TAG" ./web
           docker push "$IMAGE_TAG"
           echo "image=$IMAGE_TAG" >> $GITHUB_OUTPUT
 

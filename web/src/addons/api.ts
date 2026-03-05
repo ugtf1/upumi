@@ -1,4 +1,6 @@
-export const API_BASE = "/api";
+const rawBase = (import.meta as any)?.env?.VITE_API_BASE as string | undefined;
+const normalizedBase = (rawBase ?? "/api").trim().replace(/\/+$/, "");
+export const API_BASE = normalizedBase || "/api";
 
 const TOKEN_KEY = "upumi_token";
 type Role = "ADMIN" | "USER";
