@@ -84,6 +84,10 @@ function monthlyPresenceKey(month: number): string {
 function workbookMonthAmount(raw: RawRow, month: number): number | null {
   const label = monthNames[Math.max(1, Math.min(12, month)) - 1];
   const candidates = [
+    `Dues-${label}`,
+    `Dues-${label.toLowerCase()}`,
+    `${label} dues`,
+    `${label.toLowerCase()} dues`,
     `${label}$`,
     `${label} $`,
     `${label.toLowerCase()}$`,
@@ -270,7 +274,6 @@ export async function analyticsRoutes(app: FastifyInstance) {
 
   app.get("/ledger-summary", { preHandler: [requireAuth] }, async (req: any) => {
     const year = toInt(req.query?.year, new Date().getFullYear());
-    const month = Math.max(1, Math.min(12, toInt(req.query?.month, new Date().getMonth() + 1)));
     const workbookRows = await fetchWorkbookLikeRows();
 
     const byTypeMap: Record<string, { rowType: string; count: number; totalAmount: number; balanceAmount: number; duesPaidAmount: number }> = {};
@@ -313,39 +316,18 @@ export async function analyticsRoutes(app: FastifyInstance) {
 
     const byType = Object.values(byTypeMap).sort((a, b) => a.rowType.localeCompare(b.rowType));
 
-    const balanceRowsMonthly: Array<{
-      rowType: string;
-      last: string | null;
-      first: string | null;
-      monthAmount: number | null;
-      total: number | null;
-      balanceYear: number | null;
-    }> = workbookRows
-      .filter((r: any) => normalizeRowType(r.rowType).includes("balance"))
-      .map((r: any) => {
-        const raw = (r.rawJson ?? {}) as RawRow;
-        return {
-          rowType: normalizeRowType(r.rowType),
-          last: strCell(raw["Last"]) ?? r.lastName ?? null,
-          first: strCell(raw["First"]) ?? r.firstName ?? null,
-          monthAmount: workbookMonthAmount(raw, month),
-          total: moneyFromCell(raw["Total"]),
-          balanceYear: moneyFromCell(raw[`${year} balance`]),
-        };
-      });
-
-    const incomeYtd = balanceRowsMonthly
+    const incomeYtd = balanceRows
       .filter((r: any) => String(r.last ?? "").trim().toLowerCase() === "total" && String(r.first ?? "").trim().toLowerCase() === "income")
-      .reduce((s: number, r: any) => s + Number(r.monthAmount ?? r.total ?? 0), 0);
-    const expenseYtd = balanceRowsMonthly
+      .reduce((s: number, r: any) => s + Number(r.duesPaidYear ?? r.total ?? 0), 0);
+    const expenseYtd = balanceRows
       .filter((r: any) => String(r.last ?? "").trim().toLowerCase() === "total" && String(r.first ?? "").trim().toLowerCase() === "expense")
-      .reduce((s: number, r: any) => s + Math.abs(Number(r.monthAmount ?? r.total ?? 0)), 0);
+      .reduce((s: number, r: any) => s + Math.abs(Number(r.duesPaidYear ?? r.total ?? 0)), 0);
 
-    const accountBalances = balanceRowsMonthly
+    const accountBalances = balanceRows
       .filter((r: any) => String(r.last ?? "").trim().toLowerCase() === "account")
       .map((r: any) => ({
         title: String(r.first ?? "Account").trim() || "Account",
-        amount: Number(r.monthAmount ?? r.balanceYear ?? r.total ?? 0),
+        amount: Number(r.duesPaidYear ?? r.balanceYear ?? r.total ?? 0),
       }))
       .filter((r: any) => r.amount !== 0)
       .sort((a: any, b: any) => a.title.localeCompare(b.title));
@@ -394,7 +376,7 @@ export async function analyticsRoutes(app: FastifyInstance) {
       const raw = (r.rawJson ?? {}) as RawRow;
       const period = parseHostingPeriod(r.hosting ?? strCell(raw["Hosting"]));
       const amounts = workbookMoneyFields(raw, year, month);
-      const monthAmount = workbookMonthAmount(raw, month);
+      const monthAmount = amounts.monthlyDuesCol ?? workbookMonthAmount(raw, month);
 
       const payload = {
         id: r.id,
