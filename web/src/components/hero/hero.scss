@@ -1,0 +1,171 @@
+.hero-section {
+  width: 100%;
+  height: 74rem;
+  position: relative;
+  background: var(--background);
+  padding: 0 4rem;
+  
+  .hero-section-container {
+    width: 100%;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    padding-top: 4rem;
+
+    .first-image {
+      width: 100%;
+      // max-width: 980px;
+      margin: 0 auto;
+      mask-image: linear-gradient(
+          180deg,
+          transparent 0%,
+          black 60%,
+          black 50%,
+          transparent 100%
+        ),
+        linear-gradient(
+          180deg,
+          transparent 0%,
+          black 30%,
+          black 70%,
+          transparent 100%
+        );
+      -webkit-mask-image: linear-gradient(
+          90deg,
+          transparent 0%,
+          black 30%,
+          black 60%,
+          transparent 100%
+        ),
+        linear-gradient(
+          180deg,
+          transparent 0%,
+          black 30%,
+          black 70%,
+          transparent 100%
+        );
+      mask-composite: intersect;
+      -webkit-mask-composite: destination-in;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  }
+  .second-section-image {
+    width: 100%;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    height: 24rem;
+    
+    
+    .second-image {
+      width: 100%;
+      mask-image: linear-gradient(
+          180deg,
+          transparent 0%,
+          black 60%,
+          black 50%,
+          transparent 100%
+        ),
+        linear-gradient(
+          180deg,
+          transparent 0%,
+          black 30%,
+          black 70%,
+          transparent 100%
+        );
+      -webkit-mask-image: linear-gradient(
+          90deg,
+          transparent 0%,
+          black 30%,
+          black 60%,
+          transparent 100%
+        ),
+        linear-gradient(
+          180deg,
+          transparent 0%,
+          black 30%,
+          black 70%,
+          transparent 100%
+        );
+      mask-composite: intersect;
+      -webkit-mask-composite: destination-in;
+    }
+  }
+
+  .hero-description {
+    text-align: center;
+    line-height: 1.4;
+    margin-top: -3rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+
+    .hero-text {
+      font-weight: 800;
+      font-size: 2.9rem;
+      font-family: Perpetua Titling MT;
+      color: #141002;
+    }
+    .second-text {
+      font-family: Jokerman;
+      color: #141002;
+    }
+    .hero-text-two {
+      font-family: Inter;
+    }
+
+    .second-btn-section {
+      text-align: center;
+      border: none;
+      font-size: 1rem;
+      color: #052d3b;
+      font-family: Poppins;
+      font-weight: 700;
+      font-size: 14px;
+      line-height: 100%;
+      letter-spacing: 0%;
+      padding-left: 6rem;
+      padding-right: 6rem;
+      padding-top: 0.7rem;
+      padding-bottom: 0.7rem;
+      background: var(--white);
+      background: var(--white);
+      border-radius: 14px;
+      margin-top: 1rem;
+      box-shadow: rgba(14, 30, 37, 0.12) 0px 2px 4px 0px,
+        rgba(14, 30, 37, 0.32) 0px 2px 16px 0px;
+      cursor: pointer;
+    }
+  }
+}
+/*==============================Media Query for Small size 786px =====================*/
+@media only screen and (max-width: 786px) {
+  .hero-section {
+    width: 100%;
+    padding: 0 0.5rem;
+    height: 28rem;
+
+    .hero-description {
+      margin-top: -1rem;
+      .hero-text {
+        font-size: 1.2rem;
+        font-weight: 700;
+      }
+      .second-text {
+        font-size: 1.12rem;
+        margin-top: 0.4rem;
+      }
+    }
+    .second-section-image {
+      margin-top: -9.40rem;
+    }
+  }
+}

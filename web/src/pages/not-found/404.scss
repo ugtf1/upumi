@@ -1,0 +1,101 @@
+/* General Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+.page-not-found {
+    font-family: 'Arial', sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background: url('/images/gabriele-garanzelli.svg') no-repeat center center fixed;
+    background-size: cover;
+    color: white;
+    text-align: center;
+}
+
+.container {
+    max-width: 37.5rem;
+    width: 100%;
+    padding: 1.25rem;
+}
+
+.error-code {
+    margin-bottom: 1.25rem;
+}
+
+.message {
+    font-size: 1.5rem;
+    margin-bottom: 5rem;
+}
+
+.button {
+    display: inline-block;
+    padding: 0.625rem 1.25rem;
+    font-size: 1.125rem;
+    font-weight: bold;
+    color: white;
+    background-color: #182793;
+    text-decoration: none;
+    border-radius: 0.625rem;
+    transition: background-color 0.3s ease;
+
+    &:hover {
+        background-color: #3040a8;
+        color: white;
+    }
+}
+
+.main-image {
+    width: 30rem;
+    height: 11.625rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .main-image {
+        width: 20rem;
+    }
+
+    .message {
+        font-size: 1.25rem;
+    }
+
+    .button {
+        font-size: 1rem;
+        padding: 0.5rem 1rem;
+    }
+}
+/* Responsive Design */
+@media (max-width: 360px) {
+    .main-image {
+        width: 15rem;
+    }
+
+    .message {
+        font-size: 1.25rem;
+    }
+
+    .button {
+        font-size: 1rem;
+        padding: 0.5rem 1rem;
+    }
+}
+/* Responsive Design */
+@media (max-width: 300px) {
+    .main-image {
+        width: 10rem;
+    }
+
+    .message {
+        font-size: 1.25rem;
+    }
+
+    .button {
+        font-size: 1rem;
+        padding: 0.5rem 1rem;
+    }
+}

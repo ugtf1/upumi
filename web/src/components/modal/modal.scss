@@ -1,0 +1,199 @@
+.upumi-payment-modal,
+.upumi-payment-overlay {
+  width: 100vw;
+  height: 100vh;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  position: fixed;
+  z-index: 1000;
+}
+
+.upumi-payment-overlay {
+  background: rgba(78, 78, 78, 0.8);
+}
+
+.upumi-payment-modal-content {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  line-height: 1.4;
+  background: var(--white);
+  padding: 1.5rem;
+  border-radius: 8px;
+  max-width: 90%;
+  width: 600px;
+  min-width: 280px;
+  box-shadow: rgba(0, 0, 0, 0.19) 0px 10px 20px, rgba(0, 0, 0, 0.23) 0px 6px 6px;
+  z-index: 1000;
+  
+  .upumi-payment-heading {
+    color: var(--dark-blue);
+    margin-bottom: 0.75rem;
+    font-size: 1.5rem;
+  }
+  
+  .upumi-payment-description {
+    color: #475467;
+    margin-bottom: 1.5rem;
+  }
+  
+  .upumi-close-section {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+    
+    .upumi-hand-coin {
+      border: 1px solid rgb(221, 220, 220);
+      padding: 0.3rem;
+      border-radius: 5px;
+      width: 40px;
+      height: 40px;
+    }
+    
+    .upumi-close-button {
+      background: transparent;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      color: #666;
+      transition: color 0.2s;
+      
+      &:hover {
+        color: #333;
+      }
+    }
+  }
+  
+  .upumi-payment-methods {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    
+    .upumi-payment-method {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.75rem;
+      border-radius: 8px;
+      transition: background-color 0.2s;
+      
+      &:hover {
+        background-color: #f5f5f5;
+      }
+      
+      img {
+        width: 40px;
+        height: 40px;
+        object-fit: contain;
+      }
+      
+      .upumi-payment-info {
+        .upumi-payment-text {
+          font-size: 1rem;
+          color: #000000;
+          margin: 0;
+          
+          .upumi-payment-link {
+            color: #000000;
+            text-decoration: underline;
+            font-weight: 500;
+            font-size: 1rem;
+            word-break: break-all;
+          }
+        }
+      }
+    }
+  }
+  
+  .upumi-button-container {
+    margin-top: 2rem;
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    
+    .upumi-button {
+      padding: 0.5rem 1.5rem;
+      border: none;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      border-radius: 12px;
+      transition: transform 0.2s, opacity 0.2s;
+      min-width: 120px;
+      
+      &:active {
+        transform: scale(0.98);
+      }
+      
+      &-secondary {
+        background: var(--background);
+      }
+      
+      &-primary {
+        background: var(--green);
+        color: var(--white);
+      }
+    }
+  }
+
+  // Responsive adjustments
+  @media (max-width: 768px) {
+    padding: 1.25rem;
+    
+    .upumi-payment-heading {
+      font-size: 1.25rem;
+    }
+    
+    .upumi-payment-methods {
+      .upumi-payment-method {
+        gap: 0.75rem;
+        
+        img {
+          width: 32px;
+          height: 32px;
+        }
+        
+        .upumi-payment-info {
+          .upumi-payment-text {
+            font-size: 0.9rem;
+            
+            .upumi-payment-link {
+              font-size: 0.9rem;
+            }
+          }
+        }
+      }
+    }
+    
+    .upumi-button-container {
+      gap: 0.75rem;
+      
+      .upumi-button {
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
+        min-width: 100px;
+      }
+    }
+  }
+
+  @media (max-width: 480px) {
+    padding: 1rem;
+    width: 95%;
+    
+    .upumi-close-section {
+      margin-bottom: 1rem;
+    }
+    
+    .upumi-payment-methods {
+      gap: 1rem;
+    }
+    
+    .upumi-button-container {
+      flex-wrap: wrap;
+    }
+  }
+}

@@ -1,0 +1,122 @@
+.footer-container{
+  background: var(--white);
+  margin-top: 2rem;
+  //JOIN OUR COMMUNITY SECTION
+  .join-community{
+    background: var(--green);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    .join-image{
+      width: 100%;
+     
+    }
+    .sub-join-community{
+      position: absolute;
+      background: var(--white);
+      max-width: 900px;
+      width: 80%;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      flex-direction: column;
+      justify-content: center;
+      padding: 4rem;
+      border-radius: 8px;
+      box-shadow: rgba(0, 0, 0, 0.16) 0px 3px 6px, rgba(0, 0, 0, 0.23) 0px 3px 6px;
+      .sub-section{
+        display: flex;
+        align-items: center;
+        width: 63%;
+        .inputbox{
+          margin: 1rem;
+          border-radius: 5px;
+          border: 2px solid rgb(238, 236, 236);
+          outline: none;
+          width: 100%;
+          padding: 0.60rem;
+        }
+
+        .join-btn{
+          background: var(--green);
+          padding: 0.60rem;
+          color: var(--white);
+          border-radius: 5px;
+          border: none;
+        }
+      }
+      
+      .join-title{
+        color: #101828;
+        font-weight: 700;
+        font-family: sans-serif;
+        font-size: 48px;
+        margin-top: 1rem;
+      }
+      .join-text{
+        color: #475467;
+        font-weight: 500;
+        margin-bottom: 0.20rem;
+        @media (max-width:786px){
+          font-size: 15px;
+          font-weight: 300;
+          text-align: center;
+        }
+      }
+      .policy-link{
+        color: #475467;
+        text-decoration: underline;
+       
+      }
+      .join-policy{
+        @media (max-width:786px){
+          font-size: 14px;
+          width: 100%;
+          margin-top: -1rem;
+          font-weight: bold;
+        }
+      }
+    }
+  }
+  //FOOTER SECTION
+  
+}
+/*==============================Media Query for Small size 786px =====================*/
+@media only screen and (max-width:786px){
+  .footer-container{
+    .join-community{
+      padding-top: 2rem;
+      padding-bottom: 2rem;
+      height: 20rem;
+      .join-image{
+        width: 100%;
+        
+        object-fit: contain;
+        
+      }
+      .sub-join-community{
+        width: 90%;
+        height: 17rem;
+        
+        .sub-section{
+          flex-direction: column;
+          width: 100%;
+          gap: 0;
+          .inputbox{
+            width: 100%;
+          }
+          .join-btn{
+            width: 80%;
+          }
+        }
+        .join-title{
+          font-size: 20px;
+          font-weight: bold;
+          
+        }
+      }
+    }
+  }
+}

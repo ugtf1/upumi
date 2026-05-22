@@ -1,0 +1,85 @@
+.event-banner {
+    $box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    margin-top: 1.25rem;
+
+    display: flex;
+    flex-direction: column;
+    flex-wrap: wrap;
+
+    .banner-container {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+
+        .reminder {
+            color: #000000;
+            margin-bottom: 20px;
+            font-family: Inter;
+            font-weight: 400;
+            font-size: 18px;
+            line-height: 26px;
+            letter-spacing: 0%;
+            white-space: nowrap;
+            position: relative;
+            // overflow: hidden; 
+
+            /* Apply the animation */
+            animation: scrollText 30s linear infinite; /* Adjust duration and speed */
+
+            &::before {
+                content: "";
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 20px;
+                height: 100%;
+                z-index: 1;
+            }
+
+            /* Keyframes for the scrolling animation */
+            @keyframes scrollText {
+                0% {
+                    transform: translateX(100%); /* Start offscreen to the right */
+                }
+
+                100% {
+                    transform: translateX(-100%); /* End offscreen to the left */
+                }
+            }
+        }
+
+        .banner {
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: $box-shadow;
+            max-width: 960px;
+            position: relative;
+            width: 100%;
+
+            img {
+                width: 100%;
+                display: block;
+                object-fit: cover;
+            }
+        }
+    }
+    @media (max-width: 768px) {
+        .banner-container {
+            .reminder {
+                font-size: 16px;
+                line-height: 22px;
+                margin-bottom: 10px;
+                animation: scrollTextMobile 20s linear infinite; /* Different animation for mobile */
+            }
+        }
+    }
+}
+@keyframes scrollTextMobile {
+    0% {
+        transform: translateX(50%); /* Start offscreen to the right */
+    }
+
+    100% {
+        transform: translateX(-150%); /* End offscreen to the left */
+    }
+}

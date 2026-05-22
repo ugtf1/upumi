@@ -1,0 +1,42 @@
+.about-upumi {
+    margin: 1.25rem; // 20px
+    padding: 0 5rem; // 0 80px
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1.25rem; // 20px
+
+    .logo-image {
+        // margin-right: 1.25rem; // 20px
+        flex: 1;
+        // display: flex;
+        // flex-direction: column;
+        align-items: right;
+        
+    }
+    .logo-image img {
+        width: 18.75rem; // 300px
+    }
+    .about-upumi-text {
+        flex: 2;
+        text-align: left;
+        font-size: 24px;
+        color: #5C4800;
+        line-height: 1.6;
+        text-align: justify;
+    }
+
+    @media (max-width: 768px) {
+        flex-direction: column;
+        padding: 0;
+
+        .logo-image {
+            margin-right: 0;
+        }
+
+        .about-upumi-text {
+            text-align: justify;
+        }
+    }
+}

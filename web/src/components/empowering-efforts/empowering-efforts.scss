@@ -1,0 +1,102 @@
+.empoweringEffortsSection {
+  width: 100%;
+  padding: 4rem;
+  margin-top: -2rem;
+  box-sizing: border-box;
+  @media (max-width: 786px) {
+    padding: 0;
+  }
+
+  .empoweringEfforts {
+    background-color: var(--dark-green);
+    color: var(--white);
+    border-radius: 1.5rem; /* 24px */
+    padding: 4rem;
+
+    @media (max-width: 786px) {
+      padding: 1rem;
+    }
+
+    .empoweringEffortsHeading {
+      text-align: left;
+      padding-bottom: 1rem; /* 16px */
+      border-bottom: 0.0625rem solid var(--dark-blue); /* 1px */
+
+      h2 {
+        font-family: Montserrat;
+        font-weight: 700;
+        font-size: 2.5rem;
+        line-height: 100%;
+        color: var(--white);
+        margin-bottom: 1rem; /* 16px */
+
+        @media (max-width: 786px) {
+          font-size: 1.6rem;
+        }
+      }
+
+      p {
+        font-family: Montserrat;
+        font-weight: 500;
+        font-size: 1rem;
+        line-height: 100%;
+        color: var(--white);
+      }
+    }
+
+    .effortCards {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      @media (max-width: 786px) {
+        grid-template-columns: 1fr;
+      }
+      .effortCard {
+        width: 100%;
+        padding-top: 1rem;
+        border-radius: 1.5rem; /* 24px */
+        text-align: center;
+
+        img {
+          width: 100%;
+          height: auto;
+          border-radius: 0.625rem; /* 10px */
+          object-fit: contain;
+        }
+
+        h3 {
+          font-family: Montserrat;
+          font-weight: 600;
+          font-size: 1.75rem;
+          line-height: 100%;
+          margin-top: -3.5rem; /* -40px */
+          margin-left: 0;
+          color: var(--white);
+        }
+      }
+    }
+  }
+
+  @media (max-width: 78.125rem) {
+    .empoweringEfforts {
+      .empoweringEffortsHeading {
+        text-align: center;
+        h2 {
+          font-size: 1.5rem !important;
+        }
+        
+        p {
+          font-size: 1rem !important;
+        }
+      }
+
+      .effortCards {
+        .effortCard {
+          img {
+            max-width: 100%;
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,96 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(USER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberRecord MemberRecord?
+}
+
+model MemberRecord {
+  id String @id @default(cuid())
+
+  // NEW: stable identity for CSV imports
+  memberKey String @unique
+
+  // Optional linkage to a login account
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  status    String?
+  title     String?
+  firstName String?
+  lastName  String?
+  joined    String?
+  phone     String?
+
+  // Email is useful metadata but NOT a stable member identity
+  email String?
+
+  whatsapp String?
+  facebook String?
+
+  // Denormalized quick-access fields
+  goodStanding          String?
+  financialGoodStanding String?
+  voter                 String?
+  insurance             String?
+  attendancePct         String?
+
+  rawJson Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  monthlyDues MonthlyDue[]
+}
+
+model WorkbookRow {
+  id        String   @id @default(cuid())
+  sourceYear Int?
+  rowOrder  Int
+  rowType   String?
+  title     String?
+  firstName String?
+  lastName  String?
+  email     String?
+  hosting   String?
+  rawJson   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([rowType])
+  @@index([hosting])
+  @@index([rowOrder])
+}
+
+model MonthlyDue {
+  id             String       @id @default(cuid())
+  memberRecordId String
+  member         MemberRecord @relation(fields: [memberRecordId], references: [id], onDelete: Cascade)
+
+  year     Int
+  month    Int // 1-12
+  present  Boolean?
+  duesPaid Decimal?
+
+  createdAt DateTime @default(now())
+
+  @@unique([memberRecordId, year, month])
+}

@@ -1,0 +1,260 @@
+.member-dashboard {
+  --member-card-radius: 22px;
+}
+
+.member-dashboard__sidebar {
+  gap: 24px;
+  padding-inline: 16px;
+}
+
+.member-dashboard__nav {
+  gap: 14px;
+}
+
+.member-dashboard__sidebar-footer {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.member-dashboard__footer-actions {
+  gap: 12px;
+}
+
+.member-dashboard__profile-card {
+  margin-top: 0;
+  padding: 0;
+}
+
+.member-dashboard__main {
+  gap: 22px;
+}
+
+.member-dashboard__hero {
+  min-height: 110px;
+}
+
+.member-dashboard__hero-actions {
+  width: min(100%, 520px);
+  justify-content: flex-end;
+}
+
+.member-dashboard__search {
+  max-width: 360px;
+}
+
+.member-dashboard__search input {
+  order: -1;
+}
+
+.member-dashboard__stats {
+  gap: 18px;
+}
+
+.member-dashboard__stat-card {
+  border-radius: var(--member-card-radius);
+}
+
+.member-dashboard__panel {
+  border-radius: 22px;
+}
+
+.member-dashboard__chart-wrap {
+  height: 350px;
+}
+
+.member-dashboard__pie-layout {
+  grid-template-columns: minmax(0, 1fr) 260px;
+}
+
+.member-dashboard__pie-wrap {
+  height: 350px;
+}
+
+.member-dashboard__legend {
+  padding-right: 8px;
+}
+
+.member-dashboard__financial-grid {
+  gap: 18px;
+}
+
+.member-dashboard__finance-cards {
+  margin-bottom: 16px;
+}
+
+.member-dashboard__finance-card {
+  padding: 12px 10px;
+}
+
+.member-dashboard__finance-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.member-dashboard__membership {
+  display: grid;
+  gap: 16px;
+}
+
+.member-dashboard__section-copy h2 {
+  margin: 0;
+  font-size: clamp(1.45rem, 1.8vw, 1.9rem);
+  line-height: 1.1;
+}
+
+.member-dashboard__section-copy p {
+  margin: 10px 0 0;
+  color: var(--admin-text);
+  font-size: 0.98rem;
+}
+
+.member-dashboard__membership-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 20px;
+  border: 1px solid rgba(20, 57, 40, 0.08);
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: var(--admin-shadow);
+  flex-wrap: wrap;
+}
+
+.member-dashboard__filter-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.member-dashboard__filter-label {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: #1c2923;
+}
+
+.member-dashboard__filter-pill {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid #d7e3da;
+  border-radius: 10px;
+  background: #eaf6ef;
+  color: #31433a;
+  font: inherit;
+  cursor: default;
+}
+
+.member-dashboard__filter-search {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: min(320px, 100%);
+  margin-left: auto;
+  padding: 0 14px;
+  border: 1px solid #dbe6de;
+  border-radius: 10px;
+  background: #eef8f3;
+  color: #79a08d;
+  flex: 1 1 240px;
+}
+
+.member-dashboard__filter-search input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #30443a;
+  font: inherit;
+}
+
+.member-dashboard__filter-search input::placeholder {
+  color: #a7b9af;
+}
+
+.member-dashboard__schedule-panel {
+  display: grid;
+  gap: 22px;
+  padding: 34px 36px 32px;
+}
+
+.member-dashboard__schedule-tools {
+  align-items: center;
+}
+
+.member-dashboard__schedule-year {
+  min-height: 48px;
+  min-width: 132px;
+}
+
+.member-dashboard__schedule-year select {
+  pointer-events: none;
+}
+
+.member-dashboard__schedule-search {
+  min-height: 48px;
+  min-width: min(360px, 100%);
+}
+
+.member-dashboard__schedule-search input {
+  order: -1;
+}
+
+.member-dashboard__table-shell {
+  padding: 0;
+}
+
+@media only screen and (max-width: 1080px) {
+  .member-dashboard__sidebar-footer {
+    margin-top: 0;
+  }
+
+  .member-dashboard__footer-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media only screen and (max-width: 900px) {
+  .member-dashboard__hero-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .member-dashboard__search,
+  .member-dashboard__filter-search,
+  .member-dashboard__schedule-search {
+    max-width: none;
+  }
+
+  .member-dashboard__schedule-panel {
+    padding: 22px 20px;
+  }
+}
+
+@media only screen and (max-width: 640px) {
+  .member-dashboard__membership-toolbar,
+  .member-dashboard__filter-group {
+    align-items: stretch;
+  }
+
+  .member-dashboard__filter-group,
+  .member-dashboard__filter-pill,
+  .member-dashboard__filter-search {
+    width: 100%;
+  }
+
+  .member-dashboard__footer-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .member-dashboard__schedule-panel {
+    padding: 18px 14px;
+  }
+}

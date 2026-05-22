@@ -1,0 +1,92 @@
+.upumi-carousel-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background: rgba(0, 0, 0, 0.9);
+  z-index: 10000;
+  display: flex;
+  justify-content: center;
+  align-items: center; // Changed from flex-start to center
+  padding: 2rem;
+
+
+  &-wrapper {
+    width: 90%;
+    max-width: 800px;
+    position: relative;
+    background: var(--white);
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  &-content {
+    position: relative;
+    padding: 2rem;
+    color: black;
+    
+    .upumi-close-button {
+      position: absolute;
+      top: 0.3rem;
+      right: 1rem;
+      background: transparent;
+      border: none;
+      font-size: 2rem;
+      padding: 1rem;
+      cursor: pointer;
+      color: var(--black);
+      transition: color 0.2s;
+      z-index: 100;
+      
+      &:hover {
+        color: #333;
+      }
+    }
+  }
+}
+
+// Animation for modal appearance
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+// Responsive adjustments
+@media (max-width: 768px) {
+  .upumi-carousel-modal {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+    
+    &-wrapper {
+      width: 95%;
+    }
+    
+    &-content {
+      padding: 1.5rem;
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .upumi-carousel-modal {
+    &-content {
+      padding: 1rem;
+      
+      .upumi-close-button {
+        top: 0.5rem;
+        right: 0.5rem;
+        font-size: 1.5rem;
+      }
+    }
+  }
+}

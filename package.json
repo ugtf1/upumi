@@ -1,0 +1,11 @@
+{
+  "name": "upumi",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix web run dev",
+    "dev:web": "npm --prefix web run dev",
+    "dev:api": "npm --prefix services/upumi-backend run dev",
+    "build:web": "npm --prefix web run build",
+    "build:api": "npm --prefix services/upumi-backend run build"
+  }
+}

@@ -1,0 +1,331 @@
+.upcomingEvents {
+  padding: 6rem 5%; // 96px
+  width: 100%;
+  box-sizing: border-box;
+
+  h2 {
+    width: 100%;
+    max-width: 79.375rem; // 1270px
+    margin: 0 auto;
+    padding-bottom: 1rem; // 16px
+    // border-bottom: 0.0625rem solid var(--dark-blue);
+    font-family: Montserrat;
+    font-weight: 700;
+    font-size: 2.5rem; // 40px
+    line-height: 100%;
+    color: var(--dark-blue);
+    text-align: left;
+    margin-bottom: 0.5rem;
+  }
+
+  .upcomingEventCard {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2rem; // 32px
+    margin-top: 1.875rem; // 30px
+    width: 100%;
+    max-width: 79.375rem; // 1270px
+    margin: 0 auto;
+    border-top: 0.0625rem solid var(--dark-blue);
+
+    .eventImage {
+      width: 100%;
+      max-width: 45%;
+      border-radius: 0.75rem; // 12px
+      margin-top: 1rem;
+
+      img {
+        width: 100%;
+        height: auto;
+        border-radius: 0.625rem; // 10px
+      }
+    }
+
+    .eventDetails {
+      width: 100%;
+      max-width: 50%;
+      text-align: left;
+      margin-top: 1rem; // 16px;
+
+      .learn-more {
+        .upumi-payment-modal,
+        .upumi-payment-overlay {
+          width: 100vw;
+          height: 100vh;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          position: fixed;
+          z-index: 1000;
+        }
+
+        .upumi-payment-overlay {
+          background: rgba(78, 78, 78, 0.8);
+        }
+
+        .upumi-payment-modal-content {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          line-height: 1.4;
+          background: var(--white);
+          padding: 1.5rem;
+          border-radius: 8px;
+          max-width: 90%;
+          width: 800px;
+          min-width: 280px;
+          box-shadow: rgba(0, 0, 0, 0.19) 0px 10px 20px,
+            rgba(0, 0, 0, 0.23) 0px 6px 6px;
+          z-index: 1000;
+          max-height: 100%;
+          overflow-y: auto;
+
+          .vocation-text {
+            margin-bottom: 0.5rem;
+            color: black;
+          }
+
+          .vocation-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            .modal-links {
+              display: flex;
+              gap: 2rem;
+              padding: 1rem;
+              .links {
+                color: gray;
+                font-size: 1.70rem;
+                
+              }
+            }
+
+            ul {
+              margin: 0;
+              padding-left: 1.25rem;
+              list-style-type: disc;
+              // max-height: 60vh;
+            }
+            li {
+              text-transform: lowercase;
+              color: rgb(65, 64, 64);
+            }
+            .message{
+              color: var(--black);
+              font-size: 1.5rem;
+
+              @media(max-width:786px){
+                font-size: 0.50rem;
+              }
+            }
+          }
+
+          .upumi-close-section {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+
+            .upumi-close-button {
+              background: transparent;
+              border: none;
+              font-size: 1.5rem;
+              cursor: pointer;
+              color: #666;
+              transition: color 0.2s;
+              top: 0;
+              right: 0;
+              position: absolute;
+
+              &:hover {
+                color: #333;
+              }
+            }
+          }
+
+          .upumi-button-container {
+            margin-top: 2rem;
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+
+            .upumi-button {
+              padding: 0.5rem 1.5rem;
+              border: none;
+              font-size: 1rem;
+              font-weight: 600;
+              cursor: pointer;
+              border-radius: 12px;
+              transition: transform 0.2s, opacity 0.2s;
+              min-width: 120px;
+
+              &:active {
+                transform: scale(0.98);
+              }
+
+              &-secondary {
+                background: var(--background);
+              }
+
+              &-primary {
+                background: var(--green);
+                color: var(--white);
+              }
+            }
+          }
+
+          // Responsive adjustments
+          @media (max-width: 768px) {
+            padding: 1.25rem;
+
+            .upumi-payment-heading {
+              font-size: 1.25rem;
+            }
+
+            .upumi-payment-methods {
+              .upumi-payment-method {
+                gap: 0.75rem;
+
+                img {
+                  width: 32px;
+                  height: 32px;
+                }
+
+                .upumi-payment-info {
+                  .upumi-payment-text {
+                    font-size: 0.9rem;
+
+                    .upumi-payment-link {
+                      font-size: 0.9rem;
+                    }
+                  }
+                }
+              }
+            }
+
+            .upumi-button-container {
+              gap: 0.75rem;
+
+              .upumi-button {
+                padding: 0.5rem 1rem;
+                font-size: 0.9rem;
+                min-width: 100px;
+              }
+            }
+          }
+
+          @media (max-width: 480px) {
+            padding: 1rem;
+            width: 95%;
+
+            .upumi-close-section {
+              margin-bottom: 1rem;
+            }
+
+            .upumi-payment-methods {
+              gap: 1rem;
+            }
+
+            .upumi-button-container {
+              flex-wrap: wrap;
+            }
+          }
+        }
+      }
+
+      h3 {
+        font-weight: 600;
+        font-size: 1.75rem; // 28px
+        line-height: 2.25rem; // 36px
+        color: var(--black);
+        margin-bottom: 1rem; // 16px
+      }
+
+      p {
+        font-family: Montserrat;
+        font-weight: 450;
+        font-size: 1rem; // 16px
+        line-height: 1.5rem; // 24px
+        margin-bottom: 0.625rem; // 10px
+        color: var(--black);
+        text-align: justify;
+      }
+
+      .learnMoreButton2 {
+        background-color: var(--dark-green);
+        color: var(--white);
+        font-family: Poppins;
+        font-weight: 700;
+        font-size: 1rem; // 16px
+        line-height: 100%;
+        width: 12.125rem; // 194px
+        height: 3rem; // 48px
+        padding: 0.75rem 1rem; // 12px 16px
+        border-radius: 0.75rem; // 12px
+        border: 0.0625rem solid var(--dark-blue); // 1px
+        border-bottom-width: 0.125rem; // 2px
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+        margin-top: 6rem;
+
+        // &:hover {
+        //   background-color: var(--light-beige);
+        //   border: 0.0625rem solid var(--light-beige); // 1px
+        // }
+      }
+    }
+  }
+}
+
+// Media Queries for Responsiveness (keeping px for screen sizes)
+@media (max-width: 1024px) {
+  .upcomingEvents {
+    padding: 4rem 5%; // 64px
+
+    h2 {
+      font-size: 2rem; // 32px
+    }
+
+    .upcomingEventCard {
+      gap: 1rem; // 16px
+
+      .eventImage,
+      .eventDetails {
+        max-width: 100%;
+      }
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .upcomingEvents {
+    padding: 3rem 5%; // 48px
+
+    h2 {
+      font-size: 1.75rem; // 28px
+    }
+
+    .upcomingEventCard {
+      flex-direction: column;
+
+      .eventImage {
+        max-width: 100%;
+        margin-bottom: 1rem; // 16px
+      }
+
+      .eventDetails {
+        max-width: 100%;
+
+        h3 {
+          font-size: 1.5rem; // 24px
+        }
+
+        p {
+          font-size: 0.9rem; // 14.4px
+        }
+      }
+    }
+  }
+}

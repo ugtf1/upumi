@@ -1,0 +1,53 @@
+.executives-section{
+    width: 100%;
+
+   
+    .executive-container{
+        width: 100%;
+        padding: 0 4rem;
+        margin-top: 3rem;
+        .headline{
+            color: var(--green);
+            font-weight: 700;
+            font-size: 48px;
+            line-height: 100%;
+            letter-spacing: 0%;
+            margin-bottom: 0.5rem;
+                @media(max-width:786px){
+                    font-size: 25px;
+                }
+        }
+        @media(max-width:786px){
+            padding: 0.34rem;
+        }
+        .executive-card{
+            display: grid;
+            grid-template-columns: repeat(4 ,1fr);
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            
+
+            @media(max-width:786px){
+                grid-template-columns: 1fr;
+            }
+            .exco-image{
+                margin: 0 auto;
+                border-radius: 20px;
+                object-fit: cover;
+                width: 100%;
+                margin-top: 2rem;
+            }
+            .exco-name{
+                color: #101828;
+                font-weight: 600;
+                font-size: 20px;
+            }
+            .exco-designation{
+            color: #175CD3;
+            font-size: 18px;
+            font-family: inter;
+            }
+        }
+    }
+}

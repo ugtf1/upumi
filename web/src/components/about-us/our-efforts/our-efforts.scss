@@ -1,0 +1,112 @@
+.our-efforts {
+    text-align: center;
+    padding: 0; // 0 80px
+    margin-top: 3rem;
+
+    .our-efforts-heading {
+        height: 5.9375rem; // 95px
+        gap: 1rem; // 16px
+
+        h2 {
+            font-weight: 700;
+            font-size: 3rem; // 48px
+            line-height: 100%;
+            color: var(--dark-green);
+            display: inline;
+        }
+
+        p {
+            font-size: 1rem; // 16px
+            margin-bottom: 1.875rem; // 30px
+            color: var(--dark-green);
+        }
+    }
+
+    .effort-cards {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1.25rem; // 20px
+        padding: 0 5rem;
+    }
+
+    .effort-card {
+        border-radius: 0.625rem; // 10px
+        padding: 1.25rem; // 20px
+        width: 100%;
+        height: auto;
+        // max-width: 56.25rem; // 900px
+        text-align: left;
+        display: flex;
+        gap: 2rem; // 32px
+        margin-bottom: 2rem;
+
+        .image-container {
+            flex: 1;
+            background-color: var(--dark-green);
+            border-radius: 1rem; // 16px
+            padding: 1.25rem; // 20px
+            // height: 14.375rem; // 230px
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+
+            img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
+        }
+
+        .text-container {
+            flex: 1;
+
+            h3 {
+                font-weight: 600;
+                font-size: 28px;
+                line-height: 36px;
+                letter-spacing: 0%;                
+                margin-bottom: 0.625rem; // 10px
+                display: inline;
+                color: black;
+            }
+
+            p {
+                font-family: Inter;
+                font-weight: 400;
+                font-size: 24px;
+                line-height: 32px;
+                letter-spacing: 0%;
+
+                line-height: 1.6;
+                color: #5C4800;
+                display: block;
+            }
+        }
+    }
+
+    @media (max-width: 78.125rem) { 
+        .our-efforts{
+            padding: 0 0; 
+        }
+        .effort-cards{
+            padding: 0;
+        }
+        .effort-card {
+            flex-direction: column;
+            text-align: justify;
+            gap: 0.325rem;
+
+            .image-container {
+                height: auto;
+                padding: 0.625rem; // 10px
+
+                img {
+                    width: 100%;
+                    height: auto;
+                }
+            }
+        }
+    }
+}

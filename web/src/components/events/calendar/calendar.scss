@@ -1,0 +1,127 @@
+.calendar-container {
+  height: 63.75rem; /* 1020px */
+  background: #FFFEDC;
+  @media screen and (max-width: 768px) {
+    height: 31.875rem; /* 510px */
+    margin-bottom: 2rem;
+  }
+}
+
+.rbc-button-link {
+  color: var(--dark-green);
+}
+/* Custom Styling for react-big-calendar */
+.rbc-calendar {
+    background: var(--light-beige);
+    border-radius: 0.75rem; /* 12px */
+    box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.1); /* 4px 12px */
+    overflow: hidden;
+    font-family: 'Arial', sans-serif;
+}
+
+/* Header styling */
+.rbc-header {
+    background: var(--light-beige);
+    color: gray;
+    padding: 0.75rem; /* 12px */
+    font-size: 0.875rem; /* 14px */
+    font-weight: bold;
+    text-transform: uppercase;
+    border-bottom: 1px solid #e0e0e0;
+  }
+  
+  .rbc-toolbar {
+    background-color: var(--dark-green);
+    color: white;
+  }
+  /* Month view cells */
+  .rbc-month-view {
+    border: none;
+    
+  }
+  
+  .rbc-month-row {
+    border-bottom: 1px solid #e0e0e0;
+  }
+  
+  .rbc-month-header {
+    border-bottom: 1px solid #e0e0e0;
+    
+  }
+  
+  .rbc-day-bg + .rbc-day-bg,
+  .rbc-header + .rbc-header {
+    border-left: 1px solid #e0e0e0;
+  }
+  
+  /* Day cells */
+  .rbc-day-bg {
+    background: #FFFEDC;
+    
+  }
+  
+  .rbc-button-link {
+    color: var(--dark-green);
+    text-decoration: none;
+  }
+  .rbc-off-range-bg {
+    background: #f0f0f0;
+  }
+  
+  .rbc-today  {
+    background-color: #fffcaa;
+    color: var(--light-beige);
+    
+  }
+  
+  .rbc-current {
+    color: var(--light-beige); 
+  }
+  
+  /* Hover effects */
+  .rbc-day-bg:hover {
+    background: #e0f2ff; /* Light blue hover */
+    cursor: pointer;
+  }
+  
+  /* Event styling (if you add events later) */
+  .rbc-event {
+    background: #e5f8eb; /* Blue event */
+    border-radius: 4px;
+    padding: 2px 4px;
+    color: #00ba34;
+    font-size: 12px;
+  }
+  
+  .rbc-event:hover {
+    background: #00ba34;
+    color: #e5f8eb; /* Darker blue on hover */
+  }
+  
+  /* Toolbar styling */
+  .rbc-toolbar {
+    background: var(--dark-green);
+    padding: 10px;
+    margin-bottom: 0;
+    border-radius: 12px 12px 0 0;
+  }
+  
+  .rbc-toolbar button {
+    color: var(--dark-green);
+    border: 1px solid var(--dark-green);
+    border-radius: 4px;
+    padding: 6px 12px;
+    margin: 0 4px;
+    background: white;
+    cursor: pointer;
+  }
+  
+  .rbc-toolbar button:hover {
+    background: var(--dark-green);
+    color: white;
+  }
+  
+  .rbc-toolbar button.rbc-active {
+    background: var(--dark-green);
+    color: white;
+  }

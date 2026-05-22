@@ -1,0 +1,317 @@
+.member-view-page__content {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.member-view-page__details-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px 24px;
+  border: 1px solid rgba(20, 57, 40, 0.08);
+  border-radius: 26px;
+  background: var(--admin-surface);
+  box-shadow: var(--admin-shadow);
+}
+
+.member-view-page__details-main {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.15fr) minmax(0, 1.55fr);
+  gap: 22px;
+  align-items: start;
+}
+
+.member-view-page__identity {
+  display: grid;
+  gap: 12px;
+}
+
+.member-view-page__eyebrow {
+  color: var(--admin-subtle);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.member-view-page__identity h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  line-height: 1.2;
+}
+
+.member-view-page__contact-list {
+  display: grid;
+  gap: 12px;
+}
+
+.member-view-page__contact-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  color: #5b6761;
+  font-size: 0.94rem;
+}
+
+.member-view-page__contact-item svg {
+  color: #6a746f;
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.member-view-page__contact-item strong {
+  display: block;
+  color: var(--admin-text);
+  font-size: 0.98rem;
+  font-weight: 500;
+}
+
+.member-view-page__contact-label {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--admin-subtle);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.member-view-page__summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.member-view-page__summary-card {
+  padding: 14px 12px;
+  border: 1px solid rgba(20, 57, 40, 0.1);
+  border-radius: 16px;
+  background: #fbfdfb;
+}
+
+.member-view-page__summary-card span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--admin-subtle);
+  font-size: 0.72rem;
+}
+
+.member-view-page__summary-card strong {
+  display: block;
+  color: #101614;
+  font-size: 1.15rem;
+  line-height: 1.15;
+}
+
+.member-view-page__summary-card strong.is-success {
+  color: var(--admin-brand-dark);
+}
+
+.member-view-page__summary-card strong.is-danger {
+  color: #ff3b30;
+}
+
+.member-view-page__action-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+  border-top: 1px solid #edf1ee;
+}
+
+.member-view-page__outline-button {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  border: 1px solid var(--admin-brand);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--admin-brand-dark);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.member-view-page__table-shell {
+  padding-bottom: 20px;
+}
+
+.member-view-page__table-wrap table {
+  min-width: 960px;
+}
+
+.member-view-page__table-wrap th,
+.member-view-page__table-wrap td {
+  padding-top: 20px;
+  padding-bottom: 20px;
+}
+
+.member-view-page__table-action {
+  border: none;
+  background: transparent;
+  color: var(--admin-brand-dark);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.member-view-page__modal-panel {
+  width: min(100%, 700px);
+  gap: 18px;
+}
+
+.member-view-page__modal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 18px;
+}
+
+.member-view-page__modal-panel .admin-dashboard__modal-section {
+  gap: 8px;
+}
+
+.member-view-page__modal-panel .admin-dashboard__modal-label {
+  font-size: 0.92rem;
+}
+
+.member-view-page__modal-input {
+  min-height: 60px;
+  border-radius: 12px;
+}
+
+.member-view-page__modal-input input {
+  font-size: 0.9rem;
+}
+
+.member-view-page__modal-select-wrap {
+  position: relative;
+}
+
+.member-view-page__modal-select-wrap::after {
+  content: "";
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid #1f2824;
+  border-bottom: 2px solid #1f2824;
+  transform: translateY(-65%) rotate(45deg);
+  pointer-events: none;
+}
+
+.member-view-page__modal-select-wrap select {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #98a09b;
+  font: inherit;
+  font-size: 0.9rem;
+  appearance: none;
+  cursor: pointer;
+  padding-right: 28px;
+}
+
+.member-view-page__modal-select-wrap select.has-value {
+  color: #1f2824;
+}
+
+@media only screen and (max-width: 1280px) {
+  .member-view-page__details-card {
+    padding: 20px;
+  }
+
+  .member-view-page__details-main {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media only screen and (max-width: 900px) {
+  .member-view-page__summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media only screen and (max-width: 760px) {
+  .member-view-page__details-card {
+    padding: 20px;
+    border-radius: 22px;
+  }
+
+  .member-view-page__identity h3 {
+    font-size: 1.08rem;
+  }
+
+  .member-view-page__action-row {
+    flex-direction: column;
+  }
+
+  .member-view-page__outline-button {
+    width: 100%;
+  }
+
+  .member-view-page__table-wrap table,
+  .member-view-page__table-wrap thead,
+  .member-view-page__table-wrap tbody,
+  .member-view-page__table-wrap tr,
+  .member-view-page__table-wrap th,
+  .member-view-page__table-wrap td {
+    display: block;
+  }
+
+  .member-view-page__table-wrap thead {
+    display: none;
+  }
+
+  .member-view-page__table-wrap table {
+    min-width: 0;
+  }
+
+  .member-view-page__table-wrap tbody {
+    display: grid;
+    gap: 14px;
+  }
+
+  .member-view-page__table-wrap tr {
+    border: 1px solid #edf1ee;
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 14px 24px rgba(18, 38, 28, 0.06);
+    overflow: hidden;
+  }
+
+  .member-view-page__table-wrap td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 16px;
+    white-space: normal;
+  }
+
+  .member-view-page__table-wrap td::before {
+    content: attr(data-label);
+    color: var(--admin-subtle);
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+
+  .member-view-page__modal-panel {
+    width: 100%;
+  }
+
+  .member-view-page__modal-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .member-view-page__modal-input {
+    min-height: 56px;
+  }
+}
