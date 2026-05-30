@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { apiPost, getAuthClaims, setToken } from "./api";
+import { apiPost, setToken } from "./api";
 
 type LoginResponse = { token: string };
 
@@ -19,8 +19,7 @@ export default function LoginPage() {
       // backend should support POST /api/auth/login
       const res = await apiPost<LoginResponse>("/auth/login", { email, password });
       setToken(res.token);
-      const claims = getAuthClaims();
-      nav(claims?.role === "ADMIN" ? "/admin" : "/member");
+      nav("/analytics");
     } catch (e: any) {
       setErr(e?.message ?? "Login failed");
     } finally {

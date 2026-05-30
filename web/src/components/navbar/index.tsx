@@ -47,7 +47,7 @@ const Navbar = () => {
             }
           }}
         >
-          {/* <button
+          <button
             type="button"
             style={{
               cursor: "pointer",
@@ -65,7 +65,7 @@ const Navbar = () => {
             onClick={() => setPortalOpen((v) => !v)}
           >
             <CiMenuBurger />
-          </button> */}
+          </button>
           {portalOpen && (
             <div
               style={{

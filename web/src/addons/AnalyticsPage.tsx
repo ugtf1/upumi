@@ -16,6 +16,7 @@ import {
   FiTrendingDown,
   FiTrendingUp,
   FiUsers,
+  FiX,
 } from "react-icons/fi";
 import {
   CartesianGrid,
@@ -140,6 +141,13 @@ const HOSTING_SCHEDULE_ROWS: HostingScheduleRow[] = [
   { month: "December", hostingGroup: "Abada Evi, Abada Otuke, Agbara Onome" },
 ];
 
+const DEFAULT_SCHEDULE_MEMBERS = [
+  "Agbara Onome",
+  "Abada Evi",
+  "Abada Otuke",
+  "Atori Victoria",
+];
+
 function formatCurrency(value: number | null | undefined) {
   if (value == null) return "$0";
   const sign = value < 0 ? "-" : "";
@@ -167,7 +175,11 @@ export default function AdminPage() {
   const [ledgerSummary, setLedgerSummary] = useState<LedgerSummaryResponse | null>(null);
   const [year, setYear] = useState(2026);
   const [search, setSearch] = useState("");
+  const [scheduleRows, setScheduleRows] = useState(HOSTING_SCHEDULE_ROWS);
   const [scheduleSearch, setScheduleSearch] = useState("");
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [scheduleMonthInput, setScheduleMonthInput] = useState("");
+  const [scheduleMembers, setScheduleMembers] = useState(DEFAULT_SCHEDULE_MEMBERS);
   const [activeNav, setActiveNav] = useState("Dashboard");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -212,14 +224,34 @@ export default function AdminPage() {
     return () => window.cancelAnimationFrame(frame);
   }, [location.pathname, location.state, navigate]);
 
+  useEffect(() => {
+    if (!isScheduleModalOpen) return undefined;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsScheduleModalOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isScheduleModalOpen]);
+
   const filteredScheduleRows = useMemo(() => {
     const query = scheduleSearch.trim().toLowerCase();
-    return HOSTING_SCHEDULE_ROWS.filter((row) => {
+    return scheduleRows.filter((row) => {
       if (!query) return true;
       const haystack = `${row.month} ${row.hostingGroup}`.toLowerCase();
       return haystack.includes(query);
     });
-  }, [scheduleSearch]);
+  }, [scheduleRows, scheduleSearch]);
 
   const financialSnapshot = useMemo<FinancialSnapshot>(() => {
     const income = Math.abs(Number(ledgerSummary?.ytd?.income ?? FALLBACK_FINANCIALS.income));
@@ -272,6 +304,43 @@ export default function AdminPage() {
   function handleLogout() {
     clearToken();
     navigate("/login");
+  }
+
+  function resetScheduleModalForm() {
+    setScheduleMonthInput("");
+    setScheduleMembers(DEFAULT_SCHEDULE_MEMBERS);
+  }
+
+  function handleOpenScheduleModal() {
+    resetScheduleModalForm();
+    setIsScheduleModalOpen(true);
+  }
+
+  function handleCloseScheduleModal() {
+    setIsScheduleModalOpen(false);
+  }
+
+  function handleRemoveScheduleMember(memberName: string) {
+    setScheduleMembers((currentMembers) => currentMembers.filter((member) => member !== memberName));
+  }
+
+  function handleSaveSchedule() {
+    const month = scheduleMonthInput.trim();
+    if (!month || !scheduleMembers.length) return;
+
+    const hostingGroup = scheduleMembers.join(", ");
+
+    setScheduleRows((currentRows) => {
+      const existingIndex = currentRows.findIndex((row) => row.month.toLowerCase() === month.toLowerCase());
+      if (existingIndex === -1) {
+        return [{ month, hostingGroup }, ...currentRows];
+      }
+
+      return currentRows.map((row, index) => (index === existingIndex ? { month, hostingGroup } : row));
+    });
+
+    setScheduleSearch(month);
+    setIsScheduleModalOpen(false);
   }
 
   const primaryNavigationItems = [
@@ -496,7 +565,7 @@ export default function AdminPage() {
               <p>View and manage the monthly hosting groups</p>
             </div>
 
-            <button type="button" className="admin-dashboard__schedule-button">
+            <button type="button" className="admin-dashboard__schedule-button" onClick={handleOpenScheduleModal}>
               <FiPlus size={18} />
               <span>Add Schedule</span>
             </button>
@@ -559,6 +628,65 @@ export default function AdminPage() {
           </div>
         </section>
       </main>
+
+      {isScheduleModalOpen && (
+        <div className="admin-dashboard__modal" role="dialog" aria-modal="true" aria-labelledby="schedule-modal-title">
+          <div className="admin-dashboard__modal-backdrop" onClick={handleCloseScheduleModal} />
+
+          <div className="admin-dashboard__modal-panel">
+            <div className="admin-dashboard__modal-section">
+              <label htmlFor="schedule-month-input" className="admin-dashboard__modal-label" id="schedule-modal-title">
+                Month
+              </label>
+
+              <div className="admin-dashboard__modal-input admin-dashboard__modal-input--month">
+                <FiCalendar size={22} />
+                <input
+                  id="schedule-month-input"
+                  value={scheduleMonthInput}
+                  onChange={(event) => setScheduleMonthInput(event.target.value)}
+                  placeholder="Enter Month"
+                  aria-label="Enter schedule month"
+                />
+              </div>
+            </div>
+
+            <div className="admin-dashboard__modal-section">
+              <div className="admin-dashboard__modal-label">Add members</div>
+
+              <div className="admin-dashboard__modal-chip-area">
+                {scheduleMembers.map((member) => (
+                  <div key={member} className="admin-dashboard__modal-chip">
+                    <span>{member}</span>
+                    <button
+                      type="button"
+                      className="admin-dashboard__modal-chip-remove"
+                      onClick={() => handleRemoveScheduleMember(member)}
+                      aria-label={`Remove ${member}`}
+                    >
+                      <FiX size={18} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="admin-dashboard__modal-actions">
+              <button type="button" className="admin-dashboard__modal-button admin-dashboard__modal-button--secondary" onClick={handleCloseScheduleModal}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="admin-dashboard__modal-button admin-dashboard__modal-button--primary"
+                onClick={handleSaveSchedule}
+                disabled={!scheduleMonthInput.trim() || !scheduleMembers.length}
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -4,10 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --configLoader runner",
-    "build": "tsc -b && vite build --configLoader runner",
+    "dev": "vite",
+    "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview --configLoader runner"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@aldabil/react-scheduler": "^3.0.5",

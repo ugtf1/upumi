@@ -5,6 +5,7 @@ import AnalyticsPage from "../addons/AnalyticsPage";
 import AdminPage from "../addons/AdminPage";
 import MemberDashboard from "../addons/MemberDashboard";
 import MemberAccount from "../addons/MemberAccount";
+import MemberSettingsPage from "../addons/MemberSettingsPage";
 import MemberTransaction from "../addons/MemberTransaction";
 import LoginPage from "../addons/LoginPage";
 import MemberPage from "../addons/Member";
@@ -88,7 +89,7 @@ const BaseRoute = () => {
         path="/member/settings"
         element={
           <RequireAuth>
-            <MemberDashboard />
+            <MemberSettingsPage />
           </RequireAuth>
         }
       />
