@@ -20,7 +20,12 @@
     "react-scheduler": "^0.1.0",
     "recharts": "^3.7.0",
     "sass": "^1.83.4",
-    "swiper": "^11.2.6"
+    "swiper": "^11.2.6",
+    "@mui/material": "^5.15.0",
+    "@mui/icons-material": "^5.15.0",
+    "@mui/x-date-pickers": "^6.0.0",
+    "date-fns": "^3.0.0",
+    "react-is": "^18.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

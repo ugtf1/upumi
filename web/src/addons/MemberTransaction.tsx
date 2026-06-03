@@ -1,14 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import type { IconType } from "react-icons";
+// import type { IconType } from "react-icons";
 import {
   FiCreditCard,
   FiDollarSign,
-  FiFilter,
-  FiHome,
   FiLogOut,
-  FiPlus,
-  FiSearch,
   FiSettings,
   FiUsers,
 } from "react-icons/fi";
@@ -17,13 +13,6 @@ import { clearToken } from "./api";
 import memberImage from "../member.png";
 import "./admin-page.scss";
 import "./transaction-page.scss";
-
-type NavigationItem = {
-  label: string;
-  icon: IconType;
-  action: () => void;
-  tone?: "danger";
-};
 
 type SummaryCard = {
   title: string;
@@ -72,21 +61,39 @@ const TRANSACTION_ROWS: TransactionRow[] = [
   { id: "tx-8", date: "03 Jan 2026", fullName: "Agbara Onome", title: "Raffle", amount: "$303", status: "Completed" },
 ];
 
-const YEAR_OPTIONS = [2024, 2025, 2026, 2027];
-const COUNT_OPTIONS = ["0", "1", "2", "3"];
-const STATUS_OPTIONS = ["All Members", "Active", "Pending", "Inactive"];
+const MEMBER_ROUTE_CONFIG: Record<string, { path: string; label: string }> = {
+  "/member": { path: "/member", label: "Community Dashboard" },
+  "/member/transaction": { path: "/member/transaction", label: "Transaction" },
+  "/member/account": { path: "/member/account", label: "Account" },
+  "/member/settings": { path: "/member/settings", label: "Settings" },
+};
+
+// const YEAR_OPTIONS = [2024, 2025, 2026, 2027];
+// const COUNT_OPTIONS = ["0", "1", "2", "3"];
+// const STATUS_OPTIONS = ["All Members", "Active", "Pending", "Inactive"];
 
 export default function MemberTransaction() {
   const navigate = useNavigate();
   const location = useLocation();
   const [activeNav, setActiveNav] = useState("Community Dashboard");
 
-  const MEMBER_ROUTE_CONFIG: Record<string, { path: string; label: string }> = {
-    "/member": { path: "/member", label: "Community Dashboard" },
-    "/member/transaction": { path: "/member/transaction", label: "Transaction" },
-    "/member/account": { path: "/member/account", label: "Account" },
-    "/member/settings": { path: "/member/settings", label: "Settings" },
-  };
+  // const MEMBER_NAV_ITEMS: NavigationItem[] = [
+  //   {
+  //     label: "Community Dashboard",
+  //     icon: FiUsers,
+  //     action: () => navigate("/member", { state: { nav: "Community Dashboard" } }),
+  //   },
+  //   {
+  //     label: "Transaction",
+  //     icon: FiCreditCard,
+  //     action: () => navigate("/member/transaction", { state: { nav: "Transaction" } }),
+  //   },
+  //   {
+  //     label: "Account",
+  //     icon: FiUsers,
+  //     action: () => navigate("/member/account", { state: { nav: "Account" } }),
+  //   },
+  // ];
 
   useEffect(() => {
     const routeConfig = MEMBER_ROUTE_CONFIG[location.pathname] ?? MEMBER_ROUTE_CONFIG["/member"];
@@ -96,14 +103,14 @@ export default function MemberTransaction() {
     if (state) navigate(location.pathname, { replace: true, state: null });
   }, [location.pathname, location.state, navigate]);
 
-  const [year, setYear] = useState(2026);
+  // const [year, setYear] = useState(2026);
   const [search, setSearch] = useState("");
   const [transactionRows, setTransactionRows] = useState(TRANSACTION_ROWS);
-  const [sheetUrl, setSheetUrl] = useState("");
-  const [memberCount, setMemberCount] = useState("0");
-  const [memberStatus, setMemberStatus] = useState("All Members");
+  // const [sheetUrl, setSheetUrl] = useState("");
+  // const [memberCount, setMemberCount] = useState("0");
+  // const [memberStatus, setMemberStatus] = useState("All Members");
   const [activeTab, setActiveTab] = useState<"Income" | "Expense">("Income");
-  const [selectedFileName, setSelectedFileName] = useState("No file chosen");
+  // const [selectedFileName, setSelectedFileName] = useState("No file chosen");
   const [isAddTransactionModalOpen, setIsAddTransactionModalOpen] = useState(false);
   const [transactionForm, setTransactionForm] = useState<TransactionFormState>({
     fullName: "",
@@ -155,12 +162,8 @@ export default function MemberTransaction() {
     });
   }
 
-  function handleOpenTransactionModal() {
-    resetTransactionForm();
-    setIsAddTransactionModalOpen(true);
-  }
-
   function handleCloseTransactionModal() {
+    resetTransactionForm();
     setIsAddTransactionModalOpen(false);
   }
 
@@ -185,27 +188,9 @@ export default function MemberTransaction() {
     ]);
 
     setSearch(fullName.trim());
+    resetTransactionForm();
     setIsAddTransactionModalOpen(false);
   }
-
-  const primaryNavigationItems: NavigationItem[] = [
-    { label: "Dashboard", icon: FiHome, action: () => navigate("/admin") },
-    { label: "Transaction", icon: FiCreditCard, action: () => navigate("/admin/transaction") },
-    {
-      label: "Member",
-      icon: FiUsers,
-      action: () => navigate("/admin/member"),
-    },
-  ];
-
-  const secondaryNavigationItems: NavigationItem[] = [
-    {
-      label: "Settings",
-      icon: FiSettings,
-      action: () => navigate("/admin/settings"),
-    },
-    { label: "Logout", icon: FiLogOut, action: handleLogout, tone: "danger" },
-  ];
 
   return (
     <div className="admin-dashboard transaction-page">
@@ -254,7 +239,7 @@ export default function MemberTransaction() {
             <button
               type="button"
               className={["admin-dashboard__nav-item", "is-danger"].filter(Boolean).join(" ")}
-              onClick={() => { clearToken(); navigate("/login"); }}
+              onClick={handleLogout}
             >
               <FiLogOut size={18} />
               <span>Logout</span>

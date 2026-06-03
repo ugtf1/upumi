@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import type { IconType } from "react-icons";
-import { BsHeartFill } from "react-icons/bs";
+// import { BsHeartFill } from "react-icons/bs";
 import {
   FiDollarSign,
   FiHome,
@@ -126,13 +126,6 @@ export default function MemberAccount() {
         navigate("/login");
       },
     },
-  ];
-
-  const topNavigation = [
-    { label: "Home", action: () => navigate("/") },
-    { label: "About", action: () => navigate("/about") },
-    { label: "Events", action: () => navigate("/events") },
-    { label: "Alumni", action: () => navigate("/alumni") },
   ];
 
   return (
