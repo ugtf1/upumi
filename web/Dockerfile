@@ -4,17 +4,14 @@ WORKDIR /app
 ARG VITE_API_BASE
 ENV VITE_API_BASE=$VITE_API_BASE
 
-COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* ./
+# Copy package files and install dependencies
+COPY package.json yarn.lock ./
+
 RUN corepack enable
-RUN if [ -f yarn.lock ]; then corepack prepare yarn@stable --activate && yarn install --frozen-lockfile; \
-  elif [ -f package-lock.json ]; then npm ci; \
-  elif [ -f pnpm-lock.yaml ]; then corepack prepare pnpm@stable --activate && pnpm i --frozen-lockfile; \
-  else npm install; fi
+RUN corepack prepare yarn@stable --activate && yarn install --immutable
 
 COPY . .
-RUN if [ -f yarn.lock ]; then corepack prepare yarn@stable --activate && yarn build; \
-  elif [ -f pnpm-lock.yaml ]; then corepack prepare pnpm@stable --activate && pnpm build; \
-  else npm run build; fi
+RUN yarn build
 
 # Runtime stage (serve static)
 FROM nginx:alpine
@@ -22,5 +19,4 @@ COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 8080
-
 CMD ["nginx", "-g", "daemon off;"]
