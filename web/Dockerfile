@@ -8,7 +8,7 @@ ENV VITE_API_BASE=$VITE_API_BASE
 COPY package.json yarn.lock ./
 
 RUN corepack enable
-RUN corepack prepare yarn@stable --activate && yarn install --immutable
+RUN corepack prepare yarn@1.22.22 --activate && yarn install --frozen-lockfile
 
 COPY . .
 RUN yarn build
