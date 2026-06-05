@@ -1,16 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { IconType } from "react-icons";
 import {
-  FiCalendar,
-  FiChevronLeft,
-  FiChevronRight,
+  FiCheck,
   FiCreditCard,
-  FiEdit2,
-  FiEye,
   FiFilter,
   FiHome,
   FiLogOut,
+  FiMoreVertical,
   FiPlus,
   FiSearch,
   FiSettings,
@@ -18,7 +15,6 @@ import {
 } from "react-icons/fi";
 
 import { clearToken } from "./api";
-import { getMemberDetailByMemberId, MEMBER_ROWS } from "./member-data";
 import "./admin-page.scss";
 import "./member-page.scss";
 
@@ -29,125 +25,62 @@ type NavigationItem = {
   tone?: "danger";
 };
 
-const PAGE_SIZE = 7;
-const PAGE_BUTTONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-const VOTE_ROLE_OPTIONS = ["YES", "NO"] as const;
-
-type EditMemberFormState = {
+type MemberListItem = {
+  id: string;
+  name: string;
   memberId: string;
-  fullName: string;
   email: string;
+  joined: string;
+  phone: string;
   attendance: string;
-  voteRole: string;
+  attendancePercent: number;
+  voteRole: "Yes" | "NO" | "No";
+  voteStatus: "Participated" | "Nil";
 };
+
+const MEMBER_LIST: MemberListItem[] = [
+  { id: "member-1", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "Yes", voteStatus: "Participated" },
+  { id: "member-2", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "NO", voteStatus: "Nil" },
+  { id: "member-3", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "No", voteStatus: "Nil" },
+  { id: "member-4", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "Yes", voteStatus: "Participated" },
+  { id: "member-5", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "Yes", voteStatus: "Participated" },
+  { id: "member-6", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "Yes", voteStatus: "Participated" },
+  { id: "member-7", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "Yes", voteStatus: "Participated" },
+  { id: "member-8", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "Yes", voteStatus: "Participated" },
+  { id: "member-9", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "Yes", voteStatus: "Participated" },
+  { id: "member-10", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "Yes", voteStatus: "Participated" },
+  { id: "member-11", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "Yes", voteStatus: "Participated" },
+  { id: "member-12", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "Yes", voteStatus: "Participated" },
+];
 
 export default function MemberPage() {
   const navigate = useNavigate();
-
-  const [memberRows, setMemberRows] = useState(MEMBER_ROWS);
   const [search, setSearch] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editMemberForm, setEditMemberForm] = useState<EditMemberFormState>({
-    memberId: "",
-    fullName: "",
-    email: "",
-    attendance: "",
-    voteRole: "",
-  });
-
-  useEffect(() => {
-    if (!isEditModalOpen) return undefined;
-
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setIsEditModalOpen(false);
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = originalOverflow;
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isEditModalOpen]);
 
   const filteredMembers = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return memberRows;
+    if (!query) return MEMBER_LIST;
 
-    return memberRows.filter((member) => {
-      const haystack = [
+    return MEMBER_LIST.filter((member) =>
+      [
+        member.name,
         member.memberId,
         member.email,
         member.joined,
-        member.phoneNumber,
-        member.status,
+        member.phone,
+        member.attendance,
+        member.voteRole,
+        member.voteStatus,
       ]
         .join(" ")
-        .toLowerCase();
-
-      return haystack.includes(query);
-    });
-  }, [memberRows, search]);
-
-  const visibleMembers = useMemo(() => {
-    if (!filteredMembers.length) return [];
-
-    const startIndex = ((currentPage - 1) * PAGE_SIZE) % filteredMembers.length;
-    return filteredMembers.slice(startIndex, startIndex + PAGE_SIZE);
-  }, [currentPage, filteredMembers]);
+        .toLowerCase()
+        .includes(query)
+    );
+  }, [search]);
 
   function handleLogout() {
     clearToken();
     navigate("/login");
-  }
-
-  function handlePageChange(page: number) {
-    setCurrentPage(page);
-  }
-
-  function handleOpenEditModal(memberId: string) {
-    const detail = getMemberDetailByMemberId(memberId);
-    setEditMemberForm({
-      memberId,
-      fullName: detail.name,
-      email: detail.email,
-      attendance: detail.attendance,
-      voteRole: detail.voteRole,
-    });
-    setIsEditModalOpen(true);
-  }
-
-  function handleCloseEditModal() {
-    setIsEditModalOpen(false);
-  }
-
-  function handleEditMemberChange(field: keyof EditMemberFormState, value: string) {
-    setEditMemberForm((currentForm) => ({ ...currentForm, [field]: value }));
-  }
-
-  function handleSaveEditedMember() {
-    const fullName = editMemberForm.fullName.trim();
-    const email = editMemberForm.email.trim();
-    if (!editMemberForm.memberId || !fullName || !email) return;
-
-    setMemberRows((currentRows) =>
-      currentRows.map((member) =>
-        member.memberId === editMemberForm.memberId
-          ? {
-              ...member,
-              email,
-            }
-          : member
-      )
-    );
-
-    setIsEditModalOpen(false);
   }
 
   const primaryNavigationItems: NavigationItem[] = [
@@ -157,25 +90,21 @@ export default function MemberPage() {
   ];
 
   const secondaryNavigationItems: NavigationItem[] = [
-    {
-      label: "Settings",
-      icon: FiSettings,
-      action: () => navigate("/admin/settings"),
-    },
+    { label: "Settings", icon: FiSettings, action: () => navigate("/admin/settings") },
     { label: "Logout", icon: FiLogOut, action: handleLogout, tone: "danger" },
   ];
 
   return (
     <div className="admin-dashboard member-page">
-      <aside className="admin-dashboard__sidebar">
-        <div className="admin-dashboard__brand">
-          <div className="admin-dashboard__brand-mark">
+      <aside className="admin-dashboard__sidebar member-page__sidebar">
+        <div className="admin-dashboard__brand member-page__brand">
+          <div className="admin-dashboard__brand-mark member-page__brand-mark">
             <img src="/logo/upu-logo.svg" alt="UPUMI logo" />
           </div>
           <span>UPUMI</span>
         </div>
 
-        <nav className="admin-dashboard__nav" aria-label="Admin navigation">
+        <nav className="admin-dashboard__nav member-page__primary-nav" aria-label="Admin navigation">
           {primaryNavigationItems.map((item) => {
             const Icon = item.icon;
             const active = item.label === "Member";
@@ -184,10 +113,7 @@ export default function MemberPage() {
               <button
                 key={item.label}
                 type="button"
-                className={[
-                  "admin-dashboard__nav-item",
-                  active ? "is-active" : "",
-                ]
+                className={["admin-dashboard__nav-item", "member-page__nav-item", active ? "is-active" : ""]
                   .filter(Boolean)
                   .join(" ")}
                 onClick={item.action}
@@ -199,23 +125,18 @@ export default function MemberPage() {
           })}
         </nav>
 
-        <div className="admin-dashboard__profile">
-          <div className="admin-dashboard__profile-info">
-            <div className="admin-dashboard__profile-avatar" aria-hidden="true">A</div>
-            <div>
-              <div className="admin-dashboard__profile-name">Admin</div>
-              <div className="admin-dashboard__profile-email">Admin.Ono@gmail.com</div>
-            </div>
-          </div>
-          <div className="admin-dashboard__profile-actions">
+        <div className="admin-dashboard__profile member-page__profile">
+          <div className="admin-dashboard__profile-actions member-page__secondary-nav">
             {secondaryNavigationItems.map((item) => {
               const Icon = item.icon;
+
               return (
                 <button
                   key={item.label}
                   type="button"
                   className={[
                     "admin-dashboard__nav-item",
+                    "member-page__nav-item",
                     item.tone === "danger" ? "is-danger" : "",
                   ]
                     .filter(Boolean)
@@ -228,12 +149,22 @@ export default function MemberPage() {
               );
             })}
           </div>
+
+          <div className="admin-dashboard__profile-info member-page__profile-info">
+            <div className="admin-dashboard__profile-avatar member-page__profile-avatar">
+              <img src="/images/admin-onome.png" alt="" />
+            </div>
+            <div>
+              <div className="admin-dashboard__profile-name member-page__profile-name">Admin</div>
+              <div className="admin-dashboard__profile-email member-page__profile-email">Admin.Ono@gmail.com</div>
+            </div>
+          </div>
         </div>
       </aside>
 
-      <main className="admin-dashboard__main">
+      <main className="admin-dashboard__main member-page__main">
         <section className="admin-dashboard__hero member-page__hero">
-          <div>
+          <div className="member-page__hero-copy">
             <h1>Admin Console</h1>
             <p>Pivot-style member details for all signed-in members.</p>
           </div>
@@ -242,18 +173,15 @@ export default function MemberPage() {
             <label className="admin-dashboard__search member-page__search">
               <input
                 value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value);
-                  setCurrentPage(1);
-                }}
+                onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search member, expense, balance, income....."
                 aria-label="Search members"
               />
-              <FiSearch size={18} />
+              <FiSearch size={24} />
             </label>
 
-            <button type="button" className="admin-dashboard__icon-button" aria-label="Filter members">
-              <FiFilter size={18} />
+            <button type="button" className="admin-dashboard__icon-button member-page__filter-button" aria-label="Filter members">
+              <FiFilter size={24} />
             </button>
 
             <button type="button" className="member-page__add-button">
@@ -269,204 +197,66 @@ export default function MemberPage() {
             <p>Manage all members in your organization</p>
           </div>
 
-          <div className="admin-dashboard__table-shell member-page__table-shell">
-            <div className="admin-dashboard__table-wrap member-page__table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Member ID</th>
-                    <th>Email</th>
-                    <th>Joined</th>
-                    <th>Phone number</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {!visibleMembers.length ? (
-                    <tr>
-                      <td colSpan={6} className="admin-dashboard__empty-state">
-                        No members match the current search.
-                      </td>
-                    </tr>
-                  ) : (
-                    visibleMembers.map((member) => (
-                      <tr key={member.id}>
-                        <td data-label="Member ID">{member.memberId}</td>
-                        <td data-label="Email">{member.email}</td>
-                        <td data-label="Joined">{member.joined}</td>
-                        <td data-label="Phone number">{member.phoneNumber}</td>
-                        <td data-label="Status">
-                          <span
-                            className={[
-                              "admin-dashboard__status-pill",
-                              member.status === "Active" ? "is-good" : "is-bad",
-                            ].join(" ")}
-                          >
-                            {member.status}
-                          </span>
-                        </td>
-                        <td data-label="Actions">
-                          <div className="member-page__actions">
-                            <button
-                              type="button"
-                              className="member-page__action-link"
-                              onClick={() => handleOpenEditModal(member.memberId)}
-                            >
-                              <FiEdit2 size={14} />
-                              <span>Edit</span>
-                            </button>
-                            <button
-                              type="button"
-                              className="member-page__action-link"
-                              onClick={() => navigate(`/admin/member/${member.memberId}`)}
-                            >
-                              <FiEye size={14} />
-                              <span>View</span>
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <div className="member-page__list" aria-label="Members">
+            {!filteredMembers.length ? (
+              <div className="member-page__empty-state">No members match the current search.</div>
+            ) : (
+              filteredMembers.map((member) => (
+                <article className="member-page__row" key={member.id}>
+                  <div className="member-page__identity">
+                    <strong>{member.name}</strong>
+                    <span>Member ID - {member.memberId}</span>
+                  </div>
 
-          <div className="member-page__pagination">
-            <span className="member-page__pagination-copy">{currentPage} of {filteredMembers.length} results</span>
+                  <div className="member-page__email">
+                    <strong>{member.email}</strong>
+                    <span>Joined {member.joined}</span>
+                  </div>
 
-            <div className="member-page__pagination-controls" aria-label="Member table pagination">
-              <button
-                type="button"
-                className="member-page__page-button"
-                onClick={() => handlePageChange(currentPage === 1 ? 10 : currentPage - 1)}
-                aria-label="Previous page"
-              >
-                <FiChevronLeft size={18} />
-              </button>
+                  <a className="member-page__phone" href={`tel:${member.phone.replace(/\s+/g, "")}`}>
+                    {member.phone}
+                  </a>
 
-              {PAGE_BUTTONS.map((page) => (
-                <button
-                  key={page}
-                  type="button"
-                  className={["member-page__page-button", currentPage === page ? "is-active" : ""].filter(Boolean).join(" ")}
-                  onClick={() => handlePageChange(page)}
-                  aria-current={currentPage === page ? "page" : undefined}
-                >
-                  {page}
-                </button>
-              ))}
+                  <div className="member-page__attendance-card">
+                    <span className="member-page__attendance-title">Monthly Attendance</span>
+                    <div className="member-page__attendance-line">
+                      <span className="member-page__check member-page__check--green">
+                        <FiCheck size={15} />
+                      </span>
+                      <strong>{member.attendance}</strong>
+                    </div>
+                    <div className="member-page__progress-row">
+                      <span className="member-page__progress-track">
+                        <span style={{ width: `${member.attendancePercent}%` }} />
+                      </span>
+                      <strong>{member.attendancePercent}%</strong>
+                    </div>
+                  </div>
 
-              <button
-                type="button"
-                className="member-page__page-button"
-                onClick={() => handlePageChange(currentPage === 10 ? 1 : currentPage + 1)}
-                aria-label="Next page"
-              >
-                <FiChevronRight size={18} />
-              </button>
-            </div>
+                  <div className="member-page__vote-card">
+                    <span>Vote Role</span>
+                    <div className="member-page__vote-line">
+                      <span className="member-page__check member-page__check--yellow">
+                        <FiCheck size={15} />
+                      </span>
+                      <strong>{member.voteRole}</strong>
+                    </div>
+                    <small>{member.voteStatus}</small>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="member-page__more-button"
+                    aria-label={`More actions for ${member.name}`}
+                  >
+                    <FiMoreVertical size={22} />
+                  </button>
+                </article>
+              ))
+            )}
           </div>
         </section>
       </main>
-
-      {isEditModalOpen && (
-        <div className="admin-dashboard__modal" role="dialog" aria-modal="true" aria-labelledby="member-edit-modal-title">
-          <div className="admin-dashboard__modal-backdrop" onClick={handleCloseEditModal} />
-
-          <div className="admin-dashboard__modal-panel member-page__modal-panel">
-            <div className="member-page__modal-grid">
-              <div className="admin-dashboard__modal-section">
-                <label htmlFor="member-edit-full-name" className="admin-dashboard__modal-label" id="member-edit-modal-title">
-                  Full Name
-                </label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-page__modal-input">
-                  <input
-                    id="member-edit-full-name"
-                    value={editMemberForm.fullName}
-                    onChange={(event) => handleEditMemberChange("fullName", event.target.value)}
-                    placeholder="Agbara Onome"
-                    aria-label="Full name"
-                  />
-                </div>
-              </div>
-
-              <div className="admin-dashboard__modal-section">
-                <label htmlFor="member-edit-email" className="admin-dashboard__modal-label">
-                  Email Address
-                </label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-page__modal-input">
-                  <input
-                    id="member-edit-email"
-                    value={editMemberForm.email}
-                    onChange={(event) => handleEditMemberChange("email", event.target.value)}
-                    placeholder="Andrew.karl@gmail.com"
-                    aria-label="Email address"
-                  />
-                </div>
-              </div>
-
-              <div className="admin-dashboard__modal-section">
-                <label htmlFor="member-edit-attendance" className="admin-dashboard__modal-label">
-                  Member Attendance
-                </label>
-                <div className="admin-dashboard__modal-input member-page__modal-input">
-                  <FiCalendar size={20} />
-                  <input
-                    id="member-edit-attendance"
-                    value={editMemberForm.attendance}
-                    onChange={(event) => handleEditMemberChange("attendance", event.target.value)}
-                    placeholder="March"
-                    aria-label="Member attendance"
-                  />
-                </div>
-              </div>
-
-              <div className="admin-dashboard__modal-section">
-                <label htmlFor="member-edit-vote-role" className="admin-dashboard__modal-label">
-                  Vote Role
-                </label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-page__modal-input member-page__modal-select-wrap">
-                  <select
-                    id="member-edit-vote-role"
-                    value={editMemberForm.voteRole}
-                    onChange={(event) => handleEditMemberChange("voteRole", event.target.value)}
-                    aria-label="Vote role"
-                    className={editMemberForm.voteRole ? "has-value" : ""}
-                  >
-                    <option value="">Select</option>
-                    {VOTE_ROLE_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div className="admin-dashboard__modal-actions">
-              <button
-                type="button"
-                className="admin-dashboard__modal-button admin-dashboard__modal-button--secondary"
-                onClick={handleCloseEditModal}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="admin-dashboard__modal-button admin-dashboard__modal-button--primary"
-                onClick={handleSaveEditedMember}
-                disabled={!editMemberForm.fullName.trim() || !editMemberForm.email.trim()}
-              >
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
