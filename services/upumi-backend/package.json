@@ -4,16 +4,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "build": "tsc -p tsconfig.json",
-    "start": "node dist/server.js",
-    "start:prod": "prisma db push && node dist/server.js",
-    "db:push": "prisma db push",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:migrate:deploy": "prisma migrate deploy",
-    "import:members": "tsx scripts/import-members.ts"
-  },
+  "dev": "tsx watch src/server.ts",
+  "build": "tsc -p tsconfig.json",
+  "start": "node dist/server.js",
+  "start:prod": "node dist/server.js", 
+  "db:push": "prisma db push",
+  "prisma:generate": "prisma generate",
+  "prisma:migrate": "prisma migrate dev",
+  "prisma:migrate:deploy": "prisma migrate deploy",
+  "import:members": "tsx scripts/import-members.ts"
+},
   "dependencies": {
     "@fastify/cors": "^10.1.0",
     "@fastify/jwt": "^9.1.0",
