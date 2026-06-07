@@ -34,8 +34,7 @@ model User {
   dues              Due[]
   transactions      Transaction[]
   memberFinanceRows MemberFinance[]
-
-  @@map("users")
+  
 }
 
 model GeneralFinance {
