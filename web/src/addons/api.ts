@@ -7,10 +7,11 @@ const normalizedBase = (rawBase ?? defaultBase).trim().replace(/\/+$/, "");
 export const API_BASE = normalizedBase || defaultBase;
 
 const TOKEN_KEY = "upumi_token";
-type Role = "ADMIN" | "USER";
+type Role = "ADMIN" | "MEMBER";
 
 type AuthClaims = {
   sub?: string;
+  phone?: string;
   email?: string;
   role?: Role;
 };

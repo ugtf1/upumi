@@ -96,15 +96,15 @@ export default function MemberPage() {
 
   return (
     <div className="admin-dashboard member-page">
-      <aside className="admin-dashboard__sidebar member-page__sidebar">
-        <div className="admin-dashboard__brand member-page__brand">
-          <div className="admin-dashboard__brand-mark member-page__brand-mark">
+      <aside className="admin-dashboard__sidebar">
+        <div className="admin-dashboard__brand">
+          <div className="admin-dashboard__brand-mark">
             <img src="/logo/upu-logo.svg" alt="UPUMI logo" />
           </div>
           <span>UPUMI</span>
         </div>
 
-        <nav className="admin-dashboard__nav member-page__primary-nav" aria-label="Admin navigation">
+        <nav className="admin-dashboard__nav" aria-label="Admin navigation">
           {primaryNavigationItems.map((item) => {
             const Icon = item.icon;
             const active = item.label === "Member";
@@ -113,7 +113,7 @@ export default function MemberPage() {
               <button
                 key={item.label}
                 type="button"
-                className={["admin-dashboard__nav-item", "member-page__nav-item", active ? "is-active" : ""]
+                className={["admin-dashboard__nav-item", active ? "is-active" : ""]
                   .filter(Boolean)
                   .join(" ")}
                 onClick={item.action}
@@ -125,8 +125,18 @@ export default function MemberPage() {
           })}
         </nav>
 
-        <div className="admin-dashboard__profile member-page__profile">
-          <div className="admin-dashboard__profile-actions member-page__secondary-nav">
+        <div className="admin-dashboard__profile">
+          <div className="admin-dashboard__profile-info">
+            <div className="admin-dashboard__profile-avatar">
+              <img src="/images/admin-onome.png" alt="" />
+            </div>
+            <div>
+              <div className="admin-dashboard__profile-name">Admin</div>
+              <div className="admin-dashboard__profile-email">Admin.Ono@gmail.com</div>
+            </div>
+          </div>
+
+          <div className="admin-dashboard__profile-actions">
             {secondaryNavigationItems.map((item) => {
               const Icon = item.icon;
 
@@ -136,7 +146,6 @@ export default function MemberPage() {
                   type="button"
                   className={[
                     "admin-dashboard__nav-item",
-                    "member-page__nav-item",
                     item.tone === "danger" ? "is-danger" : "",
                   ]
                     .filter(Boolean)
@@ -148,16 +157,6 @@ export default function MemberPage() {
                 </button>
               );
             })}
-          </div>
-
-          <div className="admin-dashboard__profile-info member-page__profile-info">
-            <div className="admin-dashboard__profile-avatar member-page__profile-avatar">
-              <img src="/images/admin-onome.png" alt="" />
-            </div>
-            <div>
-              <div className="admin-dashboard__profile-name member-page__profile-name">Admin</div>
-              <div className="admin-dashboard__profile-email member-page__profile-email">Admin.Ono@gmail.com</div>
-            </div>
           </div>
         </div>
       </aside>
@@ -171,17 +170,17 @@ export default function MemberPage() {
 
           <div className="admin-dashboard__hero-actions member-page__hero-actions">
             <label className="admin-dashboard__search member-page__search">
+              <FiSearch size={18} />
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search member, expense, balance, income....."
                 aria-label="Search members"
               />
-              <FiSearch size={24} />
             </label>
 
             <button type="button" className="admin-dashboard__icon-button member-page__filter-button" aria-label="Filter members">
-              <FiFilter size={24} />
+              <FiFilter size={18} />
             </button>
 
             <button type="button" className="member-page__add-button">

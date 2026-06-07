@@ -1,74 +1,102 @@
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, FastifyReply } from 'fastify';
+import { createHash, randomInt } from 'node:crypto';
 import { z } from 'zod';
-import bcrypt from 'bcryptjs';
 import { prisma } from '../services/prisma.js';
+import { normalizePhone, phoneLookupCandidates } from '../services/phone.js';
+import { sendOtpSms } from '../services/twilio.js';
 
-const RegisterSchema = z.object({
-  email: z.string().email().transform((s) => s.toLowerCase().trim()),
-  password: z.string().min(10),
+const PhoneSchema = z.object({
+  phone: z.string().min(7).transform((s) => normalizePhone(s)),
 });
 
-const LoginSchema = z.object({
-  email: z.string().email().transform((s) => s.toLowerCase().trim()),
-  password: z.string().min(1),
+const VerifyOtpSchema = PhoneSchema.extend({
+  otp: z.string().regex(/^\d{6}$/, 'OTP must be 6 digits'),
 });
+
+const OTP_TTL_MINUTES = Number(process.env.OTP_TTL_MINUTES ?? 10);
+
+function otpHash(userId: string, otp: string) {
+  const secret = process.env.JWT_SECRET || 'dev-secret';
+  return createHash('sha256').update(`${userId}:${otp}:${secret}`).digest('hex');
+}
+
+function createOtp() {
+  return String(randomInt(100000, 1000000));
+}
+
+async function findUserByPhone(phone: string) {
+  return prisma.user.findFirst({
+    where: { phone: { in: phoneLookupCandidates(phone) } },
+  });
+}
+
+async function signLogin(reply: FastifyReply, user: { id: string; phone: string; email: string | null; role: string }) {
+  const role = user.role === 'ADMIN' ? 'ADMIN' : 'MEMBER';
+  const token = await reply.jwtSign({ sub: user.id, phone: user.phone, email: user.email, role });
+  return {
+    token,
+    redirectPath: role === 'ADMIN' ? '/admin' : '/member',
+    user: { id: user.id, phone: user.phone, email: user.email, role },
+  };
+}
+
+async function requestOtp(phone: string, reply: FastifyReply) {
+  const user = await findUserByPhone(phone);
+  if (!user) return reply.code(404).send({ message: 'record not found' });
+  if (user.status !== 'Active') return reply.code(403).send({ message: 'Account is inactive' });
+
+  if (user.masterOtpBypass) {
+    const login = await signLogin(reply, user);
+    return reply.send({ requiresOtp: false, ...login });
+  }
+
+  const otp = createOtp();
+  const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      otpCodeHash: otpHash(user.id, otp),
+      otpExpiresAt: expiresAt,
+      otpLastSentAt: new Date(),
+    },
+  });
+
+  await sendOtpSms(user.phone, otp);
+  return reply.send({ requiresOtp: true, message: 'OTP sent' });
+}
 
 export const authRoutes: FastifyPluginAsync = async (app) => {
-  app.post('/register', async (req, reply) => {
-    const body = RegisterSchema.parse(req.body);
-
-    const exists = await prisma.user.findUnique({ where: { email: body.email } });
-    if (exists) return reply.status(409).send({ message: 'Email already registered' });
-
-    const passwordHash = await bcrypt.hash(body.password, 12);
-    const user = await prisma.user.create({
-      data: { email: body.email, passwordHash },
-      select: { id: true, email: true, role: true },
-    });
-
-    // If there is already a workbook row with this email, auto-link it.
-    await prisma.memberRecord.updateMany({
-      where: { email: body.email, userId: null },
-      data: { userId: user.id },
-    });
-
-    const token = await reply.jwtSign({ sub: user.id, email: user.email, role: user.role });
-    return reply.send({ token, user });
+  app.post('/request-otp', async (req, reply) => {
+    const body = PhoneSchema.parse(req.body);
+    return requestOtp(body.phone, reply);
   });
 
   app.post('/login', async (req, reply) => {
-    const body = LoginSchema.parse(req.body);
-
-    const user = await prisma.user.findUnique({ where: { email: body.email } });
-    if (!user) return reply.status(401).send({ message: 'Invalid credentials' });
-
-    const ok = await bcrypt.compare(body.password, user.passwordHash);
-    if (!ok) return reply.status(401).send({ message: 'Invalid credentials' });
-
-    const token = await reply.jwtSign({ sub: user.id, email: user.email, role: user.role });
-    return reply.send({ token, user: { id: user.id, email: user.email, role: user.role } });
+    const body = PhoneSchema.parse(req.body);
+    return requestOtp(body.phone, reply);
   });
 
-  // One-time admin creation endpoint.
-  // Protect it with an env secret and delete/disable after initial setup.
-  app.post('/bootstrap-admin', async (req, reply) => {
-    const secret = (req.headers['x-admin-bootstrap'] ?? '').toString();
-    const expected = process.env.ADMIN_BOOTSTRAP_SECRET ?? '';
-    if (!expected || secret !== expected) {
-      return reply.status(403).send({ message: 'Forbidden' });
+  app.post('/verify-otp', async (req, reply) => {
+    const body = VerifyOtpSchema.parse(req.body);
+    const user = await findUserByPhone(body.phone);
+    if (!user) return reply.code(404).send({ message: 'record not found' });
+
+    const isExpired = !user.otpExpiresAt || user.otpExpiresAt.getTime() < Date.now();
+    const expectedHash = user.otpCodeHash ?? '';
+    if (isExpired || expectedHash !== otpHash(user.id, body.otp)) {
+      return reply.code(401).send({ message: 'Invalid or expired OTP' });
     }
 
-    const body = RegisterSchema.parse(req.body);
-    const exists = await prisma.user.findUnique({ where: { email: body.email } });
-    if (exists) return reply.status(409).send({ message: 'Email already registered' });
-
-    const passwordHash = await bcrypt.hash(body.password, 12);
-    const user = await prisma.user.create({
-      data: { email: body.email, passwordHash, role: 'ADMIN' },
-      select: { id: true, email: true, role: true },
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        otpCodeHash: null,
+        otpExpiresAt: null,
+      },
     });
 
-    const token = await reply.jwtSign({ sub: user.id, email: user.email, role: user.role });
-    return reply.send({ token, user });
+    const login = await signLogin(reply, user);
+    return reply.send(login);
   });
 };

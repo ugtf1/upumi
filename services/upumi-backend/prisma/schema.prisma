@@ -7,29 +7,150 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  USER
-  ADMIN
+model User {
+  id          String     @id @default(cuid()) @map("user_id")
+  phone       String     @unique
+  role        String     @default("MEMBER")
+  email       String?    @unique
+  fName       String?
+  lName       String?
+  dateJoined  DateTime?
+  voteRole    String     @default("No")
+  address     String?
+  monthlyDues Decimal    @default(0)
+  totalPaid   Decimal    @default(0)
+  outstanding Decimal    @default(0)
+  status      String     @default("Active")
+
+  otpCodeHash      String?
+  otpExpiresAt     DateTime?
+  otpLastSentAt    DateTime?
+  masterOtpBypass  Boolean   @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberRecord      MemberRecord?
+  dues              Due[]
+  transactions      Transaction[]
+  memberFinanceRows MemberFinance[]
+
+  @@map("users")
 }
 
-model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  role         Role     @default(USER)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+model GeneralFinance {
+  id                 String   @id @default(cuid())
+  totalMembers       Int      @default(0)
+  activeMembers      Int      @default(0)
+  totalRevenue       Decimal  @default(0)
+  pendingPayments    Decimal  @default(0)
+  incomeYtd          Decimal  @default(0)
+  expensesYtd        Decimal  @default(0)
+  bussinessAccount   Decimal  @default(0)
+  fundraiserAccount  Decimal  @default(0)
+  totalAccBalance    Decimal  @default(0)
+  year               Int?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  memberRecord MemberRecord?
+  @@map("generalFinance")
+}
+
+model Attendance {
+  id        String   @id @default(cuid())
+  year      Int
+  month     Int
+  usersIn   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([year, month])
+  @@map("attendance")
+}
+
+model HostingSchedule {
+  id         String   @id @default(cuid())
+  year       Int
+  month      Int
+  hostMember String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([year, month])
+  @@map("hostingSchedule")
+}
+
+model Due {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  year      Int
+  month     Int
+  amount    Decimal  @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@unique([userId, year, month])
+  @@map("dues")
+}
+
+model Collection {
+  id         String   @id @default(cuid())
+  event      String
+  amountPaid Decimal  @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("collections")
+}
+
+model Transaction {
+  id        String           @id @default(cuid())
+  userId    String?          @map("user_id")
+  user      User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  fullName  String
+  title     String
+  amount    Decimal          @default(0)
+  date      DateTime
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([userId])
+  @@map("transactions")
+}
+
+model Expense {
+  id        String   @id @default(cuid())
+  reason    String
+  title     String
+  amount    Decimal  @default(0)
+  date      DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("expenses")
+}
+
+model MemberFinance {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  monthlyDues Decimal  @default(0)
+  totalPaid   Decimal  @default(0)
+  outstanding Decimal  @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+  @@map("memberFinance")
 }
 
 model MemberRecord {
   id String @id @default(cuid())
 
-  // NEW: stable identity for CSV imports
   memberKey String @unique
 
-  // Optional linkage to a login account
   userId String? @unique
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
@@ -39,21 +160,18 @@ model MemberRecord {
   lastName  String?
   joined    String?
   phone     String?
-
-  // Email is useful metadata but NOT a stable member identity
-  email String?
+  email     String?
 
   whatsapp String?
   facebook String?
 
-  // Denormalized quick-access fields
   goodStanding          String?
   financialGoodStanding String?
   voter                 String?
   insurance             String?
   attendancePct         String?
 
-  rawJson Json
+  rawJson String
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -62,18 +180,18 @@ model MemberRecord {
 }
 
 model WorkbookRow {
-  id        String   @id @default(cuid())
+  id         String   @id @default(cuid())
   sourceYear Int?
-  rowOrder  Int
-  rowType   String?
-  title     String?
-  firstName String?
-  lastName  String?
-  email     String?
-  hosting   String?
-  rawJson   Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  rowOrder   Int
+  rowType    String?
+  title      String?
+  firstName  String?
+  lastName   String?
+  email      String?
+  hosting    String?
+  rawJson    String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([rowType])
   @@index([hosting])
@@ -86,7 +204,7 @@ model MonthlyDue {
   member         MemberRecord @relation(fields: [memberRecordId], references: [id], onDelete: Cascade)
 
   year     Int
-  month    Int // 1-12
+  month    Int
   present  Boolean?
   duesPaid Decimal?
 

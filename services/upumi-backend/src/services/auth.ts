@@ -1,7 +1,7 @@
 import type { FastifyRequest } from 'fastify';
-import type { Role } from '@prisma/client';
 
-export type JwtUser = { sub: string; email: string; role: Role };
+export type Role = 'ADMIN' | 'MEMBER';
+export type JwtUser = { sub: string; phone: string; email?: string | null; role: Role };
 
 declare module '@fastify/jwt' {
   interface FastifyJWT {

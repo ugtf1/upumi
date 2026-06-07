@@ -1,27 +1,66 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { apiPost, setToken } from "./api";
 
-type LoginResponse = { token: string };
+type RequestOtpResponse = {
+  requiresOtp: boolean;
+  message?: string;
+  token?: string;
+  redirectPath?: string;
+};
+
+type VerifyOtpResponse = {
+  token: string;
+  redirectPath: string;
+};
 
 export default function LoginPage() {
   const nav = useNavigate();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState("");
+  const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function onSubmit(e: React.FormEvent) {
+  function completeLogin(token: string, redirectPath?: string) {
+    setToken(token);
+    nav(redirectPath || "/member");
+  }
+
+  async function requestOtp(e: React.FormEvent) {
+    e.preventDefault();
+    setErr(null);
+    setNotice(null);
+    setLoading(true);
+
+    try {
+      const res = await apiPost<RequestOtpResponse>("/auth/request-otp", { phone });
+      if (res.token) {
+        completeLogin(res.token, res.redirectPath);
+        return;
+      }
+
+      setOtpSent(true);
+      setNotice(res.message || "OTP sent");
+    } catch (e: any) {
+      const message = String(e?.message ?? "Login failed");
+      setErr(message.includes("record not found") ? "record not found" : message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function verifyOtp(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
     setLoading(true);
+
     try {
-      // backend should support POST /api/auth/login
-      const res = await apiPost<LoginResponse>("/auth/login", { email, password });
-      setToken(res.token);
-      nav("/analytics");
+      const res = await apiPost<VerifyOtpResponse>("/auth/verify-otp", { phone, otp });
+      completeLogin(res.token, res.redirectPath);
     } catch (e: any) {
-      setErr(e?.message ?? "Login failed");
+      setErr(e?.message ?? "OTP verification failed");
     } finally {
       setLoading(false);
     }
@@ -29,46 +68,66 @@ export default function LoginPage() {
 
   return (
     <div style={{ maxWidth: 420, margin: "40px auto", padding: 16 }}>
-      <h2 style={{ fontSize: 24, marginBottom: 12 }}>Member Login</h2>
-      <form onSubmit={onSubmit}>
+      <h2 style={{ fontSize: 24, marginBottom: 12 }}>UPUMI Login</h2>
+
+      <form onSubmit={otpSent ? verifyOtp : requestOtp}>
         <label style={{ display: "block", marginBottom: 8 }}>
-          Email
+          Phone number
           <input
             style={{ width: "100%", padding: 10, marginTop: 6 }}
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            autoComplete="tel"
+            disabled={otpSent}
+            placeholder="08020909745"
           />
         </label>
 
-        <label style={{ display: "block", marginBottom: 8 }}>
-          Password
-          <input
-            style={{ width: "100%", padding: 10, marginTop: 6 }}
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-          />
-        </label>
+        {otpSent && (
+          <label style={{ display: "block", marginBottom: 8 }}>
+            OTP
+            <input
+              style={{ width: "100%", padding: 10, marginTop: 6 }}
+              value={otp}
+              onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              autoComplete="one-time-code"
+              inputMode="numeric"
+              placeholder="Enter 6-digit code"
+            />
+          </label>
+        )}
+
+        {notice && (
+          <div style={{ margin: "12px 0", padding: 10, border: "1px solid #cfe8d8", color: "#166445" }}>
+            {notice}
+          </div>
+        )}
 
         {err && (
-          <div style={{ margin: "12px 0", padding: 10, border: "1px solid #ccc" }}>
+          <div style={{ margin: "12px 0", padding: 10, border: "1px solid #f0c7c4", color: "#9c2f29" }}>
             {err}
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={loading}
-          style={{ width: "100%", padding: 12, marginTop: 8 }}
-        >
-          {loading ? "Signing in..." : "Sign in"}
+        <button type="submit" disabled={loading || !phone.trim() || (otpSent && otp.length !== 6)} style={{ width: "100%", padding: 12, marginTop: 8 }}>
+          {loading ? "Please wait..." : otpSent ? "Verify OTP" : "Send OTP"}
         </button>
+
+        {otpSent && (
+          <button
+            type="button"
+            onClick={() => {
+              setOtpSent(false);
+              setOtp("");
+              setNotice(null);
+              setErr(null);
+            }}
+            style={{ width: "100%", padding: 12, marginTop: 8 }}
+          >
+            Use another phone number
+          </button>
+        )}
       </form>
-      <div style={{ marginTop: 12 }}>
-        Need an account? <Link to="/register">Create member account</Link>
-      </div>
     </div>
   );
 }

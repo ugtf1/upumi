@@ -7,10 +7,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { prisma } from './services/prisma.js';
+import { ensureMasterAdmin } from './services/masterAdmin.js';
 import { authRoutes } from './routes/auth.js';
 import { meRoutes } from './routes/me.js';
 import { adminRoutes } from './routes/admin.js';
 import { memberRoutes } from './routes/members.js';
+import { adminDatabaseRoutes, memberDatabaseRoutes } from './routes/database.js';
 
 // ✅ ADD THESE (these files already exist in your backend)
 import { analyticsRoutes } from './routes/analytics.js';
@@ -59,6 +61,8 @@ async function main() {
   await app.register(meRoutes, { prefix: '/api/me' });
   await app.register(memberRoutes, { prefix: '/api/members' });
   await app.register(adminRoutes, { prefix: '/api/admin' });
+  await app.register(adminDatabaseRoutes, { prefix: '/api/admin/database' });
+  await app.register(memberDatabaseRoutes, { prefix: '/api/members/database' });
 
   // ✅ Analytics endpoints expected by AnalyticsPage.tsx:
   //   GET /api/analytics/me?year=2026
@@ -70,6 +74,8 @@ async function main() {
   // If traffic.ts defines app.get('/traffic', ...) then keep prefix '/api/analytics'
   // If traffic.ts defines app.get('/', ...) then change prefix to '/api/analytics/traffic'
   await app.register(trafficRoutes, { prefix: '/api/analytics' });
+
+  await ensureMasterAdmin();
 
   // ---- Static hosting for web build ----
   await app.register(fastifyStatic, {

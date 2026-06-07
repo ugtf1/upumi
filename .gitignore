@@ -27,3 +27,6 @@ tmp*
 .qodo
 .vite/
 web/.vite/
+
+# Local environment files
+**/.env
