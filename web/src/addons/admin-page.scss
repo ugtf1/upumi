@@ -173,9 +173,7 @@
 }
 
 
-#admin-dashboard-top {
-  /* section anchor styling removed */
-}
+/* #admin-dashboard-top selector intentionally removed to avoid empty ruleset */
 
 .admin-dashboard__hero,
 .admin-dashboard__panel,
@@ -691,6 +689,7 @@
   position: absolute;
   inset: 0;
   background: rgba(18, 38, 28, 0.24);
+  -webkit-backdrop-filter: blur(3px);
   backdrop-filter: blur(3px);
 }
 

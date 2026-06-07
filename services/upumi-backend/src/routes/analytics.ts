@@ -558,7 +558,7 @@ export async function analyticsRoutes(app: FastifyInstance) {
       lastName: legacy.lastName,
       status: legacy.status,
       hosting: strCell((legacy.rawJson as any)?.Hosting),
-      rawJson: sanitizeRawJson((legacy.rawJson ?? {}) as RawRow),
+      rawJson: sanitizeRawJson((legacy.rawJson ?? {}) as unknown as RawRow),
       updatedAt: legacy.updatedAt,
     };
   });
