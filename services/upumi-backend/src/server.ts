@@ -75,7 +75,12 @@ async function main() {
   // If traffic.ts defines app.get('/', ...) then change prefix to '/api/analytics/traffic'
   await app.register(trafficRoutes, { prefix: '/api/analytics' });
 
-  await ensureMasterAdmin();
+  // Gracefully attempt to ensure master admin exists; warn if DB is unavailable
+  try {
+    await ensureMasterAdmin();
+  } catch (err) {
+    app.log.warn('Failed to initialize master admin (database may not be ready yet):', err instanceof Error ? err.message : err);
+  }
 
   // ---- Static hosting for web build ----
   await app.register(fastifyStatic, {
