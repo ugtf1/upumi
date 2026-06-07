@@ -14,7 +14,7 @@ import { adminRoutes } from './routes/admin.js';
 import { memberRoutes } from './routes/members.js';
 import { adminDatabaseRoutes, memberDatabaseRoutes } from './routes/database.js';
 
-// ✅ ADD THESE (these files already exist in your backend)
+// ADD THESE (these files already exist in your backend)
 import { analyticsRoutes } from './routes/analytics.js';
 import { trafficRoutes } from './routes/traffic.js';
 
@@ -64,7 +64,7 @@ async function main() {
   await app.register(adminDatabaseRoutes, { prefix: '/api/admin/database' });
   await app.register(memberDatabaseRoutes, { prefix: '/api/members/database' });
 
-  // ✅ Analytics endpoints expected by AnalyticsPage.tsx:
+  //    Analytics endpoints expected by AnalyticsPage.tsx:
   //   GET /api/analytics/me?year=2026
   //   GET /api/analytics/summary?year=2026
   //   GET /api/analytics/traffic?period=30d
@@ -76,11 +76,12 @@ async function main() {
   await app.register(trafficRoutes, { prefix: '/api/analytics' });
 
   // Gracefully attempt to ensure master admin exists; warn if DB is unavailable
-  try {
-    await ensureMasterAdmin();
-  } catch (err) {
-    app.log.warn('Failed to initialize master admin (database may not be ready yet):', err instanceof Error ? err.message : err);
-  }
+try {
+  await ensureMasterAdmin();
+} catch (err) {
+  const message = err instanceof Error ? err.message : String(err);
+  app.log.warn(`Failed to initialize master admin (database may not be ready yet): ${message}`);
+}
 
   // ---- Static hosting for web build ----
   await app.register(fastifyStatic, {
