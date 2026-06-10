@@ -696,15 +696,24 @@
 .admin-dashboard__modal-panel {
   position: relative;
   z-index: 1;
-  width: min(80%, 620px);
-  max-height: calc(80vh - 20px);
-  overflow: auto;
+  width: min(92%, 880px);
+  max-height: none;
+  overflow: visible;
   padding: 28px 30px 26px;
   border-radius: 22px;
   background: #fff;
   box-shadow: 0 28px 70px rgba(18, 38, 28, 0.18);
   display: grid;
-  gap: 22px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 20px;
+  align-items: start;
+}
+
+/* Make header, global errors and action row span both columns */
+.admin-dashboard__modal-header,
+.admin-dashboard__modal-error,
+.admin-dashboard__modal-actions {
+  grid-column: 1 / -1;
 }
 
 .admin-dashboard__modal-section {
@@ -833,6 +842,71 @@
   cursor: not-allowed;
 }
 
+.admin-dashboard__modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.admin-dashboard__modal-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #202823;
+}
+
+.admin-dashboard__modal-close {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #cbd2cd;
+  border-radius: 50%;
+  background: #fff;
+  color: #7c8480;
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition: 0.2s ease;
+}
+
+.admin-dashboard__modal-close:hover {
+  border-color: #a0a7a1;
+  color: #202823;
+}
+
+.admin-dashboard__modal-input-field {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid #cbd2cd;
+  border-radius: 12px;
+  background: #fff;
+  color: #2d3530;
+  font: inherit;
+  font-size: 0.92rem;
+  transition: 0.2s ease;
+}
+
+.admin-dashboard__modal-input-field:focus {
+  outline: none;
+  border-color: #1ba389;
+  box-shadow: 0 0 0 3px rgba(27, 163, 137, 0.1);
+}
+
+.admin-dashboard__modal-input-field::placeholder {
+  color: #a0a7a1;
+}
+
+.admin-dashboard__modal-error {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #ffd7d3;
+  color: #c53030;
+  font-size: 0.9rem;
+}
+
 @media only screen and (max-width: 1280px) {
   .admin-dashboard__stats,
   .admin-dashboard__charts,
@@ -903,6 +977,9 @@
   .admin-dashboard__modal-panel {
     width: min(100%, 720px);
     padding: 22px 20px;
+    grid-template-columns: 1fr;
+    max-height: calc(100vh - 20px);
+    overflow: auto;
   }
 
   .admin-dashboard__modal-chip {
@@ -1002,6 +1079,8 @@
     padding: 18px 14px;
     border-radius: 18px;
     gap: 18px;
+    grid-template-columns: 1fr;
+    overflow: auto;
   }
 
   .admin-dashboard__modal-input {

@@ -348,4 +348,54 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       select: { id: true, userId: true, firstName: true, lastName: true },
     });
   });
+
+  // Create a new user (admin)
+  app.post('/users', { preHandler: requireRole('ADMIN') }, async (req) => {
+    const Body = z.object({
+      phone: z.string().min(1),
+      email: z.string().email().transform((s) => s.toLowerCase().trim()),
+      fName: z.string().min(1),
+      lName: z.string().min(1),
+      role: z.enum(['ADMIN', 'MEMBER']).default('MEMBER'),
+    }).parse(req.body);
+
+    // Check if user already exists by phone or email
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { phone: Body.phone },
+          { email: Body.email },
+        ],
+      },
+    });
+
+    if (existingUser) {
+      const err: any = new Error('User with this phone or email already exists');
+      err.statusCode = 409;
+      throw err;
+    }
+
+    const user = await prisma.user.create({
+      data: {
+        phone: Body.phone,
+        email: Body.email,
+        fName: Body.fName,
+        lName: Body.lName,
+        role: Body.role,
+        status: 'Active',
+      },
+      select: {
+        id: true,
+        phone: true,
+        email: true,
+        fName: true,
+        lName: true,
+        role: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+
+    return user;
+  });
 };

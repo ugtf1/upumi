@@ -12,9 +12,10 @@ import {
   FiSearch,
   FiSettings,
   FiUsers,
+  FiX,
 } from "react-icons/fi";
 
-import { clearToken } from "./api";
+import { apiPost, clearToken } from "./api";
 import "./admin-page.scss";
 import "./member-page.scss";
 
@@ -38,6 +39,14 @@ type MemberListItem = {
   voteStatus: "Participated" | "Nil";
 };
 
+type AddMemberForm = {
+  phone: string;
+  email: string;
+  fName: string;
+  lName: string;
+  role: "ADMIN" | "MEMBER";
+};
+
 const MEMBER_LIST: MemberListItem[] = [
   { id: "member-1", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "Yes", voteStatus: "Participated" },
   { id: "member-2", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "NO", voteStatus: "Nil" },
@@ -56,6 +65,85 @@ const MEMBER_LIST: MemberListItem[] = [
 export default function MemberPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
+  const [isAddMemberModalOpen, setIsAddMemberModalOpen] = useState(false);
+  const [addMemberForm, setAddMemberForm] = useState({
+    phone: "",
+    email: "",
+    fName: "",
+    lName: "",
+    role: "MEMBER" as const,
+  });
+  const [addMemberLoading, setAddMemberLoading] = useState(false);
+  const [addMemberError, setAddMemberError] = useState<string | null>(null);
+
+  function handleOpenAddMemberModal() {
+    setAddMemberForm({
+      phone: "",
+      email: "",
+      fName: "",
+      lName: "",
+      role: "MEMBER",
+    });
+    setAddMemberError(null);
+    setIsAddMemberModalOpen(true);
+  }
+
+  function handleCloseAddMemberModal() {
+    setIsAddMemberModalOpen(false);
+    setAddMemberError(null);
+  }
+
+  async function handleSaveAddMember() {
+    setAddMemberError(null);
+    setAddMemberLoading(true);
+
+    try {
+      const { phone, email, fName, lName, role } = addMemberForm;
+
+      // Validation
+      if (!phone.trim()) {
+        throw new Error("Phone is required");
+      }
+      if (!email.trim()) {
+        throw new Error("Email is required");
+      }
+      if (!fName.trim()) {
+        throw new Error("First name is required");
+      }
+      if (!lName.trim()) {
+        throw new Error("Last name is required");
+      }
+
+      // Call API to create user
+      await apiPost("/admin/users", {
+        phone: phone.trim(),
+        email: email.trim(),
+        fName: fName.trim(),
+        lName: lName.trim(),
+        role,
+      });
+
+      // Reset form and close modal
+      setAddMemberForm({
+        phone: "",
+        email: "",
+        fName: "",
+        lName: "",
+        role: "MEMBER",
+      });
+      setIsAddMemberModalOpen(false);
+    } catch (error) {
+      setAddMemberError(error instanceof Error ? error.message : "Failed to add member");
+    } finally {
+      setAddMemberLoading(false);
+    }
+  }
+
+  const isAddMemberFormValid = 
+    addMemberForm.phone.trim() &&
+    addMemberForm.email.trim() &&
+    addMemberForm.fName.trim() &&
+    addMemberForm.lName.trim();
 
   const filteredMembers = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -183,7 +271,7 @@ export default function MemberPage() {
               <FiFilter size={18} />
             </button>
 
-            <button type="button" className="member-page__add-button">
+            <button type="button" className="member-page__add-button" onClick={handleOpenAddMemberModal}>
               <FiPlus size={18} />
               <span>Add New</span>
             </button>
@@ -256,6 +344,127 @@ export default function MemberPage() {
           </div>
         </section>
       </main>
+
+      {isAddMemberModalOpen && (
+        <div className="admin-dashboard__modal" role="dialog" aria-modal="true" aria-labelledby="add-member-modal-title">
+          <div className="admin-dashboard__modal-backdrop" onClick={handleCloseAddMemberModal} />
+
+          <div className="admin-dashboard__modal-panel">
+            <div className="admin-dashboard__modal-header">
+              <h2 id="add-member-modal-title">Add New Member</h2>
+              <button
+                type="button"
+                className="admin-dashboard__modal-close"
+                onClick={handleCloseAddMemberModal}
+                aria-label="Close modal"
+              >
+                <FiX size={24} />
+              </button>
+            </div>
+
+            {addMemberError && (
+              <div className="admin-dashboard__modal-error">
+                {addMemberError}
+              </div>
+            )}
+
+            <div className="admin-dashboard__modal-section">
+              <label htmlFor="add-member-phone" className="admin-dashboard__modal-label">
+                Phone *
+              </label>
+              <input
+                id="add-member-phone"
+                type="tel"
+                value={addMemberForm.phone}
+                onChange={(event) => setAddMemberForm({ ...addMemberForm, phone: event.target.value })}
+                placeholder="Enter phone number"
+                aria-label="Member phone number"
+                className="admin-dashboard__modal-input-field"
+              />
+            </div>
+
+            <div className="admin-dashboard__modal-section">
+              <label htmlFor="add-member-email" className="admin-dashboard__modal-label">
+                Email *
+              </label>
+              <input
+                id="add-member-email"
+                type="email"
+                value={addMemberForm.email}
+                onChange={(event) => setAddMemberForm({ ...addMemberForm, email: event.target.value })}
+                placeholder="Enter email address"
+                aria-label="Member email address"
+                className="admin-dashboard__modal-input-field"
+              />
+            </div>
+
+            <div className="admin-dashboard__modal-section">
+              <label htmlFor="add-member-fname" className="admin-dashboard__modal-label">
+                First Name *
+              </label>
+              <input
+                id="add-member-fname"
+                type="text"
+                value={addMemberForm.fName}
+                onChange={(event) => setAddMemberForm({ ...addMemberForm, fName: event.target.value })}
+                placeholder="Enter first name"
+                aria-label="Member first name"
+                className="admin-dashboard__modal-input-field"
+              />
+            </div>
+
+            <div className="admin-dashboard__modal-section">
+              <label htmlFor="add-member-lname" className="admin-dashboard__modal-label">
+                Last Name *
+              </label>
+              <input
+                id="add-member-lname"
+                type="text"
+                value={addMemberForm.lName}
+                onChange={(event) => setAddMemberForm({ ...addMemberForm, lName: event.target.value })}
+                placeholder="Enter last name"
+                aria-label="Member last name"
+                className="admin-dashboard__modal-input-field"
+              />
+            </div>
+
+            <div className="admin-dashboard__modal-section">
+              <label htmlFor="add-member-role" className="admin-dashboard__modal-label">
+                Role
+              </label>
+              <select
+                id="add-member-role"
+                value={addMemberForm.role}
+                onChange={(event) => setAddMemberForm({ ...addMemberForm, role: event.target.value as "ADMIN" | "MEMBER" })}
+                aria-label="Member role"
+                className="admin-dashboard__modal-input-field"
+              >
+                <option value="MEMBER">Member</option>
+                <option value="ADMIN">Admin</option>
+              </select>
+            </div>
+
+            <div className="admin-dashboard__modal-actions">
+              <button
+                type="button"
+                className="admin-dashboard__modal-button admin-dashboard__modal-button--secondary"
+                onClick={handleCloseAddMemberModal}
+                disabled={addMemberLoading}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="admin-dashboard__modal-button admin-dashboard__modal-button--primary"
+                onClick={handleSaveAddMember}
+                disabled={!isAddMemberFormValid || addMemberLoading}
+              >
+                {addMemberLoading ? "Saving..." : "Save Member"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
