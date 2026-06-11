@@ -1,0 +1,51 @@
+name: Prisma  Cloud SQL (Destructive)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+
+jobs:
+  destructive-push:
+    runs-on: ubuntu-latest
+    env:
+      DB_NAME: ${{ secrets.DB_NAME }}
+      DB_USER: ${{ secrets.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      CLOUD_SQL_CONNECTION_NAME: ${{ secrets.CLOUD_SQL_CONNECTION_NAME }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: services/upumi-backend
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Start Cloud SQL Auth Proxy
+        uses: google-github-actions/cloud-sql-proxy@v1
+        with:
+          instance_connection_name: ${{ env.CLOUD_SQL_CONNECTION_NAME }}
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          port: 5432
+
+      - name: Wait for proxy
+        run: sleep 4
+
+      - name: Export DATABASE_URL
+        run: echo "DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@127.0.0.1:5432/${DB_NAME}" >> $GITHUB_ENV
+
+      - name: Verify Prisma schema file exists
+        run: test -f services/upumi-backend/prisma/schema.prisma
+
+      - name: Run destructive Prisma DB push (FORCE)
+        run: npx prisma db push --force
+        working-directory: services/upumi-backend

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { IconType } from "react-icons";
+import { Role } from "./types/Role";
 import {
   FiCheck,
   FiCreditCard,
@@ -39,14 +40,6 @@ type MemberListItem = {
   voteStatus: "Participated" | "Nil";
 };
 
-type AddMemberForm = {
-  phone: string;
-  email: string;
-  fName: string;
-  lName: string;
-  role: "ADMIN" | "MEMBER";
-};
-
 const MEMBER_LIST: MemberListItem[] = [
   { id: "member-1", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "Yes", voteStatus: "Participated" },
   { id: "member-2", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "NO", voteStatus: "Nil" },
@@ -62,28 +55,32 @@ const MEMBER_LIST: MemberListItem[] = [
   { id: "member-12", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "Yes", voteStatus: "Participated" },
 ];
 
+type AddMemberForm = {
+  phone: string;
+  email: string;
+  fName: string;
+  lName: string;
+  role: Role;
+};
+
+const INITIAL_ADD_MEMBER_FORM: AddMemberForm = {
+  phone: "",
+  email: "",
+  fName: "",
+  lName: "",
+  role: "MEMBER",
+};
+
 export default function MemberPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [isAddMemberModalOpen, setIsAddMemberModalOpen] = useState(false);
-  const [addMemberForm, setAddMemberForm] = useState({
-    phone: "",
-    email: "",
-    fName: "",
-    lName: "",
-    role: "MEMBER" as const,
-  });
+  const [addMemberForm, setAddMemberForm] = useState<AddMemberForm>(INITIAL_ADD_MEMBER_FORM);
   const [addMemberLoading, setAddMemberLoading] = useState(false);
   const [addMemberError, setAddMemberError] = useState<string | null>(null);
 
   function handleOpenAddMemberModal() {
-    setAddMemberForm({
-      phone: "",
-      email: "",
-      fName: "",
-      lName: "",
-      role: "MEMBER",
-    });
+    setAddMemberForm(INITIAL_ADD_MEMBER_FORM);
     setAddMemberError(null);
     setIsAddMemberModalOpen(true);
   }
@@ -124,13 +121,7 @@ export default function MemberPage() {
       });
 
       // Reset form and close modal
-      setAddMemberForm({
-        phone: "",
-        email: "",
-        fName: "",
-        lName: "",
-        role: "MEMBER",
-      });
+      setAddMemberForm(INITIAL_ADD_MEMBER_FORM);
       setIsAddMemberModalOpen(false);
     } catch (error) {
       setAddMemberError(error instanceof Error ? error.message : "Failed to add member");
@@ -139,7 +130,7 @@ export default function MemberPage() {
     }
   }
 
-  const isAddMemberFormValid = 
+  const isAddMemberFormValid =
     addMemberForm.phone.trim() &&
     addMemberForm.email.trim() &&
     addMemberForm.fName.trim() &&
@@ -435,7 +426,9 @@ export default function MemberPage() {
               <select
                 id="add-member-role"
                 value={addMemberForm.role}
-                onChange={(event) => setAddMemberForm({ ...addMemberForm, role: event.target.value as "ADMIN" | "MEMBER" })}
+                onChange={(event) =>
+                  setAddMemberForm({ ...addMemberForm, role: event.target.value as Role })
+                }
                 aria-label="Member role"
                 className="admin-dashboard__modal-input-field"
               >
