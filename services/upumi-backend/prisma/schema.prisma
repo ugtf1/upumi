@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -34,7 +34,6 @@ model User {
   dues              Due[]
   transactions      Transaction[]
   memberFinanceRows MemberFinance[]
-  
 }
 
 model GeneralFinance {
@@ -105,15 +104,15 @@ model Collection {
 }
 
 model Transaction {
-  id        String           @id @default(cuid())
-  userId    String?          @map("user_id")
-  user      User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id        String   @id @default(cuid())
+  userId    String?  @map("user_id")
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   fullName  String
   title     String
-  amount    Decimal          @default(0)
+  amount    Decimal  @default(0)
   date      DateTime
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId])
   @@map("transactions")
