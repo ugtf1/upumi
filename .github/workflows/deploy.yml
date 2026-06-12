@@ -134,6 +134,7 @@ jobs:
             -p 18080:8080 \
             -e PORT=8080 \
             -e JWT_SECRET=ci-smoke-test-secret \
+            -e SKIP_MIGRATIONS=true \
             -e DATABASE_URL='postgresql://ci:ci@127.0.0.1:5432/upumi?schema=public' \
             "$IMAGE_TAG" \
             node dist/server.js)
@@ -161,52 +162,10 @@ jobs:
           docker push "$IMAGE_TAG"
           echo "image=$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-  # 1b) Run API DB migrations as a dedicated Cloud Run Job (only if api changed)
-  migrate-api:
-    needs: [detect-changes, build-api-image]
-    if: needs.detect-changes.outputs.api == 'true' && needs.build-api-image.result == 'success'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: "read"
-      id-token: "write"
-    steps:
-      - name: Authenticate to Google Cloud (WIF)
-        uses: google-github-actions/auth@v2
-        with:
-          project_id: ${{ env.PROJECT_ID }}
-          workload_identity_provider: projects/${{ env.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/ugtf-github-pool/providers/github-actions
-          service_account: github-runner-ugtf@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-        with:
-          project_id: ${{ env.PROJECT_ID }}
-
-      - name: Deploy Migration Job Definition
-        run: |
-          JOB_NAME="${{ env.API_SERVICE_NAME }}-migrate"
-          IMAGE_TAG="${{ needs.build-api-image.outputs.image }}"
-
-          gcloud run jobs deploy "$JOB_NAME" \
-            --image="$IMAGE_TAG" \
-            --region="${{ env.REGION }}" \
-            --set-cloudsql-instances="${{ env.PROJECT_ID }}:${{ env.REGION }}:upumi-postgres" \
-            --set-env-vars=NODE_ENV=production \
-            --set-secrets=DATABASE_URL=UPUMI_DATABASE_URL:latest \
-            --command=npx \
-            --args=prisma \
-            --args=migrate \
-            --args=deploy
-
-      - name: Execute Migration Job
-        run: |
-          JOB_NAME="${{ env.API_SERVICE_NAME }}-migrate"
-          gcloud run jobs execute "$JOB_NAME" --region="${{ env.REGION }}" --wait
-
   # 1c) Deploy API service (only if api changed)
   deploy-api:
-    needs: [detect-changes, build-api-image, migrate-api]
-    if: needs.detect-changes.outputs.api == 'true' && needs.build-api-image.result == 'success' && needs.migrate-api.result == 'success'
+    needs: [detect-changes, build-api-image]
+    if: needs.detect-changes.outputs.api == 'true' && needs.build-api-image.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: "read"
@@ -433,7 +392,7 @@ jobs:
 
   # 5) Notify via Email (runs when either service changed)
   notify:
-    needs: [detect-changes, deploy-web, build-api-image, migrate-api, deploy-api, health-check-web, health-check-api, lighthouse-audit, seo-audit]
+    needs: [detect-changes, deploy-web, build-api-image, deploy-api, health-check-web, health-check-api, lighthouse-audit, seo-audit]
     if: always() && (needs.detect-changes.outputs.web == 'true' || needs.detect-changes.outputs.api == 'true')
     runs-on: ubuntu-latest
     steps:
@@ -461,7 +420,6 @@ jobs:
 
             API:
               - image: ${{ needs.build-api-image.result }}
-              - migrate: ${{ needs.migrate-api.result }}
               - deploy: ${{ needs.deploy-api.result }}
               - health: ${{ needs.health-check-api.result }}
               - url: ${{ needs.deploy-api.outputs.api_url || 'skipped' }}

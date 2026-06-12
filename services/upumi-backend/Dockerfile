@@ -33,5 +33,10 @@ COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/public ./public
 
+# Entrypoint that runs migrations before starting the app
+COPY entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
+
 EXPOSE 8080
+ENTRYPOINT ["./entrypoint.sh"]
 CMD ["node", "dist/server.js"]
