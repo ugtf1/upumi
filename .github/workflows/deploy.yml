@@ -136,8 +136,7 @@ jobs:
             -e JWT_SECRET=ci-smoke-test-secret \
             -e SKIP_MIGRATIONS=true \
             -e DATABASE_URL='postgresql://ci:ci@127.0.0.1:5432/upumi?schema=public' \
-            "$IMAGE_TAG" \
-            node dist/server.js)
+            "$IMAGE_TAG")
 
           cleanup() {
             docker rm -f "$CID" >/dev/null 2>&1 || true
@@ -200,9 +199,6 @@ jobs:
             --set-env-vars=NODE_ENV=production
             --set-secrets=DATABASE_URL=UPUMI_DATABASE_URL:latest,JWT_SECRET=UPUMI_JWT_SECRET:latest,ADMIN_BOOTSTRAP_SECRET=UPUMI_ADMIN_BOOTSTRAP_SECRET:latest,CORS_ORIGIN=UPUMI_CORS_ORIGIN:latest
             --set-secrets=GOOGLE_SHEET_URL=UPUMI_GOOGLE_SHEET_URL:latest,GOOGLE_SHEET_GID=UPUMI_GOOGLE_SHEET_GID:latest,GOOGLE_SHEET_YEAR=UPUMI_GOOGLE_SHEET_YEAR:latest,SCHEDULER_IMPORT_SECRET=UPUMI_SCHEDULER_IMPORT_SECRET:latest
-            --command=npm
-            --args=run
-            --args=start:prod
           wait: true
 
       - name: Fetch API URL
