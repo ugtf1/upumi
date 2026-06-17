@@ -78,6 +78,7 @@ export default function MemberPage() {
   const [addMemberForm, setAddMemberForm] = useState<AddMemberForm>(INITIAL_ADD_MEMBER_FORM);
   const [addMemberLoading, setAddMemberLoading] = useState(false);
   const [addMemberError, setAddMemberError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   function handleOpenAddMemberModal() {
     setAddMemberForm(INITIAL_ADD_MEMBER_FORM);
@@ -123,6 +124,10 @@ export default function MemberPage() {
       // Reset form and close modal
       setAddMemberForm(INITIAL_ADD_MEMBER_FORM);
       setIsAddMemberModalOpen(false);
+
+      // Show success notification
+      setToast("Member added successfully");
+      window.setTimeout(() => setToast(null), 3000);
     } catch (error) {
       setAddMemberError(error instanceof Error ? error.message : "Failed to add member");
     } finally {
@@ -456,6 +461,13 @@ export default function MemberPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className="admin-dashboard__toast" role="status" aria-live="polite">
+          <FiCheck size={16} />
+          <span>{toast}</span>
         </div>
       )}
     </div>
