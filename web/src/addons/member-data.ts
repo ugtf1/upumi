@@ -1,5 +1,7 @@
 export type MemberStatus = "Active" | "Inactive";
 
+export const MEMBER_STATUS_OPTIONS: MemberStatus[] = ["Active", "Inactive"];
+
 export type MemberRecord = {
   id: string;
   memberId: string;
@@ -22,11 +24,13 @@ export type MemberDetailRecord = {
   name: string;
   email: string;
   phoneNumber: string;
+  address: string;
   attendance: string;
   voteRole: string;
   monthlyDues: string;
   totalPaid: string;
   outstanding: string;
+  status: MemberStatus;
   paymentHistory: PaymentHistoryRow[];
 };
 
@@ -73,11 +77,13 @@ const DETAIL_OVERRIDES: Record<string, MemberDetailRecord> = {
     name: "Andrew Karl",
     email: "Andrew.karl@gmail.com",
     phoneNumber: "09198489383",
+    address: "12 Ring Road, Benin City, Edo State",
     attendance: "March",
     voteRole: "YES",
     monthlyDues: "$20",
     totalPaid: "$1500",
     outstanding: "$80",
+    status: "Active",
     paymentHistory: DEFAULT_PAYMENT_HISTORY,
   },
 };
@@ -103,7 +109,7 @@ function deriveAttendanceFromJoined(joined: string) {
   return "March";
 }
 
-export function getMemberDetailByMemberId(memberId: string) {
+export function getMemberDetailByMemberId(memberId: string): MemberDetailRecord {
   const member = MEMBER_ROWS.find((entry) => entry.memberId === memberId);
   const override = DETAIL_OVERRIDES[memberId];
 
@@ -115,11 +121,13 @@ export function getMemberDetailByMemberId(memberId: string) {
       name: "Member Not Found",
       email: "unknown@upumi.org",
       phoneNumber: "-",
+      address: "",
       attendance: "March",
       voteRole: "NO",
       monthlyDues: "$20",
       totalPaid: "$0",
       outstanding: "$0",
+      status: "Inactive",
       paymentHistory: DEFAULT_PAYMENT_HISTORY,
     };
   }
@@ -129,11 +137,13 @@ export function getMemberDetailByMemberId(memberId: string) {
     name: deriveNameFromEmail(member.email),
     email: member.email,
     phoneNumber: member.phoneNumber,
+    address: "",
     attendance: deriveAttendanceFromJoined(member.joined),
     voteRole: member.status === "Active" ? "YES" : "NO",
     monthlyDues: "$20",
     totalPaid: "$1500",
     outstanding: member.status === "Active" ? "$80" : "$120",
+    status: member.status,
     paymentHistory: DEFAULT_PAYMENT_HISTORY,
   };
 }

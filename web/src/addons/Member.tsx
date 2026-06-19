@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { IconType } from "react-icons";
 import { Role } from "./types/Role";
 import {
   FiCheck,
   FiCreditCard,
+  FiEye,
   FiFilter,
   FiHome,
   FiLogOut,
@@ -79,6 +80,7 @@ export default function MemberPage() {
   const [addMemberLoading, setAddMemberLoading] = useState(false);
   const [addMemberError, setAddMemberError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
 
   function handleOpenAddMemberModal() {
     setAddMemberForm(INITIAL_ADD_MEMBER_FORM);
@@ -166,6 +168,25 @@ export default function MemberPage() {
     clearToken();
     navigate("/login");
   }
+
+  function handleViewMember(member: MemberListItem) {
+    setOpenActionMenuId(null);
+    navigate(`/admin/member/${member.memberId}`);
+  }
+
+  useEffect(() => {
+    if (!openActionMenuId) return undefined;
+
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as HTMLElement;
+      if (!target.closest(".member-page__row-actions")) {
+        setOpenActionMenuId(null);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [openActionMenuId]);
 
   const primaryNavigationItems: NavigationItem[] = [
     { label: "Dashboard", icon: FiHome, action: () => navigate("/admin") },
@@ -327,13 +348,34 @@ export default function MemberPage() {
                     <small>{member.voteStatus}</small>
                   </div>
 
-                  <button
-                    type="button"
-                    className="member-page__more-button"
-                    aria-label={`More actions for ${member.name}`}
-                  >
-                    <FiMoreVertical size={22} />
-                  </button>
+                  <div className="member-page__row-actions">
+                    <button
+                      type="button"
+                      className="member-page__more-button"
+                      aria-label={`More actions for ${member.name}`}
+                      aria-haspopup="menu"
+                      aria-expanded={openActionMenuId === member.id}
+                      onClick={() =>
+                        setOpenActionMenuId((current) => (current === member.id ? null : member.id))
+                      }
+                    >
+                      <FiMoreVertical size={22} />
+                    </button>
+
+                    {openActionMenuId === member.id && (
+                      <div className="member-page__action-menu" role="menu">
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="member-page__action-menu-item"
+                          onClick={() => handleViewMember(member)}
+                        >
+                          <FiEye size={16} />
+                          <span>View</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </article>
               ))
             )}

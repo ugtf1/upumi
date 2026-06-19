@@ -10,7 +10,7 @@ import {
 } from "react-icons/fi";
 
 import { clearToken } from "./api";
-import memberImage from "../member.png";
+import memberImage from "./upu-logo.svg";
 import "./admin-page.scss";
 import "./transaction-page.scss";
 

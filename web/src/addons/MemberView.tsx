@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import type { IconType } from "react-icons";
 import {
   FiCalendar,
+  FiCheck,
   FiCreditCard,
   FiEdit2,
   FiFilter,
@@ -16,8 +17,8 @@ import {
   FiUsers,
 } from "react-icons/fi";
 
-import { clearToken } from "./api";
-import { getMemberDetailByMemberId, type PaymentHistoryRow } from "./member-data";
+import { apiPatch, clearToken } from "./api";
+import { getMemberDetailByMemberId, MEMBER_STATUS_OPTIONS, type MemberStatus, type PaymentHistoryRow } from "./member-data";
 import "./admin-page.scss";
 import "./member-page.scss";
 import "./member-view-page.scss";
@@ -42,13 +43,28 @@ type RecordPaymentFormState = {
 };
 
 type EditMemberFormState = {
-  fullName: string;
+  fName: string;
+  lName: string;
   email: string;
-  attendance: string;
-  voteRole: string;
+  phone: string;
+  address: string;
+  monthlyDues: string;
+  totalPaid: string;
+  outstanding: string;
+  status: string;
 };
 
-const VOTE_ROLE_OPTIONS = ["YES", "NO"] as const;
+function toNumericInputValue(value: string | number | undefined | null): string {
+  if (value === undefined || value === null) return "";
+  const numeric = Number(String(value).replace(/[^0-9.-]/g, ""));
+  return Number.isNaN(numeric) ? "" : String(numeric);
+}
+
+function formatCurrencyDisplay(value: string): string {
+  const numeric = Number(value);
+  if (Number.isNaN(numeric)) return value;
+  return `$${numeric.toLocaleString()}`;
+}
 
 export default function MemberViewPage() {
   const navigate = useNavigate();
@@ -59,11 +75,19 @@ export default function MemberViewPage() {
   const [isEditMemberModalOpen, setIsEditMemberModalOpen] = useState(false);
   const [isRecordPaymentModalOpen, setIsRecordPaymentModalOpen] = useState(false);
   const [editMemberForm, setEditMemberForm] = useState<EditMemberFormState>({
-    fullName: "",
+    fName: "",
+    lName: "",
     email: "",
-    attendance: "",
-    voteRole: "",
+    phone: "",
+    address: "",
+    monthlyDues: "",
+    totalPaid: "",
+    outstanding: "",
+    status: "Active",
   });
+  const [editMemberLoading, setEditMemberLoading] = useState(false);
+  const [editMemberError, setEditMemberError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [recordPaymentForm, setRecordPaymentForm] = useState<RecordPaymentFormState>({
     month: "",
     amountPaid: "",
@@ -104,39 +128,127 @@ export default function MemberViewPage() {
   }
 
   function handleOpenEditMemberModal() {
+    const [fName = "", ...rest] = memberProfile.name.trim().split(" ");
+    const lName = rest.join(" ");
+
     setEditMemberForm({
-      fullName: memberProfile.name,
+      fName,
+      lName,
       email: memberProfile.email,
-      attendance: memberProfile.attendance,
-      voteRole: memberProfile.voteRole,
+      phone: memberProfile.phoneNumber,
+      address: memberProfile.address,
+      monthlyDues: toNumericInputValue(memberProfile.monthlyDues),
+      totalPaid: toNumericInputValue(memberProfile.totalPaid),
+      outstanding: toNumericInputValue(memberProfile.outstanding),
+      status: memberProfile.status,
     });
+    setEditMemberError(null);
     setIsEditMemberModalOpen(true);
   }
 
   function handleCloseEditMemberModal() {
     setIsEditMemberModalOpen(false);
+    setEditMemberError(null);
   }
 
   function handleEditMemberChange(field: keyof EditMemberFormState, value: string) {
     setEditMemberForm((currentForm) => ({ ...currentForm, [field]: value }));
   }
 
-  function handleSaveEditedMember() {
-    const fullName = editMemberForm.fullName.trim();
-    const email = editMemberForm.email.trim();
-    const attendance = editMemberForm.attendance.trim();
-    const voteRole = editMemberForm.voteRole.trim();
-    if (!fullName || !email || !attendance || !voteRole) return;
+  async function handleSaveEditedMember() {
+    setEditMemberError(null);
+    setEditMemberLoading(true);
 
-    setMemberProfile((currentProfile) => ({
-      ...currentProfile,
-      name: fullName,
-      email,
-      attendance,
-      voteRole,
-    }));
-    setIsEditMemberModalOpen(false);
+    try {
+      const fName = editMemberForm.fName.trim();
+      const lName = editMemberForm.lName.trim();
+      const email = editMemberForm.email.trim();
+      const phone = editMemberForm.phone.trim();
+      const address = editMemberForm.address.trim();
+      const status = editMemberForm.status.trim();
+
+      // Validation
+      if (!fName) {
+        throw new Error("First name is required");
+      }
+      if (!lName) {
+        throw new Error("Last name is required");
+      }
+      if (!email) {
+        throw new Error("Email is required");
+      }
+      if (!phone) {
+        throw new Error("Phone is required");
+      }
+      if (!status) {
+        throw new Error("Status is required");
+      }
+
+      const monthlyDues = Number(editMemberForm.monthlyDues);
+      const totalPaid = Number(editMemberForm.totalPaid);
+      const outstanding = Number(editMemberForm.outstanding);
+
+      if (Number.isNaN(monthlyDues)) {
+        throw new Error("Monthly dues must be a number");
+      }
+      if (Number.isNaN(totalPaid)) {
+        throw new Error("Total paid must be a number");
+      }
+      if (Number.isNaN(outstanding)) {
+        throw new Error("Outstanding must be a number");
+      }
+
+      // Call API to update the member record.
+      // Uses memberId from the route (e.g. "2944"). If your backend's
+      // /admin/users/:id route expects the Prisma User.id (cuid) rather
+      // than this display memberId, update member-data.ts to carry the
+      // real id through once this page is wired to a live API response.
+      await apiPatch(`/admin/users/${memberId}`, {
+        fName,
+        lName,
+        email,
+        phone,
+        address,
+        monthlyDues,
+        totalPaid,
+        outstanding,
+        status,
+      });
+
+      // Reflect the update locally so the UI doesn't need a full refetch
+      setMemberProfile((currentProfile) => ({
+        ...currentProfile,
+        name: `${fName} ${lName}`.trim(),
+        email,
+        phoneNumber: phone,
+        address,
+        monthlyDues: formatCurrencyDisplay(editMemberForm.monthlyDues),
+        totalPaid: formatCurrencyDisplay(editMemberForm.totalPaid),
+        outstanding: formatCurrencyDisplay(editMemberForm.outstanding),
+        status: status as MemberStatus,
+      }));
+
+      setIsEditMemberModalOpen(false);
+
+      // Show success notification
+      setToast("Member updated successfully");
+      window.setTimeout(() => setToast(null), 3000);
+    } catch (error) {
+      setEditMemberError(error instanceof Error ? error.message : "Failed to update member");
+    } finally {
+      setEditMemberLoading(false);
+    }
   }
+
+  const isEditMemberFormValid =
+    editMemberForm.fName.trim() &&
+    editMemberForm.lName.trim() &&
+    editMemberForm.email.trim() &&
+    editMemberForm.phone.trim() &&
+    editMemberForm.status.trim() &&
+    editMemberForm.monthlyDues.trim() !== "" &&
+    editMemberForm.totalPaid.trim() !== "" &&
+    editMemberForm.outstanding.trim() !== "";
 
   function resetRecordPaymentForm() {
     setRecordPaymentForm({
@@ -474,29 +586,52 @@ export default function MemberViewPage() {
           <div className="admin-dashboard__modal-backdrop" onClick={handleCloseEditMemberModal} />
 
           <div className="admin-dashboard__modal-panel member-view-page__modal-panel">
+            {editMemberError && (
+              <div className="admin-dashboard__modal-error">
+                {editMemberError}
+              </div>
+            )}
+
             <div className="member-view-page__modal-grid">
               <div className="admin-dashboard__modal-section">
-                <label htmlFor="member-profile-full-name" className="admin-dashboard__modal-label" id="member-profile-edit-modal-title">
-                  Full Name
+                <label htmlFor="member-profile-fname" className="admin-dashboard__modal-label" id="member-profile-edit-modal-title">
+                  First Name *
                 </label>
                 <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
                   <input
-                    id="member-profile-full-name"
-                    value={editMemberForm.fullName}
-                    onChange={(event) => handleEditMemberChange("fullName", event.target.value)}
-                    placeholder="Agbara Onome"
-                    aria-label="Full name"
+                    id="member-profile-fname"
+                    value={editMemberForm.fName}
+                    onChange={(event) => handleEditMemberChange("fName", event.target.value)}
+                    placeholder="Agbara"
+                    aria-label="First name"
+                  />
+                </div>
+              </div>
+
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="member-profile-lname" className="admin-dashboard__modal-label">
+                  Last Name *
+                </label>
+                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                  <input
+                    id="member-profile-lname"
+                    value={editMemberForm.lName}
+                    onChange={(event) => handleEditMemberChange("lName", event.target.value)}
+                    placeholder="Onome"
+                    aria-label="Last name"
                   />
                 </div>
               </div>
 
               <div className="admin-dashboard__modal-section">
                 <label htmlFor="member-profile-email" className="admin-dashboard__modal-label">
-                  Email Address
+                  Email Address *
                 </label>
                 <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                  <FiMail size={20} />
                   <input
                     id="member-profile-email"
+                    type="email"
                     value={editMemberForm.email}
                     onChange={(event) => handleEditMemberChange("email", event.target.value)}
                     placeholder="Andrew.karl@gmail.com"
@@ -506,40 +641,106 @@ export default function MemberViewPage() {
               </div>
 
               <div className="admin-dashboard__modal-section">
-                <label htmlFor="member-profile-attendance" className="admin-dashboard__modal-label">
-                  Member Attendance
+                <label htmlFor="member-profile-phone" className="admin-dashboard__modal-label">
+                  Phone *
                 </label>
-                <div className="admin-dashboard__modal-input member-view-page__modal-input">
-                  <FiCalendar size={20} />
+                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                  <FiPhone size={20} />
                   <input
-                    id="member-profile-attendance"
-                    value={editMemberForm.attendance}
-                    onChange={(event) => handleEditMemberChange("attendance", event.target.value)}
-                    placeholder="March"
-                    aria-label="Member attendance"
+                    id="member-profile-phone"
+                    type="tel"
+                    value={editMemberForm.phone}
+                    onChange={(event) => handleEditMemberChange("phone", event.target.value)}
+                    placeholder="+234 818 481 9383"
+                    aria-label="Phone number"
                   />
                 </div>
               </div>
 
               <div className="admin-dashboard__modal-section">
-                <label htmlFor="member-profile-vote-role" className="admin-dashboard__modal-label">
-                  Vote Role
+                <label htmlFor="member-profile-address" className="admin-dashboard__modal-label">
+                  Address
+                </label>
+                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                  <input
+                    id="member-profile-address"
+                    value={editMemberForm.address}
+                    onChange={(event) => handleEditMemberChange("address", event.target.value)}
+                    placeholder="Enter address"
+                    aria-label="Address"
+                  />
+                </div>
+              </div>
+
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="member-profile-status" className="admin-dashboard__modal-label">
+                  Status *
                 </label>
                 <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input member-view-page__modal-select-wrap">
                   <select
-                    id="member-profile-vote-role"
-                    value={editMemberForm.voteRole}
-                    onChange={(event) => handleEditMemberChange("voteRole", event.target.value)}
-                    aria-label="Vote role"
-                    className={editMemberForm.voteRole ? "has-value" : ""}
+                    id="member-profile-status"
+                    value={editMemberForm.status}
+                    onChange={(event) => handleEditMemberChange("status", event.target.value)}
+                    aria-label="Status"
+                    className={editMemberForm.status ? "has-value" : ""}
                   >
-                    <option value="">Select</option>
-                    {VOTE_ROLE_OPTIONS.map((option) => (
+                    {MEMBER_STATUS_OPTIONS.map((option) => (
                       <option key={option} value={option}>
                         {option}
                       </option>
                     ))}
                   </select>
+                </div>
+              </div>
+
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="member-profile-monthly-dues" className="admin-dashboard__modal-label">
+                  Monthly Dues *
+                </label>
+                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                  <input
+                    id="member-profile-monthly-dues"
+                    type="number"
+                    inputMode="decimal"
+                    value={editMemberForm.monthlyDues}
+                    onChange={(event) => handleEditMemberChange("monthlyDues", event.target.value)}
+                    placeholder="0"
+                    aria-label="Monthly dues"
+                  />
+                </div>
+              </div>
+
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="member-profile-total-paid" className="admin-dashboard__modal-label">
+                  Total Paid *
+                </label>
+                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                  <input
+                    id="member-profile-total-paid"
+                    type="number"
+                    inputMode="decimal"
+                    value={editMemberForm.totalPaid}
+                    onChange={(event) => handleEditMemberChange("totalPaid", event.target.value)}
+                    placeholder="0"
+                    aria-label="Total paid"
+                  />
+                </div>
+              </div>
+
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="member-profile-outstanding" className="admin-dashboard__modal-label">
+                  Outstanding *
+                </label>
+                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                  <input
+                    id="member-profile-outstanding"
+                    type="number"
+                    inputMode="decimal"
+                    value={editMemberForm.outstanding}
+                    onChange={(event) => handleEditMemberChange("outstanding", event.target.value)}
+                    placeholder="0"
+                    aria-label="Outstanding"
+                  />
                 </div>
               </div>
             </div>
@@ -549,6 +750,7 @@ export default function MemberViewPage() {
                 type="button"
                 className="admin-dashboard__modal-button admin-dashboard__modal-button--secondary"
                 onClick={handleCloseEditMemberModal}
+                disabled={editMemberLoading}
               >
                 Cancel
               </button>
@@ -556,17 +758,19 @@ export default function MemberViewPage() {
                 type="button"
                 className="admin-dashboard__modal-button admin-dashboard__modal-button--primary"
                 onClick={handleSaveEditedMember}
-                disabled={
-                  !editMemberForm.fullName.trim() ||
-                  !editMemberForm.email.trim() ||
-                  !editMemberForm.attendance.trim() ||
-                  !editMemberForm.voteRole.trim()
-                }
+                disabled={!isEditMemberFormValid || editMemberLoading}
               >
-                Save Changes
+                {editMemberLoading ? "Saving..." : "Save Changes"}
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className="admin-dashboard__toast" role="status" aria-live="polite">
+          <FiCheck size={16} />
+          <span>{toast}</span>
         </div>
       )}
     </div>

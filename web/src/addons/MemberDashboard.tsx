@@ -33,7 +33,7 @@ import {
 } from "recharts";
 
 import { clearToken } from "./api";
-import memberImage from "../member.png";
+import memberImage from "./upu-logo.svg";
 import "./admin-page.scss";
 import "./member-dashboard.scss";
 
