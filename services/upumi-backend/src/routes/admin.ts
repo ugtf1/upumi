@@ -46,25 +46,160 @@ function sanitizeRawJson(raw: Record<string, any>) {
   return out;
 }
 
+function parseRawJson(raw: unknown): Record<string, any> {
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw as Record<string, any>;
+  if (typeof raw !== 'string') return {};
+
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, any> : {};
+  } catch {
+    return {};
+  }
+}
+
+function strCell(value: unknown): string | null {
+  const text = String(value ?? '').trim();
+  return text || null;
+}
+
+function decimalToNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function rawMoney(raw: Record<string, any>, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = raw[key];
+    if (value === null || value === undefined || value === '') continue;
+    const numeric = Number(String(value).replace(/[^0-9.-]/g, ''));
+    if (Number.isFinite(numeric)) return numeric;
+  }
+  return null;
+}
+
 export const adminRoutes: FastifyPluginAsync = async (app) => {
   const prismaAny = prisma as any;
   // List all members (admin)
   app.get('/members', { preHandler: requireRole('ADMIN') }, async () => {
-    return prisma.memberRecord.findMany({
+    const rows = await prisma.memberRecord.findMany({
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
       select: {
         id: true,
+        memberKey: true,
         status: true,
+        title: true,
         firstName: true,
         lastName: true,
+        joined: true,
+        phone: true,
+        email: true,
         goodStanding: true,
         financialGoodStanding: true,
         voter: true,
         attendancePct: true,
+        rawJson: true,
         userId: true,
         updatedAt: true,
+        user: {
+          select: {
+            id: true,
+            phone: true,
+            email: true,
+            fName: true,
+            lName: true,
+            status: true,
+            dateJoined: true,
+            voteRole: true,
+          },
+        },
       },
     });
+
+    return rows.map((row: any) => {
+      const raw = parseRawJson(row.rawJson);
+      return {
+        id: row.id,
+        memberKey: row.memberKey,
+        displayMemberId: row.memberKey,
+        status: strCell(row.status) ?? strCell(row.user?.status) ?? 'Active',
+        title: strCell(row.title) ?? strCell(raw.Title),
+        firstName: strCell(row.firstName) ?? strCell(row.user?.fName) ?? strCell(raw.First),
+        lastName: strCell(row.lastName) ?? strCell(row.user?.lName) ?? strCell(raw.Last),
+        joined: strCell(row.joined) ?? strCell(raw.Joined) ?? row.user?.dateJoined ?? null,
+        phone: strCell(row.phone) ?? strCell(row.user?.phone) ?? strCell(raw.Phone),
+        email: strCell(row.email) ?? strCell(row.user?.email) ?? strCell(raw.Email),
+        goodStanding: strCell(row.goodStanding) ?? strCell(raw.GoodStanding),
+        financialGoodStanding: strCell(row.financialGoodStanding) ?? strCell(raw['Financial GoodStanding']),
+        voter: strCell(row.voter) ?? strCell(row.user?.voteRole) ?? strCell(raw.Voter),
+        attendancePct: strCell(row.attendancePct) ?? strCell(raw['%Attendance']),
+        userId: row.userId,
+        updatedAt: row.updatedAt,
+      };
+    });
+  });
+
+  app.get('/members/:id', { preHandler: requireRole('ADMIN') }, async (req: any, reply) => {
+    const id = String(req.params?.id ?? '');
+    const row = await prisma.memberRecord.findUnique({
+      where: { id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            phone: true,
+            email: true,
+            fName: true,
+            lName: true,
+            address: true,
+            dateJoined: true,
+            voteRole: true,
+            monthlyDues: true,
+            totalPaid: true,
+            outstanding: true,
+            status: true,
+          },
+        },
+        monthlyDues: { orderBy: [{ year: 'desc' }, { month: 'asc' }] },
+      },
+    });
+
+    if (!row) return reply.code(404).send({ message: 'Member not found' });
+
+    const raw = parseRawJson(row.rawJson);
+    return {
+      id: row.id,
+      memberKey: row.memberKey,
+      displayMemberId: row.memberKey,
+      status: strCell(row.status) ?? strCell(row.user?.status) ?? 'Active',
+      title: strCell(row.title) ?? strCell(raw.Title),
+      firstName: strCell(row.firstName) ?? strCell(row.user?.fName) ?? strCell(raw.First),
+      lastName: strCell(row.lastName) ?? strCell(row.user?.lName) ?? strCell(raw.Last),
+      joined: strCell(row.joined) ?? strCell(raw.Joined) ?? row.user?.dateJoined ?? null,
+      phone: strCell(row.phone) ?? strCell(row.user?.phone) ?? strCell(raw.Phone),
+      email: strCell(row.email) ?? strCell(row.user?.email) ?? strCell(raw.Email),
+      address: strCell(row.user?.address) ?? strCell(raw.Address),
+      attendancePct: strCell(row.attendancePct) ?? strCell(raw['%Attendance']),
+      voter: strCell(row.voter) ?? strCell(row.user?.voteRole) ?? strCell(raw.Voter),
+      goodStanding: strCell(row.goodStanding) ?? strCell(raw.GoodStanding),
+      financialGoodStanding: strCell(row.financialGoodStanding) ?? strCell(raw['Financial GoodStanding']),
+      monthlyDuesAmount: decimalToNumber(row.user?.monthlyDues) ?? rawMoney(raw, ['Monthly Dues', 'monthlyDues']),
+      totalPaid: decimalToNumber(row.user?.totalPaid) ?? rawMoney(raw, ['Total', '2026 dues paid', '2025 dues paid']),
+      outstanding: decimalToNumber(row.user?.outstanding) ?? rawMoney(raw, ['Balance', '2026 balance', '2025 balance']),
+      monthlyDues: row.monthlyDues.map((due: any) => ({
+        id: due.id,
+        year: due.year,
+        month: due.month,
+        present: due.present ?? null,
+        duesPaid: decimalToNumber(due.duesPaid) ?? 0,
+        createdAt: due.createdAt,
+      })),
+      rawJson: sanitizeRawJson(raw),
+      userId: row.userId,
+      updatedAt: row.updatedAt,
+    };
   });
 
   // Import / re-import workbook CSV (admin)
@@ -347,6 +482,81 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       data: { userId: user.id },
       select: { id: true, userId: true, firstName: true, lastName: true },
     });
+  });
+
+  app.patch('/members/:id', { preHandler: requireRole('ADMIN') }, async (req: any, reply) => {
+    const id = String(req.params?.id ?? '');
+    const Body = z.object({
+      fName: z.string().min(1).optional(),
+      lName: z.string().min(1).optional(),
+      email: z.string().email().optional(),
+      phone: z.string().min(1).optional(),
+      address: z.string().optional(),
+      dateJoined: z.string().nullable().optional(),
+      voteRole: z.string().optional(),
+      monthlyDues: z.number().optional(),
+      totalPaid: z.number().optional(),
+      outstanding: z.number().optional(),
+      status: z.string().optional(),
+    }).parse(req.body ?? {});
+
+    const existing = await prisma.memberRecord.findUnique({
+      where: { id },
+      select: { id: true, userId: true },
+    });
+    if (!existing) return reply.code(404).send({ message: 'Member not found' });
+
+    const parseDate = (value: string | null | undefined) => {
+      if (!value) return null;
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    };
+
+    const updated = await prisma.memberRecord.update({
+      where: { id },
+      data: {
+        ...(Body.fName !== undefined ? { firstName: Body.fName } : {}),
+        ...(Body.lName !== undefined ? { lastName: Body.lName } : {}),
+        ...(Body.email !== undefined ? { email: Body.email.toLowerCase().trim() } : {}),
+        ...(Body.phone !== undefined ? { phone: Body.phone } : {}),
+        ...(Body.status !== undefined ? { status: Body.status } : {}),
+        ...(Body.dateJoined !== undefined ? { joined: Body.dateJoined ?? null } : {}),
+        ...(Body.voteRole !== undefined ? { voter: Body.voteRole } : {}),
+      },
+      select: {
+        id: true,
+        memberKey: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        phone: true,
+        joined: true,
+        status: true,
+        voter: true,
+        userId: true,
+      },
+    });
+
+    if (existing.userId) {
+      await prisma.user.update({
+        where: { id: existing.userId },
+        data: {
+          ...(Body.fName !== undefined ? { fName: Body.fName } : {}),
+          ...(Body.lName !== undefined ? { lName: Body.lName } : {}),
+          ...(Body.email !== undefined ? { email: Body.email.toLowerCase().trim() } : {}),
+          ...(Body.phone !== undefined ? { phone: Body.phone } : {}),
+          ...(Body.address !== undefined ? { address: Body.address } : {}),
+          ...(Body.dateJoined !== undefined ? { dateJoined: parseDate(Body.dateJoined) } : {}),
+          ...(Body.voteRole !== undefined ? { voteRole: Body.voteRole } : {}),
+          ...(Body.monthlyDues !== undefined ? { monthlyDues: Body.monthlyDues as any } : {}),
+          ...(Body.totalPaid !== undefined ? { totalPaid: Body.totalPaid as any } : {}),
+          ...(Body.outstanding !== undefined ? { outstanding: Body.outstanding as any } : {}),
+          ...(Body.status !== undefined ? { status: Body.status } : {}),
+        },
+      });
+    }
+
+    return updated;
   });
 
   // Create a new user (admin)

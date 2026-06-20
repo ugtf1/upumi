@@ -17,7 +17,7 @@ import {
   FiX,
 } from "react-icons/fi";
 
-import { apiPost, clearToken } from "./api";
+import { apiGet, apiPost, clearToken } from "./api";
 import "./admin-page.scss";
 import "./member-page.scss";
 
@@ -41,20 +41,59 @@ type MemberListItem = {
   voteStatus: "Participated" | "Nil";
 };
 
-const MEMBER_LIST: MemberListItem[] = [
-  { id: "member-1", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "Yes", voteStatus: "Participated" },
-  { id: "member-2", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "NO", voteStatus: "Nil" },
-  { id: "member-3", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "No", voteStatus: "Nil" },
-  { id: "member-4", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "Yes", voteStatus: "Participated" },
-  { id: "member-5", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "Yes", voteStatus: "Participated" },
-  { id: "member-6", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "Yes", voteStatus: "Participated" },
-  { id: "member-7", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "Yes", voteStatus: "Participated" },
-  { id: "member-8", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "Yes", voteStatus: "Participated" },
-  { id: "member-9", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "Yes", voteStatus: "Participated" },
-  { id: "member-10", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "Yes", voteStatus: "Participated" },
-  { id: "member-11", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "Yes", voteStatus: "Participated" },
-  { id: "member-12", name: "Agbara Onome", memberId: "2944", email: "Agbaraonome@gmail.com", joined: "12 Jan 2024", phone: "+234 818 481 9383", attendance: "7/12 Months", attendancePercent: 55, voteRole: "Yes", voteStatus: "Participated" },
-];
+type ApiMemberRow = {
+  id: string;
+  displayMemberId?: string | null;
+  memberKey?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+  joined?: string | null;
+  phone?: string | null;
+  voter?: string | null;
+  attendancePct?: string | null;
+};
+
+function formatJoined(value?: string | null) {
+  if (!value) return "-";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function parsePercent(value?: string | null) {
+  const numeric = Number(String(value ?? "").replace(/[^0-9.-]/g, ""));
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.min(100, numeric));
+}
+
+function normalizeVoteRole(value?: string | null): MemberListItem["voteRole"] {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "yes" || normalized === "y" || normalized === "true") return "Yes";
+  if (normalized === "no" || normalized === "n" || normalized === "false") return "NO";
+  return "No";
+}
+
+function mapApiMember(row: ApiMemberRow): MemberListItem {
+  const firstName = row.firstName?.trim() ?? "";
+  const lastName = row.lastName?.trim() ?? "";
+  const name = [firstName, lastName].filter(Boolean).join(" ") || row.email || "Unnamed member";
+  const attendancePercent = parsePercent(row.attendancePct);
+  const voteRole = normalizeVoteRole(row.voter);
+
+  return {
+    id: row.id,
+    name,
+    memberId: row.displayMemberId || row.memberKey || row.id,
+    email: row.email || "-",
+    joined: formatJoined(row.joined),
+    phone: row.phone || "-",
+    attendance: row.attendancePct ? `${row.attendancePct}` : "0%",
+    attendancePercent,
+    voteRole,
+    voteStatus: voteRole === "Yes" ? "Participated" : "Nil",
+  };
+}
 
 type AddMemberForm = {
   phone: string;
@@ -81,6 +120,27 @@ export default function MemberPage() {
   const [addMemberError, setAddMemberError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  const [members, setMembers] = useState<MemberListItem[]>([]);
+  const [membersLoading, setMembersLoading] = useState(true);
+  const [membersError, setMembersError] = useState<string | null>(null);
+
+  async function loadMembers() {
+    setMembersLoading(true);
+    setMembersError(null);
+
+    try {
+      const rows = await apiGet<ApiMemberRow[]>("/admin/members");
+      setMembers(rows.map(mapApiMember));
+    } catch (error) {
+      setMembersError(error instanceof Error ? error.message : "Failed to load members");
+    } finally {
+      setMembersLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadMembers();
+  }, []);
 
   function handleOpenAddMemberModal() {
     setAddMemberForm(INITIAL_ADD_MEMBER_FORM);
@@ -126,6 +186,7 @@ export default function MemberPage() {
       // Reset form and close modal
       setAddMemberForm(INITIAL_ADD_MEMBER_FORM);
       setIsAddMemberModalOpen(false);
+      await loadMembers();
 
       // Show success notification
       setToast("Member added successfully");
@@ -145,9 +206,9 @@ export default function MemberPage() {
 
   const filteredMembers = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return MEMBER_LIST;
+    if (!query) return members;
 
-    return MEMBER_LIST.filter((member) =>
+    return members.filter((member) =>
       [
         member.name,
         member.memberId,
@@ -162,7 +223,7 @@ export default function MemberPage() {
         .toLowerCase()
         .includes(query)
     );
-  }, [search]);
+  }, [members, search]);
 
   function handleLogout() {
     clearToken();
@@ -171,7 +232,7 @@ export default function MemberPage() {
 
   function handleViewMember(member: MemberListItem) {
     setOpenActionMenuId(null);
-    navigate(`/admin/member/${member.memberId}`);
+    navigate(`/admin/member/${member.id}`);
   }
 
   useEffect(() => {
@@ -302,7 +363,11 @@ export default function MemberPage() {
           </div>
 
           <div className="member-page__list" aria-label="Members">
-            {!filteredMembers.length ? (
+            {membersLoading ? (
+              <div className="member-page__empty-state">Loading members...</div>
+            ) : membersError ? (
+              <div className="member-page__empty-state">{membersError}</div>
+            ) : !filteredMembers.length ? (
               <div className="member-page__empty-state">No members match the current search.</div>
             ) : (
               filteredMembers.map((member) => (

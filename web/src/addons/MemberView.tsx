@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { IconType } from "react-icons";
 import {
@@ -17,8 +17,8 @@ import {
   FiUsers,
 } from "react-icons/fi";
 
-import { apiPatch, clearToken } from "./api";
-import { getMemberDetailByMemberId, MEMBER_STATUS_OPTIONS, type MemberStatus, type PaymentHistoryRow } from "./member-data";
+import { apiGet, apiPatch, clearToken } from "./api";
+import { MEMBER_STATUS_OPTIONS, type MemberDetailRecord, type MemberStatus, type PaymentHistoryRow } from "./member-data";
 import "./admin-page.scss";
 import "./member-page.scss";
 import "./member-view-page.scss";
@@ -57,6 +57,50 @@ type EditMemberFormState = {
 };
 
 const VOTE_ROLE_OPTIONS = ["YES", "NO"] as const;
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+type ApiMonthlyDue = {
+  id: string;
+  year: number;
+  month: number;
+  duesPaid: number;
+  createdAt?: string;
+};
+
+type ApiMemberDetail = {
+  id: string;
+  displayMemberId?: string | null;
+  memberKey?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  joined?: string | null;
+  voter?: string | null;
+  attendancePct?: string | null;
+  monthlyDuesAmount?: number | null;
+  totalPaid?: number | null;
+  outstanding?: number | null;
+  status?: string | null;
+  monthlyDues?: ApiMonthlyDue[];
+};
+
+const EMPTY_MEMBER_PROFILE: MemberDetailRecord = {
+  memberId: "",
+  name: "",
+  email: "",
+  phoneNumber: "",
+  address: "",
+  dateJoined: "",
+  attendance: "",
+  voteRole: "NO",
+  monthlyDues: "$0",
+  totalPaid: "$0",
+  outstanding: "$0",
+  status: "Inactive",
+  paymentHistory: [],
+};
 
 function toNumericInputValue(value: string | number | undefined | null): string {
   if (value === undefined || value === null) return "";
@@ -70,12 +114,70 @@ function formatCurrencyDisplay(value: string): string {
   return `$${numeric.toLocaleString()}`;
 }
 
+function formatCurrencyAmount(value?: number | null): string {
+  const numeric = Number(value ?? 0);
+  return `$${numeric.toLocaleString()}`;
+}
+
+function formatDateDisplay(value?: string | null): string {
+  if (!value) return "-";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function normalizeMemberStatus(value?: string | null): MemberStatus {
+  return String(value ?? "").trim().toLowerCase() === "active" ? "Active" : "Inactive";
+}
+
+function normalizeVoteRole(value?: string | null): string {
+  const normalized = String(value ?? "").trim().toUpperCase();
+  return normalized === "YES" ? "YES" : "NO";
+}
+
+function mapPaymentHistory(rows: ApiMonthlyDue[] = []): PaymentHistoryRow[] {
+  return rows.map((row) => {
+    const monthName = MONTH_NAMES[Math.max(1, Math.min(12, row.month)) - 1] ?? String(row.month);
+    const amountPaid = Number(row.duesPaid ?? 0);
+    return {
+      id: row.id,
+      month: `${monthName} ${row.year}`,
+      amountPaid: formatCurrencyAmount(amountPaid),
+      status: amountPaid > 0 ? "Paid" : "Unpaid",
+      paymentDate: row.createdAt ? formatDateDisplay(row.createdAt) : "-",
+    };
+  });
+}
+
+function mapApiMemberDetail(row: ApiMemberDetail): MemberDetailRecord {
+  const firstName = row.firstName?.trim() ?? "";
+  const lastName = row.lastName?.trim() ?? "";
+
+  return {
+    memberId: row.displayMemberId || row.memberKey || row.id,
+    name: [firstName, lastName].filter(Boolean).join(" ") || row.email || "Unnamed member",
+    email: row.email || "-",
+    phoneNumber: row.phone || "-",
+    address: row.address || "",
+    dateJoined: formatDateDisplay(row.joined),
+    attendance: row.attendancePct || "",
+    voteRole: normalizeVoteRole(row.voter),
+    monthlyDues: formatCurrencyAmount(row.monthlyDuesAmount),
+    totalPaid: formatCurrencyAmount(row.totalPaid),
+    outstanding: formatCurrencyAmount(row.outstanding),
+    status: normalizeMemberStatus(row.status),
+    paymentHistory: mapPaymentHistory(row.monthlyDues),
+  };
+}
+
 export default function MemberViewPage() {
   const navigate = useNavigate();
-  const { memberId = "2944" } = useParams();
+  const { memberId = "" } = useParams();
   const [search, setSearch] = useState("");
-  const [memberProfile, setMemberProfile] = useState(() => getMemberDetailByMemberId(memberId));
+  const [memberProfile, setMemberProfile] = useState<MemberDetailRecord>(EMPTY_MEMBER_PROFILE);
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistoryRow[]>([]);
+  const [memberLoading, setMemberLoading] = useState(true);
+  const [memberError, setMemberError] = useState<string | null>(null);
   const [isEditMemberModalOpen, setIsEditMemberModalOpen] = useState(false);
   const [isRecordPaymentModalOpen, setIsRecordPaymentModalOpen] = useState(false);
   const [editMemberForm, setEditMemberForm] = useState<EditMemberFormState>({
@@ -100,12 +202,41 @@ export default function MemberViewPage() {
     paymentDate: "",
   });
 
-  const memberDetail = useMemo(() => getMemberDetailByMemberId(memberId), [memberId]);
-
   useEffect(() => {
-    setMemberProfile(memberDetail);
-    setPaymentHistory(memberDetail.paymentHistory);
-  }, [memberDetail]);
+    let active = true;
+
+    async function loadMemberDetail() {
+      if (!memberId) {
+        setMemberError("Member ID is missing");
+        setMemberLoading(false);
+        return;
+      }
+
+      setMemberLoading(true);
+      setMemberError(null);
+
+      try {
+        const row = await apiGet<ApiMemberDetail>(`/admin/members/${memberId}`);
+        if (!active) return;
+        const profile = mapApiMemberDetail(row);
+        setMemberProfile(profile);
+        setPaymentHistory(profile.paymentHistory);
+      } catch (error) {
+        if (!active) return;
+        setMemberProfile(EMPTY_MEMBER_PROFILE);
+        setPaymentHistory([]);
+        setMemberError(error instanceof Error ? error.message : "Failed to load member");
+      } finally {
+        if (active) setMemberLoading(false);
+      }
+    }
+
+    void loadMemberDetail();
+
+    return () => {
+      active = false;
+    };
+  }, [memberId]);
 
   useEffect(() => {
     if (!isEditMemberModalOpen && !isRecordPaymentModalOpen) return undefined;
@@ -211,12 +342,7 @@ export default function MemberViewPage() {
         throw new Error("Outstanding must be a number");
       }
 
-      // Call API to update the member record.
-      // Uses memberId from the route (e.g. "2944"). If your backend's
-      // /admin/users/:id route expects the Prisma User.id (cuid) rather
-      // than this display memberId, update member-data.ts to carry the
-      // real id through once this page is wired to a live API response.
-      await apiPatch(`/admin/users/${memberId}`, {
+      await apiPatch(`/admin/members/${memberId}`, {
         fName,
         lName,
         email,
@@ -424,6 +550,12 @@ export default function MemberViewPage() {
         </section>
 
         <section className="member-view-page__content">
+          {memberLoading ? (
+            <div className="member-page__empty-state">Loading member details...</div>
+          ) : memberError ? (
+            <div className="member-page__empty-state">{memberError}</div>
+          ) : (
+            <>
           <div className="admin-dashboard__section-copy member-page__section-copy">
             <h2>Member Details</h2>
             <p>Manage all members in your organization</p>
@@ -519,6 +651,8 @@ export default function MemberViewPage() {
               </table>
             </div>
           </div>
+            </>
+          )}
         </section>
       </main>
 
