@@ -80,6 +80,49 @@ function rawMoney(raw: Record<string, any>, keys: string[]): number | null {
   return null;
 }
 
+function mapMemberRecord(row: any) {
+  const raw = parseRawJson(row.rawJson);
+  return {
+    id: row.id,
+    memberKey: row.memberKey,
+    displayMemberId: row.memberKey,
+    status: strCell(row.status) ?? strCell(row.user?.status) ?? 'Active',
+    title: strCell(row.title) ?? strCell(raw.Title),
+    firstName: strCell(row.firstName) ?? strCell(row.user?.fName) ?? strCell(raw.First),
+    lastName: strCell(row.lastName) ?? strCell(row.user?.lName) ?? strCell(raw.Last),
+    joined: strCell(row.joined) ?? strCell(raw.Joined) ?? row.user?.dateJoined ?? null,
+    phone: strCell(row.phone) ?? strCell(row.user?.phone) ?? strCell(raw.Phone),
+    email: strCell(row.email) ?? strCell(row.user?.email) ?? strCell(raw.Email),
+    goodStanding: strCell(row.goodStanding) ?? strCell(raw.GoodStanding),
+    financialGoodStanding: strCell(row.financialGoodStanding) ?? strCell(raw['Financial GoodStanding']),
+    voter: strCell(row.voter) ?? strCell(row.user?.voteRole) ?? strCell(raw.Voter),
+    attendancePct: strCell(row.attendancePct) ?? strCell(raw['%Attendance']),
+    userId: row.userId,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function mapUserAsMember(user: any) {
+  return {
+    id: user.id,
+    memberKey: `user.${user.id}`,
+    displayMemberId: `user.${user.id}`,
+    status: strCell(user.status) ?? 'Active',
+    title: null,
+    firstName: strCell(user.fName),
+    lastName: strCell(user.lName),
+    joined: user.dateJoined ?? user.createdAt ?? null,
+    phone: strCell(user.phone),
+    email: strCell(user.email),
+    goodStanding: null,
+    financialGoodStanding: null,
+    voter: strCell(user.voteRole),
+    attendancePct: null,
+    userId: user.id,
+    updatedAt: user.updatedAt,
+  };
+}
+
 export const adminRoutes: FastifyPluginAsync = async (app) => {
   const prismaAny = prisma as any;
   // List all members (admin)
@@ -118,26 +161,30 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       },
     });
 
-    return rows.map((row: any) => {
-      const raw = parseRawJson(row.rawJson);
-      return {
-        id: row.id,
-        memberKey: row.memberKey,
-        displayMemberId: row.memberKey,
-        status: strCell(row.status) ?? strCell(row.user?.status) ?? 'Active',
-        title: strCell(row.title) ?? strCell(raw.Title),
-        firstName: strCell(row.firstName) ?? strCell(row.user?.fName) ?? strCell(raw.First),
-        lastName: strCell(row.lastName) ?? strCell(row.user?.lName) ?? strCell(raw.Last),
-        joined: strCell(row.joined) ?? strCell(raw.Joined) ?? row.user?.dateJoined ?? null,
-        phone: strCell(row.phone) ?? strCell(row.user?.phone) ?? strCell(raw.Phone),
-        email: strCell(row.email) ?? strCell(row.user?.email) ?? strCell(raw.Email),
-        goodStanding: strCell(row.goodStanding) ?? strCell(raw.GoodStanding),
-        financialGoodStanding: strCell(row.financialGoodStanding) ?? strCell(raw['Financial GoodStanding']),
-        voter: strCell(row.voter) ?? strCell(row.user?.voteRole) ?? strCell(raw.Voter),
-        attendancePct: strCell(row.attendancePct) ?? strCell(raw['%Attendance']),
-        userId: row.userId,
-        updatedAt: row.updatedAt,
-      };
+    const userOnlyRows = await prismaAny.user.findMany({
+      where: {
+        role: 'MEMBER',
+        memberRecord: { is: null },
+      },
+      orderBy: [{ lName: 'asc' }, { fName: 'asc' }],
+      select: {
+        id: true,
+        phone: true,
+        email: true,
+        fName: true,
+        lName: true,
+        dateJoined: true,
+        voteRole: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return [...rows.map(mapMemberRecord), ...userOnlyRows.map(mapUserAsMember)].sort((a, b) => {
+      const aName = `${a.lastName ?? ''} ${a.firstName ?? ''}`.trim();
+      const bName = `${b.lastName ?? ''} ${b.firstName ?? ''}`.trim();
+      return aName.localeCompare(bName);
     });
   });
 
@@ -166,7 +213,40 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       },
     });
 
-    if (!row) return reply.code(404).send({ message: 'Member not found' });
+    if (!row) {
+      const userId = id.startsWith('user.') ? id.slice('user.'.length) : id;
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          phone: true,
+          email: true,
+          fName: true,
+          lName: true,
+          address: true,
+          dateJoined: true,
+          voteRole: true,
+          monthlyDues: true,
+          totalPaid: true,
+          outstanding: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      if (!user) return reply.code(404).send({ message: 'Member not found' });
+
+      return {
+        ...mapUserAsMember(user),
+        address: strCell(user.address),
+        monthlyDuesAmount: decimalToNumber(user.monthlyDues) ?? 0,
+        totalPaid: decimalToNumber(user.totalPaid) ?? 0,
+        outstanding: decimalToNumber(user.outstanding) ?? 0,
+        monthlyDues: [],
+        rawJson: {},
+      };
+    }
 
     const raw = parseRawJson(row.rawJson);
     return {
@@ -504,7 +584,12 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       where: { id },
       select: { id: true, userId: true },
     });
-    if (!existing) return reply.code(404).send({ message: 'Member not found' });
+    const userOnlyId = id.startsWith('user.') ? id.slice('user.'.length) : id;
+    const userOnly = existing ? null : await prisma.user.findUnique({
+      where: { id: userOnlyId },
+      select: { id: true },
+    });
+    if (!existing && !userOnly) return reply.code(404).send({ message: 'Member not found' });
 
     const parseDate = (value: string | null | undefined) => {
       if (!value) return null;
@@ -512,34 +597,36 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       return Number.isNaN(parsed.getTime()) ? null : parsed;
     };
 
-    const updated = await prisma.memberRecord.update({
-      where: { id },
-      data: {
-        ...(Body.fName !== undefined ? { firstName: Body.fName } : {}),
-        ...(Body.lName !== undefined ? { lastName: Body.lName } : {}),
-        ...(Body.email !== undefined ? { email: Body.email.toLowerCase().trim() } : {}),
-        ...(Body.phone !== undefined ? { phone: Body.phone } : {}),
-        ...(Body.status !== undefined ? { status: Body.status } : {}),
-        ...(Body.dateJoined !== undefined ? { joined: Body.dateJoined ?? null } : {}),
-        ...(Body.voteRole !== undefined ? { voter: Body.voteRole } : {}),
-      },
-      select: {
-        id: true,
-        memberKey: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        phone: true,
-        joined: true,
-        status: true,
-        voter: true,
-        userId: true,
-      },
-    });
+    const updated = existing
+      ? await prisma.memberRecord.update({
+          where: { id },
+          data: {
+            ...(Body.fName !== undefined ? { firstName: Body.fName } : {}),
+            ...(Body.lName !== undefined ? { lastName: Body.lName } : {}),
+            ...(Body.email !== undefined ? { email: Body.email.toLowerCase().trim() } : {}),
+            ...(Body.phone !== undefined ? { phone: Body.phone } : {}),
+            ...(Body.status !== undefined ? { status: Body.status } : {}),
+            ...(Body.dateJoined !== undefined ? { joined: Body.dateJoined ?? null } : {}),
+            ...(Body.voteRole !== undefined ? { voter: Body.voteRole } : {}),
+          },
+          select: {
+            id: true,
+            memberKey: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+            joined: true,
+            status: true,
+            voter: true,
+            userId: true,
+          },
+        })
+      : { id: userOnlyId, memberKey: `user.${userOnlyId}`, userId: userOnlyId };
 
-    if (existing.userId) {
+    if (existing?.userId || userOnly) {
       await prisma.user.update({
-        where: { id: existing.userId },
+        where: { id: existing?.userId ?? userOnlyId },
         data: {
           ...(Body.fName !== undefined ? { fName: Body.fName } : {}),
           ...(Body.lName !== undefined ? { lName: Body.lName } : {}),
@@ -604,6 +691,29 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         status: true,
         createdAt: true,
       },
+    });
+
+    await prisma.memberRecord.create({
+      data: {
+        memberKey: `user.${user.id}`,
+        status: 'Member',
+        firstName: user.fName,
+        lastName: user.lName,
+        joined: user.createdAt.toISOString(),
+        phone: user.phone,
+        email: user.email,
+        voter: 'No',
+        rawJson: {
+          Status: 'Member',
+          First: user.fName ?? '',
+          Last: user.lName ?? '',
+          Joined: user.createdAt.toISOString(),
+          Phone: user.phone,
+          Email: user.email ?? '',
+          Voter: 'No',
+        },
+        userId: user.id,
+      } as any,
     });
 
     return user;
