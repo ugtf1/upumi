@@ -25,6 +25,7 @@ export type MemberDetailRecord = {
   email: string;
   phoneNumber: string;
   address: string;
+  dateJoined: string;
   attendance: string;
   voteRole: string;
   monthlyDues: string;
@@ -78,6 +79,7 @@ const DETAIL_OVERRIDES: Record<string, MemberDetailRecord> = {
     email: "Andrew.karl@gmail.com",
     phoneNumber: "09198489383",
     address: "12 Ring Road, Benin City, Edo State",
+    dateJoined: "12 Jan 2024",
     attendance: "March",
     voteRole: "YES",
     monthlyDues: "$20",
@@ -122,6 +124,7 @@ export function getMemberDetailByMemberId(memberId: string): MemberDetailRecord 
       email: "unknown@upumi.org",
       phoneNumber: "-",
       address: "",
+      dateJoined: "-",
       attendance: "March",
       voteRole: "NO",
       monthlyDues: "$20",
@@ -138,6 +141,7 @@ export function getMemberDetailByMemberId(memberId: string): MemberDetailRecord 
     email: member.email,
     phoneNumber: member.phoneNumber,
     address: "",
+    dateJoined: member.joined,
     attendance: deriveAttendanceFromJoined(member.joined),
     voteRole: member.status === "Active" ? "YES" : "NO",
     monthlyDues: "$20",

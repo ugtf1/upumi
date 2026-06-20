@@ -48,11 +48,15 @@ type EditMemberFormState = {
   email: string;
   phone: string;
   address: string;
+  dateJoined: string;
+  voteRole: string;
   monthlyDues: string;
   totalPaid: string;
   outstanding: string;
   status: string;
 };
+
+const VOTE_ROLE_OPTIONS = ["YES", "NO"] as const;
 
 function toNumericInputValue(value: string | number | undefined | null): string {
   if (value === undefined || value === null) return "";
@@ -80,6 +84,8 @@ export default function MemberViewPage() {
     email: "",
     phone: "",
     address: "",
+    dateJoined: "",
+    voteRole: "",
     monthlyDues: "",
     totalPaid: "",
     outstanding: "",
@@ -137,6 +143,8 @@ export default function MemberViewPage() {
       email: memberProfile.email,
       phone: memberProfile.phoneNumber,
       address: memberProfile.address,
+      dateJoined: memberProfile.dateJoined,
+      voteRole: memberProfile.voteRole,
       monthlyDues: toNumericInputValue(memberProfile.monthlyDues),
       totalPaid: toNumericInputValue(memberProfile.totalPaid),
       outstanding: toNumericInputValue(memberProfile.outstanding),
@@ -165,6 +173,8 @@ export default function MemberViewPage() {
       const email = editMemberForm.email.trim();
       const phone = editMemberForm.phone.trim();
       const address = editMemberForm.address.trim();
+      const dateJoined = editMemberForm.dateJoined.trim();
+      const voteRole = editMemberForm.voteRole.trim();
       const status = editMemberForm.status.trim();
 
       // Validation
@@ -179,6 +189,9 @@ export default function MemberViewPage() {
       }
       if (!phone) {
         throw new Error("Phone is required");
+      }
+      if (!voteRole) {
+        throw new Error("Vote role is required");
       }
       if (!status) {
         throw new Error("Status is required");
@@ -209,6 +222,8 @@ export default function MemberViewPage() {
         email,
         phone,
         address,
+        dateJoined: dateJoined || null,
+        voteRole,
         monthlyDues,
         totalPaid,
         outstanding,
@@ -222,6 +237,8 @@ export default function MemberViewPage() {
         email,
         phoneNumber: phone,
         address,
+        dateJoined,
+        voteRole,
         monthlyDues: formatCurrencyDisplay(editMemberForm.monthlyDues),
         totalPaid: formatCurrencyDisplay(editMemberForm.totalPaid),
         outstanding: formatCurrencyDisplay(editMemberForm.outstanding),
@@ -245,6 +262,7 @@ export default function MemberViewPage() {
     editMemberForm.lName.trim() &&
     editMemberForm.email.trim() &&
     editMemberForm.phone.trim() &&
+    editMemberForm.voteRole.trim() &&
     editMemberForm.status.trim() &&
     editMemberForm.monthlyDues.trim() !== "" &&
     editMemberForm.totalPaid.trim() !== "" &&
@@ -585,14 +603,14 @@ export default function MemberViewPage() {
         <div className="admin-dashboard__modal" role="dialog" aria-modal="true" aria-labelledby="member-profile-edit-modal-title">
           <div className="admin-dashboard__modal-backdrop" onClick={handleCloseEditMemberModal} />
 
-          <div className="admin-dashboard__modal-panel member-view-page__modal-panel">
+          <div className="admin-dashboard__modal-panel member-view-page__modal-panel member-view-page__modal-panel--wide">
             {editMemberError && (
               <div className="admin-dashboard__modal-error">
                 {editMemberError}
               </div>
             )}
 
-            <div className="member-view-page__modal-grid">
+            <div className="member-view-page__modal-grid member-view-page__modal-grid--cols-3">
               <div className="admin-dashboard__modal-section">
                 <label htmlFor="member-profile-fname" className="admin-dashboard__modal-label" id="member-profile-edit-modal-title">
                   First Name *
@@ -668,6 +686,44 @@ export default function MemberViewPage() {
                     onChange={(event) => handleEditMemberChange("address", event.target.value)}
                     placeholder="Enter address"
                     aria-label="Address"
+                  />
+                </div>
+              </div>
+
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="member-profile-vote-role" className="admin-dashboard__modal-label">
+                  Vote Role *
+                </label>
+                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input member-view-page__modal-select-wrap">
+                  <select
+                    id="member-profile-vote-role"
+                    value={editMemberForm.voteRole}
+                    onChange={(event) => handleEditMemberChange("voteRole", event.target.value)}
+                    aria-label="Vote role"
+                    className={editMemberForm.voteRole ? "has-value" : ""}
+                  >
+                    <option value="">Select</option>
+                    {VOTE_ROLE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="member-profile-date-joined" className="admin-dashboard__modal-label">
+                  Date Joined
+                </label>
+                <div className="admin-dashboard__modal-input member-view-page__modal-input">
+                  <FiCalendar size={20} />
+                  <input
+                    id="member-profile-date-joined"
+                    value={editMemberForm.dateJoined}
+                    onChange={(event) => handleEditMemberChange("dateJoined", event.target.value)}
+                    placeholder="12 Jan 2024"
+                    aria-label="Date joined"
                   />
                 </div>
               </div>
