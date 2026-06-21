@@ -33,7 +33,7 @@ import {
   YAxis,
 } from "recharts";
 
-import { apiGet, apiPost, clearToken } from "./api";
+import { apiGet, apiPatch, apiPost, clearToken } from "./api";
 import "./admin-page.scss";
 
 type LedgerSummaryResponse = {
@@ -90,9 +90,10 @@ type HostingScheduleRow = {
   hostingGroup: string;
 };
 
-// Shape returned by GET /admin/hosting-schedule, mirroring the Prisma
-// HostingSchedule model (year, month, hostMember).
+// Shape returned by GET /admin/database/hostingSchedule, mirroring the Prisma
+// HostingSchedule model (id, year, month, hostMember).
 type HostingScheduleApiRow = {
+  id: string;
   year: number;
   month: number;
   hostMember: string;
@@ -105,10 +106,10 @@ type HostingMemberOption = {
   name: string;
 };
 
-type AdminUserResponse = {
+type AdminMemberResponse = {
   id: string;
-  fName?: string | null;
-  lName?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
   email?: string | null;
   phone?: string | null;
 };
@@ -132,9 +133,9 @@ function monthLabel(month: number): string {
   return MONTH_OPTIONS.find((option) => option.value === month)?.label ?? String(month);
 }
 
-function memberDisplayName(user: AdminUserResponse): string {
-  const fullName = [user.fName, user.lName].filter(Boolean).join(" ").trim();
-  return fullName || user.email || user.phone || "Unnamed member";
+function memberDisplayName(member: AdminMemberResponse): string {
+  const fullName = [member.firstName, member.lastName].filter(Boolean).join(" ").trim();
+  return fullName || member.email || member.phone || "Unnamed member";
 }
 
 const SUMMARY_CARDS: SummaryCardData[] = [
@@ -216,7 +217,8 @@ export default function AdminPage() {
   const [ledgerSummary, setLedgerSummary] = useState<LedgerSummaryResponse | null>(null);
   const [year, setYear] = useState(2026);
   const [search, setSearch] = useState("");
-  const [scheduleRows, setScheduleRows] = useState(HOSTING_SCHEDULE_ROWS);
+  const [hostingScheduleRows, setHostingScheduleRows] = useState<HostingScheduleApiRow[]>([]);
+  const [hostingScheduleLoaded, setHostingScheduleLoaded] = useState(false);
   const [scheduleSearch, setScheduleSearch] = useState("");
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [scheduleMonth, setScheduleMonth] = useState<number | "">("");
@@ -296,29 +298,21 @@ export default function AdminPage() {
   useEffect(() => {
     let active = true;
 
-    apiGet<HostingScheduleApiRow[]>(`/admin/hosting-schedule?year=${year}`)
+    apiGet<HostingScheduleApiRow[]>("/admin/database/hostingSchedule")
       .then((rows) => {
         if (!active) return;
-        if (!rows.length) {
-          setScheduleRows([]);
-          return;
-        }
-        setScheduleRows(
-          rows
-            .slice()
-            .sort((a, b) => a.month - b.month)
-            .map((row) => ({ month: monthLabel(row.month), hostingGroup: row.hostMember }))
-        );
+        setHostingScheduleRows(rows);
+        setHostingScheduleLoaded(true);
       })
       .catch(() => {
-        // Keep whatever rows are currently shown (e.g. the placeholder rows)
-        // if the hosting schedule endpoint isn't reachable.
+        // Leave hostingScheduleLoaded false; the table falls back to the
+        // placeholder rows below if the endpoint isn't reachable.
       });
 
     return () => {
       active = false;
     };
-  }, [year]);
+  }, []);
 
   useEffect(() => {
     if (!isScheduleModalOpen) return undefined;
@@ -327,10 +321,10 @@ export default function AdminPage() {
     setMembersLoading(true);
     setMembersError(null);
 
-    apiGet<AdminUserResponse[]>("/admin/users")
-      .then((users) => {
+    apiGet<AdminMemberResponse[]>("/admin/members")
+      .then((members) => {
         if (!active) return;
-        setMemberOptions(users.map((user) => ({ id: user.id, name: memberDisplayName(user) })));
+        setMemberOptions(members.map((member) => ({ id: member.id, name: memberDisplayName(member) })));
       })
       .catch((error: Error) => {
         if (!active) return;
@@ -345,6 +339,16 @@ export default function AdminPage() {
       active = false;
     };
   }, [isScheduleModalOpen]);
+
+  const scheduleRows = useMemo(() => {
+    if (!hostingScheduleLoaded) return HOSTING_SCHEDULE_ROWS;
+
+    return hostingScheduleRows
+      .filter((row) => row.year === year)
+      .slice()
+      .sort((a, b) => a.month - b.month)
+      .map((row) => ({ month: monthLabel(row.month), hostingGroup: row.hostMember }));
+  }, [hostingScheduleRows, hostingScheduleLoaded, year]);
 
   const filteredScheduleRows = useMemo(() => {
     const query = scheduleSearch.trim().toLowerCase();
@@ -457,29 +461,32 @@ export default function AdminPage() {
     setScheduleSaving(true);
 
     try {
-      // Matches the HostingSchedule model: { year, month, hostMember }.
-      // year + month are unique together in the schema, so the backend
-      // route for this should upsert on that pair rather than always
-      // inserting a new row.
-      await apiPost("/admin/hosting-schedule", {
-        year: scheduleYear,
-        month: scheduleMonth,
-        hostMember,
-      });
+      // HostingSchedule has @@unique([year, month]) in the schema, and the
+      // generic table route only exposes plain create (POST) + update-by-id
+      // (PATCH /:table/:id) — there's no upsert-by-year-month on the
+      // backend. So we look for an existing row for this year/month
+      // ourselves and PATCH it if found, otherwise POST a new one.
+      const existing = hostingScheduleRows.find(
+        (row) => row.year === scheduleYear && row.month === scheduleMonth
+      );
 
-      const label = monthLabel(scheduleMonth);
+      if (existing) {
+        await apiPatch(`/admin/database/hostingSchedule/${existing.id}`, { hostMember });
+      } else {
+        await apiPost("/admin/database/hostingSchedule", {
+          year: scheduleYear,
+          month: scheduleMonth,
+          hostMember,
+        });
+      }
+
+      // Re-fetch so the table reflects the save immediately.
+      const refreshed = await apiGet<HostingScheduleApiRow[]>("/admin/database/hostingSchedule");
+      setHostingScheduleRows(refreshed);
+      setHostingScheduleLoaded(true);
 
       if (scheduleYear === year) {
-        setScheduleRows((currentRows) => {
-          const existingIndex = currentRows.findIndex((row) => row.month === label);
-          if (existingIndex === -1) {
-            return [...currentRows, { month: label, hostingGroup: hostMember }].sort(
-              (a, b) => MONTH_OPTIONS.findIndex((m) => m.label === a.month) - MONTH_OPTIONS.findIndex((m) => m.label === b.month)
-            );
-          }
-          return currentRows.map((row, index) => (index === existingIndex ? { month: label, hostingGroup: hostMember } : row));
-        });
-        setScheduleSearch(label);
+        setScheduleSearch(monthLabel(scheduleMonth));
       }
 
       setIsScheduleModalOpen(false);
