@@ -4,6 +4,7 @@ import type { IconType } from "react-icons";
 import {
   FiBell,
   FiCalendar,
+  FiCheck,
   FiClock,
   FiCreditCard,
   FiDollarSign,
@@ -32,7 +33,7 @@ import {
   YAxis,
 } from "recharts";
 
-import { apiGet, clearToken } from "./api";
+import { apiGet, apiPost, clearToken } from "./api";
 import "./admin-page.scss";
 
 type LedgerSummaryResponse = {
@@ -89,6 +90,53 @@ type HostingScheduleRow = {
   hostingGroup: string;
 };
 
+// Shape returned by GET /admin/hosting-schedule, mirroring the Prisma
+// HostingSchedule model (year, month, hostMember).
+type HostingScheduleApiRow = {
+  year: number;
+  month: number;
+  hostMember: string;
+};
+
+// Lightweight member option used to populate the "add members" picker,
+// derived from the real User records in the database.
+type HostingMemberOption = {
+  id: string;
+  name: string;
+};
+
+type AdminUserResponse = {
+  id: string;
+  fName?: string | null;
+  lName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+};
+
+const MONTH_OPTIONS: { value: number; label: string }[] = [
+  { value: 1, label: "January" },
+  { value: 2, label: "February" },
+  { value: 3, label: "March" },
+  { value: 4, label: "April" },
+  { value: 5, label: "May" },
+  { value: 6, label: "June" },
+  { value: 7, label: "July" },
+  { value: 8, label: "August" },
+  { value: 9, label: "September" },
+  { value: 10, label: "October" },
+  { value: 11, label: "November" },
+  { value: 12, label: "December" },
+];
+
+function monthLabel(month: number): string {
+  return MONTH_OPTIONS.find((option) => option.value === month)?.label ?? String(month);
+}
+
+function memberDisplayName(user: AdminUserResponse): string {
+  const fullName = [user.fName, user.lName].filter(Boolean).join(" ").trim();
+  return fullName || user.email || user.phone || "Unnamed member";
+}
+
 const SUMMARY_CARDS: SummaryCardData[] = [
   {
     title: "Total Members",
@@ -141,13 +189,6 @@ const HOSTING_SCHEDULE_ROWS: HostingScheduleRow[] = [
   { month: "December", hostingGroup: "Abada Evi, Abada Otuke, Agbara Onome" },
 ];
 
-const DEFAULT_SCHEDULE_MEMBERS = [
-  "Agbara Onome",
-  "Abada Evi",
-  "Abada Otuke",
-  "Atori Victoria",
-];
-
 function formatCurrency(value: number | null | undefined) {
   if (value == null) return "$0";
   const sign = value < 0 ? "-" : "";
@@ -178,8 +219,16 @@ export default function AdminPage() {
   const [scheduleRows, setScheduleRows] = useState(HOSTING_SCHEDULE_ROWS);
   const [scheduleSearch, setScheduleSearch] = useState("");
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
-  const [scheduleMonthInput, setScheduleMonthInput] = useState("");
-  const [scheduleMembers, setScheduleMembers] = useState(DEFAULT_SCHEDULE_MEMBERS);
+  const [scheduleMonth, setScheduleMonth] = useState<number | "">("");
+  const [scheduleYear, setScheduleYear] = useState(year);
+  const [scheduleMemberIds, setScheduleMemberIds] = useState<string[]>([]);
+  const [scheduleMemberSearch, setScheduleMemberSearch] = useState("");
+  const [memberOptions, setMemberOptions] = useState<HostingMemberOption[]>([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [membersError, setMembersError] = useState<string | null>(null);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [activeNav, setActiveNav] = useState("Dashboard");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -244,6 +293,59 @@ export default function AdminPage() {
     };
   }, [isScheduleModalOpen]);
 
+  useEffect(() => {
+    let active = true;
+
+    apiGet<HostingScheduleApiRow[]>(`/admin/hosting-schedule?year=${year}`)
+      .then((rows) => {
+        if (!active) return;
+        if (!rows.length) {
+          setScheduleRows([]);
+          return;
+        }
+        setScheduleRows(
+          rows
+            .slice()
+            .sort((a, b) => a.month - b.month)
+            .map((row) => ({ month: monthLabel(row.month), hostingGroup: row.hostMember }))
+        );
+      })
+      .catch(() => {
+        // Keep whatever rows are currently shown (e.g. the placeholder rows)
+        // if the hosting schedule endpoint isn't reachable.
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [year]);
+
+  useEffect(() => {
+    if (!isScheduleModalOpen) return undefined;
+    let active = true;
+
+    setMembersLoading(true);
+    setMembersError(null);
+
+    apiGet<AdminUserResponse[]>("/admin/users")
+      .then((users) => {
+        if (!active) return;
+        setMemberOptions(users.map((user) => ({ id: user.id, name: memberDisplayName(user) })));
+      })
+      .catch((error: Error) => {
+        if (!active) return;
+        setMembersError(error?.message ?? "Failed to load members");
+      })
+      .finally(() => {
+        if (!active) return;
+        setMembersLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isScheduleModalOpen]);
+
   const filteredScheduleRows = useMemo(() => {
     const query = scheduleSearch.trim().toLowerCase();
     return scheduleRows.filter((row) => {
@@ -252,6 +354,12 @@ export default function AdminPage() {
       return haystack.includes(query);
     });
   }, [scheduleRows, scheduleSearch]);
+
+  const filteredMemberOptions = useMemo(() => {
+    const query = scheduleMemberSearch.trim().toLowerCase();
+    if (!query) return memberOptions;
+    return memberOptions.filter((member) => member.name.toLowerCase().includes(query));
+  }, [memberOptions, scheduleMemberSearch]);
 
   const financialSnapshot = useMemo<FinancialSnapshot>(() => {
     const income = Math.abs(Number(ledgerSummary?.ytd?.income ?? FALLBACK_FINANCIALS.income));
@@ -307,8 +415,11 @@ export default function AdminPage() {
   }
 
   function resetScheduleModalForm() {
-    setScheduleMonthInput("");
-    setScheduleMembers(DEFAULT_SCHEDULE_MEMBERS);
+    setScheduleMonth("");
+    setScheduleYear(year);
+    setScheduleMemberIds([]);
+    setScheduleMemberSearch("");
+    setScheduleError(null);
   }
 
   function handleOpenScheduleModal() {
@@ -320,27 +431,65 @@ export default function AdminPage() {
     setIsScheduleModalOpen(false);
   }
 
-  function handleRemoveScheduleMember(memberName: string) {
-    setScheduleMembers((currentMembers) => currentMembers.filter((member) => member !== memberName));
+  function toggleScheduleMember(memberId: string) {
+    setScheduleMemberIds((current) =>
+      current.includes(memberId) ? current.filter((id) => id !== memberId) : [...current, memberId]
+    );
   }
 
-  function handleSaveSchedule() {
-    const month = scheduleMonthInput.trim();
-    if (!month || !scheduleMembers.length) return;
+  async function handleSaveSchedule() {
+    setScheduleError(null);
 
-    const hostingGroup = scheduleMembers.join(", ");
+    if (!scheduleMonth) {
+      setScheduleError("Select a month");
+      return;
+    }
+    if (!scheduleMemberIds.length) {
+      setScheduleError("Add at least one member");
+      return;
+    }
 
-    setScheduleRows((currentRows) => {
-      const existingIndex = currentRows.findIndex((row) => row.month.toLowerCase() === month.toLowerCase());
-      if (existingIndex === -1) {
-        return [{ month, hostingGroup }, ...currentRows];
+    const hostMember = scheduleMemberIds
+      .map((id) => memberOptions.find((member) => member.id === id)?.name)
+      .filter(Boolean)
+      .join(", ");
+
+    setScheduleSaving(true);
+
+    try {
+      // Matches the HostingSchedule model: { year, month, hostMember }.
+      // year + month are unique together in the schema, so the backend
+      // route for this should upsert on that pair rather than always
+      // inserting a new row.
+      await apiPost("/admin/hosting-schedule", {
+        year: scheduleYear,
+        month: scheduleMonth,
+        hostMember,
+      });
+
+      const label = monthLabel(scheduleMonth);
+
+      if (scheduleYear === year) {
+        setScheduleRows((currentRows) => {
+          const existingIndex = currentRows.findIndex((row) => row.month === label);
+          if (existingIndex === -1) {
+            return [...currentRows, { month: label, hostingGroup: hostMember }].sort(
+              (a, b) => MONTH_OPTIONS.findIndex((m) => m.label === a.month) - MONTH_OPTIONS.findIndex((m) => m.label === b.month)
+            );
+          }
+          return currentRows.map((row, index) => (index === existingIndex ? { month: label, hostingGroup: hostMember } : row));
+        });
+        setScheduleSearch(label);
       }
 
-      return currentRows.map((row, index) => (index === existingIndex ? { month, hostingGroup } : row));
-    });
-
-    setScheduleSearch(month);
-    setIsScheduleModalOpen(false);
+      setIsScheduleModalOpen(false);
+      setToast("Hosting schedule saved successfully");
+      window.setTimeout(() => setToast(null), 3000);
+    } catch (error) {
+      setScheduleError(error instanceof Error ? error.message : "Failed to save hosting schedule");
+    } finally {
+      setScheduleSaving(false);
+    }
   }
 
   const primaryNavigationItems = [
@@ -633,58 +782,156 @@ export default function AdminPage() {
         <div className="admin-dashboard__modal" role="dialog" aria-modal="true" aria-labelledby="schedule-modal-title">
           <div className="admin-dashboard__modal-backdrop" onClick={handleCloseScheduleModal} />
 
-          <div className="admin-dashboard__modal-panel">
-            <div className="admin-dashboard__modal-section">
-              <label htmlFor="schedule-month-input" className="admin-dashboard__modal-label" id="schedule-modal-title">
-                Month
-              </label>
+          <div className="admin-dashboard__modal-panel admin-dashboard__modal-panel--wide">
+            <h2 id="schedule-modal-title" className="admin-dashboard__modal-title">
+              Add Hosting Schedule
+            </h2>
 
-              <div className="admin-dashboard__modal-input admin-dashboard__modal-input--month">
-                <FiCalendar size={22} />
-                <input
-                  id="schedule-month-input"
-                  value={scheduleMonthInput}
-                  onChange={(event) => setScheduleMonthInput(event.target.value)}
-                  placeholder="Enter Month"
-                  aria-label="Enter schedule month"
-                />
+            {scheduleError && <div className="admin-dashboard__modal-error">{scheduleError}</div>}
+            {membersError && <div className="admin-dashboard__modal-error">{membersError}</div>}
+
+            <div className="admin-dashboard__modal-grid admin-dashboard__modal-grid--cols-2">
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="schedule-month-select" className="admin-dashboard__modal-label">
+                  Month *
+                </label>
+
+                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--month admin-dashboard__modal-select-wrap">
+                  <FiCalendar size={22} />
+                  <select
+                    id="schedule-month-select"
+                    value={scheduleMonth}
+                    onChange={(event) => setScheduleMonth(event.target.value ? Number(event.target.value) : "")}
+                    aria-label="Select schedule month"
+                    className={scheduleMonth ? "has-value" : ""}
+                  >
+                    <option value="">Select month</option>
+                    {MONTH_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="schedule-year-select" className="admin-dashboard__modal-label">
+                  Year *
+                </label>
+
+                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--month admin-dashboard__modal-select-wrap">
+                  <FiCalendar size={22} />
+                  <select
+                    id="schedule-year-select"
+                    value={scheduleYear}
+                    onChange={(event) => setScheduleYear(Number(event.target.value))}
+                    aria-label="Select schedule year"
+                    className="has-value"
+                  >
+                    {YEAR_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 
             <div className="admin-dashboard__modal-section">
-              <div className="admin-dashboard__modal-label">Add members</div>
-
-              <div className="admin-dashboard__modal-chip-area">
-                {scheduleMembers.map((member) => (
-                  <div key={member} className="admin-dashboard__modal-chip">
-                    <span>{member}</span>
-                    <button
-                      type="button"
-                      className="admin-dashboard__modal-chip-remove"
-                      onClick={() => handleRemoveScheduleMember(member)}
-                      aria-label={`Remove ${member}`}
-                    >
-                      <FiX size={18} />
-                    </button>
-                  </div>
-                ))}
+              <div className="admin-dashboard__modal-label">
+                Add members {scheduleMonth ? `to ${monthLabel(scheduleMonth)} ${scheduleYear}` : ""}
               </div>
+
+              <label className="admin-dashboard__search admin-dashboard__modal-member-search">
+                <FiSearch size={16} />
+                <input
+                  value={scheduleMemberSearch}
+                  onChange={(event) => setScheduleMemberSearch(event.target.value)}
+                  placeholder="Search members....."
+                  aria-label="Search members to add"
+                />
+              </label>
+
+              <div className="admin-dashboard__modal-member-list">
+                {membersLoading ? (
+                  <div className="admin-dashboard__modal-member-empty">Loading members...</div>
+                ) : !filteredMemberOptions.length ? (
+                  <div className="admin-dashboard__modal-member-empty">No members found.</div>
+                ) : (
+                  filteredMemberOptions.map((member) => {
+                    const isSelected = scheduleMemberIds.includes(member.id);
+                    return (
+                      <button
+                        type="button"
+                        key={member.id}
+                        className={[
+                          "admin-dashboard__modal-member-row",
+                          isSelected ? "is-selected" : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        onClick={() => toggleScheduleMember(member.id)}
+                        aria-pressed={isSelected}
+                      >
+                        <span>{member.name}</span>
+                        {isSelected ? <FiCheck size={16} /> : <FiPlus size={16} />}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+
+              {!!scheduleMemberIds.length && (
+                <div className="admin-dashboard__modal-chip-area">
+                  {scheduleMemberIds.map((id) => {
+                    const member = memberOptions.find((entry) => entry.id === id);
+                    const label = member?.name ?? id;
+                    return (
+                      <div key={id} className="admin-dashboard__modal-chip">
+                        <span>{label}</span>
+                        <button
+                          type="button"
+                          className="admin-dashboard__modal-chip-remove"
+                          onClick={() => toggleScheduleMember(id)}
+                          aria-label={`Remove ${label}`}
+                        >
+                          <FiX size={18} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div className="admin-dashboard__modal-actions">
-              <button type="button" className="admin-dashboard__modal-button admin-dashboard__modal-button--secondary" onClick={handleCloseScheduleModal}>
+              <button
+                type="button"
+                className="admin-dashboard__modal-button admin-dashboard__modal-button--secondary"
+                onClick={handleCloseScheduleModal}
+                disabled={scheduleSaving}
+              >
                 Cancel
               </button>
               <button
                 type="button"
                 className="admin-dashboard__modal-button admin-dashboard__modal-button--primary"
                 onClick={handleSaveSchedule}
-                disabled={!scheduleMonthInput.trim() || !scheduleMembers.length}
+                disabled={!scheduleMonth || !scheduleMemberIds.length || scheduleSaving}
               >
-                Save Changes
+                {scheduleSaving ? "Saving..." : "Save Changes"}
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className="admin-dashboard__toast" role="status" aria-live="polite">
+          <FiCheck size={16} />
+          <span>{toast}</span>
         </div>
       )}
     </div>
