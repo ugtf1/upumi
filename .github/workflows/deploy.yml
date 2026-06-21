@@ -286,7 +286,10 @@ jobs:
       lighthouse_summary: ${{ steps.summary.outputs.lighthouse_summary }}
     steps:
       - name: Install Lighthouse CI + jq
-        run: npm install -g @lhci/cli@0.13.x jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+          npm install -g @lhci/cli@0.13.x
 
       - name: Run Lighthouse (Desktop + Mobile)
         run: |
@@ -302,7 +305,11 @@ jobs:
             --settings.throttlingMethod=provided || true
 
           DESKTOP_REPORT=$(find .lighthouseci -name "lhr-*.json" | sort | tail -n 1)
-          cp "$DESKTOP_REPORT" ./lighthouse-desktop.json
+          if [ -n "$DESKTOP_REPORT" ]; then
+            cp "$DESKTOP_REPORT" ./lighthouse-desktop.json
+          else
+            echo "Desktop Lighthouse audit failed; no report was generated."
+          fi
 
           echo "📱 Mobile..."
           lhci collect \
@@ -312,7 +319,11 @@ jobs:
             --settings.throttlingMethod=simulate || true
 
           MOBILE_REPORT=$(find .lighthouseci -name "lhr-*.json" | sort | tail -n 1)
-          cp "$MOBILE_REPORT" ./lighthouse-mobile.json
+          if [ -n "$MOBILE_REPORT" ]; then
+            cp "$MOBILE_REPORT" ./lighthouse-mobile.json
+          else
+            echo "Mobile Lighthouse audit failed; no report was generated."
+          fi
 
       - name: Extract Lighthouse Scores
         id: summary
