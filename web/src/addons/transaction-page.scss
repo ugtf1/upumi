@@ -4,6 +4,13 @@
   color: var(--admin-brand-dark);
 }
 
+.transaction-page__table-state {
+  padding: 32px 16px !important;
+  text-align: center;
+  color: var(--admin-subtle);
+  font-size: 0.9rem;
+}
+
 .transaction-page__name-wrap {
   position: relative;
   flex-direction: row;

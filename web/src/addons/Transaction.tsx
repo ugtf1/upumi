@@ -42,6 +42,17 @@ type TransactionRow = {
   status: string;
 };
 
+// Shape returned by GET /admin/database/transactions (raw Prisma row).
+type TransactionApiRow = {
+  id: string;
+  userId?: string | null;
+  fullName: string;
+  title: string;
+  amount: string | number;
+  date: string;
+  createdAt?: string;
+};
+
 type UserOption = {
   id: string;
   fullName: string;
@@ -68,17 +79,6 @@ const SUMMARY_CARDS: SummaryCard[] = [
   { title: "Expense", amount: "$240", delta: "+12.5%", tone: "expense" },
 ];
 
-const TRANSACTION_ROWS: TransactionRow[] = [
-  { id: "tx-1", date: "03 Jan 2026", fullName: "Agbara Onome", title: "Raffle", amount: "$303", status: "Completed" },
-  { id: "tx-2", date: "03 Jan 2026", fullName: "Agbara Onome", title: "SSW", amount: "$303", status: "Completed" },
-  { id: "tx-3", date: "03 Jan 2026", fullName: "Agbara Onome", title: "Raffle", amount: "$303", status: "Completed" },
-  { id: "tx-4", date: "03 Jan 2026", fullName: "Agbara Onome", title: "Anamb.", amount: "$303", status: "Completed" },
-  { id: "tx-5", date: "03 Jan 2026", fullName: "Agbara Onome", title: "Raffle", amount: "$303", status: "Completed" },
-  { id: "tx-6", date: "03 Jan 2026", fullName: "Agbara Onome", title: "Raffle", amount: "$303", status: "Completed" },
-  { id: "tx-7", date: "03 Jan 2026", fullName: "Agbara Onome", title: "Raffle", amount: "$303", status: "Completed" },
-  { id: "tx-8", date: "03 Jan 2026", fullName: "Agbara Onome", title: "Raffle", amount: "$303", status: "Completed" },
-];
-
 const YEAR_OPTIONS = [2024, 2025, 2026, 2027];
 const COUNT_OPTIONS = ["0", "1", "2", "3"];
 const STATUS_OPTIONS = ["All Members", "Active", "Pending", "Inactive"];
@@ -88,7 +88,9 @@ export default function TransactionPage() {
 
   const [year, setYear] = useState(2026);
   const [search, setSearch] = useState("");
-  const [transactionRows, setTransactionRows] = useState(TRANSACTION_ROWS);
+  const [transactionRows, setTransactionRows] = useState<TransactionRow[]>([]);
+  const [txLoading, setTxLoading] = useState(true);
+  const [txError, setTxError] = useState<string | null>(null);
   const [sheetUrl, setSheetUrl] = useState("");
   const [memberCount, setMemberCount] = useState("0");
   const [memberStatus, setMemberStatus] = useState("All Members");
@@ -165,6 +167,45 @@ export default function TransactionPage() {
 
     return () => { active = false; };
   }, [isAddTransactionModalOpen]);
+
+  // Fetch all transactions from the database on mount.
+  // The generic table route (adminDatabaseRoutes at /api/admin/database)
+  // returns every row ordered by createdAt desc — we normalise the raw
+  // Prisma shape into the TransactionRow display type here.
+  useEffect(() => {
+    let active = true;
+
+    setTxLoading(true);
+    setTxError(null);
+
+    apiGet<TransactionApiRow[]>("/admin/database/transactions")
+      .then((rows) => {
+        if (!active) return;
+        setTransactionRows(
+          rows.map((row) => ({
+            id: row.id,
+            date: new Date(row.date).toLocaleDateString("en-GB", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            }),
+            fullName: row.fullName,
+            title: row.title,
+            amount: `$${Number(row.amount).toLocaleString()}`,
+            status: "Completed",
+          }))
+        );
+      })
+      .catch((error: Error) => {
+        if (!active) return;
+        setTxError(error?.message ?? "Failed to load transactions");
+      })
+      .finally(() => {
+        if (active) setTxLoading(false);
+      });
+
+    return () => { active = false; };
+  }, []);
 
   const visibleRows = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -517,37 +558,55 @@ export default function TransactionPage() {
           </div>
 
           <div className="transaction-page__section-copy">
-            <h2>Recent Transaction</h2>
-            <p>View Most Recent Transaction</p>
+            <h2>Recent Transactions</h2>
+            <p>{txLoading ? "Loading..." : `${visibleRows.length} transaction${visibleRows.length !== 1 ? "s" : ""}`}</p>
           </div>
 
           <div className="admin-dashboard__table-shell transaction-page__table-shell">
-            <div className="admin-dashboard__table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Full Name</th>
-                    <th>Title</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleRows.map((row) => (
-                    <tr key={row.id}>
-                      <td>{row.date}</td>
-                      <td>{row.fullName}</td>
-                      <td>{row.title}</td>
-                      <td>{row.amount}</td>
-                      <td>
-                        <span className="transaction-page__status">{row.status}</span>
-                      </td>
+            {txError ? (
+              <div className="admin-dashboard__modal-error">{txError}</div>
+            ) : (
+              <div className="admin-dashboard__table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Full Name</th>
+                      <th>Title</th>
+                      <th>Amount</th>
+                      <th>Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {txLoading ? (
+                      <tr>
+                        <td colSpan={5} className="transaction-page__table-state">
+                          Loading transactions...
+                        </td>
+                      </tr>
+                    ) : !visibleRows.length ? (
+                      <tr>
+                        <td colSpan={5} className="transaction-page__table-state">
+                          {search.trim() ? "No transactions match your search." : "No transactions recorded yet."}
+                        </td>
+                      </tr>
+                    ) : (
+                      visibleRows.map((row) => (
+                        <tr key={row.id}>
+                          <td>{row.date}</td>
+                          <td>{row.fullName}</td>
+                          <td>{row.title}</td>
+                          <td>{row.amount}</td>
+                          <td>
+                            <span className="transaction-page__status">{row.status}</span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </section>
       </main>
