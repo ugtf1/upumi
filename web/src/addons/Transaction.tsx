@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { IconType } from "react-icons";
 import {
+  FiCheck,
   FiCreditCard,
   FiDollarSign,
   FiFilter,
@@ -11,11 +12,10 @@ import {
   FiSearch,
   FiSettings,
   FiUsers,
+  FiX,
 } from "react-icons/fi";
 
-// NOTE: this assumes `getToken` exists alongside `clearToken` in your ./api
-// module to retrieve the stored auth token. Adjust if your auth pattern differs.
-import { clearToken, getToken } from "./api";
+import { apiGet, apiPost, clearToken } from "./api";
 import "./admin-page.scss";
 import "./transaction-page.scss";
 
@@ -42,26 +42,24 @@ type TransactionRow = {
   status: string;
 };
 
+type UserOption = {
+  id: string;
+  fullName: string;
+};
+
 type TransactionFormState = {
+  userId: string;
   fullName: string;
   title: string;
   amount: string;
   paymentDate: string;
 };
 
-// Minimal shape of a User as returned by GET /api/users — extend as needed.
-type UserOption = {
-  id: string;
-  fName: string | null;
-  lName: string | null;
-  phone: string;
-};
-
 const TRANSACTION_TITLE_OPTIONS = [
   "Raffle",
   "Insurance",
   "Wrapper",
-  "UPUA 25 raffle",
+  "UPUA 25 Raffle",
   "Levy",
 ];
 
@@ -85,49 +83,6 @@ const YEAR_OPTIONS = [2024, 2025, 2026, 2027];
 const COUNT_OPTIONS = ["0", "1", "2", "3"];
 const STATUS_OPTIONS = ["All Members", "Active", "Pending", "Inactive"];
 
-function formatUserName(user: UserOption) {
-  return [user.fName, user.lName].filter(Boolean).join(" ") || user.phone;
-}
-
-async function searchUsers(query: string): Promise<UserOption[]> {
-  const token = getToken();
-  const response = await fetch(`/api/users?search=${encodeURIComponent(query)}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to load members");
-  }
-
-  const data = await response.json();
-  // Tolerate either `{ users: [...] }` or a bare array response shape.
-  return Array.isArray(data) ? data : data.users ?? [];
-}
-
-async function createTransactionOnServer(payload: {
-  userId: string;
-  fullName: string;
-  title: string;
-  amount: number;
-  date: string;
-}) {
-  const token = getToken();
-  const response = await fetch("/api/transactions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to save transaction");
-  }
-
-  return response.json();
-}
-
 export default function TransactionPage() {
   const navigate = useNavigate();
 
@@ -141,19 +96,20 @@ export default function TransactionPage() {
   const [selectedFileName, setSelectedFileName] = useState("No file chosen");
   const [isAddTransactionModalOpen, setIsAddTransactionModalOpen] = useState(false);
   const [transactionForm, setTransactionForm] = useState<TransactionFormState>({
+    userId: "",
     fullName: "",
     title: "",
     amount: "",
     paymentDate: "",
   });
-
-  // --- Member lookup state for the Full Name combobox ---
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [userOptions, setUserOptions] = useState<UserOption[]>([]);
+  const [userSearch, setUserSearch] = useState("");
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
-  const [isUserSearchLoading, setIsUserSearchLoading] = useState(false);
-  const [isSavingTransaction, setIsSavingTransaction] = useState(false);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [usersError, setUsersError] = useState<string | null>(null);
+  const [saveLoading, setSaveLoading] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAddTransactionModalOpen) return undefined;
@@ -175,31 +131,37 @@ export default function TransactionPage() {
     };
   }, [isAddTransactionModalOpen]);
 
-  // Debounced member search whenever the Full Name field changes while the
-  // modal is open and the dropdown is meant to be visible.
+  // Fetch the real member list when the modal opens so the name dropdown
+  // is always up-to-date with whoever is actually in the database.
   useEffect(() => {
-    if (!isAddTransactionModalOpen || !isUserDropdownOpen) return undefined;
+    if (!isAddTransactionModalOpen) return undefined;
+    let active = true;
 
-    let isActive = true;
-    setIsUserSearchLoading(true);
+    setUsersLoading(true);
+    setUsersError(null);
 
-    const timeoutId = window.setTimeout(async () => {
-      try {
-        const results = await searchUsers(transactionForm.fullName.trim());
-        if (isActive) setUserOptions(results);
-      } catch (error) {
-        console.error(error);
-        if (isActive) setUserOptions([]);
-      } finally {
-        if (isActive) setIsUserSearchLoading(false);
-      }
-    }, 300);
+    apiGet<{ id: string; fName?: string | null; lName?: string | null; email?: string | null; phone?: string | null }[]>(
+      "/admin/members"
+    )
+      .then((users) => {
+        if (!active) return;
+        setUserOptions(
+          users.map((user) => {
+            const name = [user.fName, user.lName].filter(Boolean).join(" ").trim();
+            return { id: user.id, fullName: name || user.email || user.phone || "Unnamed member" };
+          })
+        );
+      })
+      .catch((error: Error) => {
+        if (!active) return;
+        setUsersError(error?.message ?? "Failed to load members");
+      })
+      .finally(() => {
+        if (active) setUsersLoading(false);
+      });
 
-    return () => {
-      isActive = false;
-      window.clearTimeout(timeoutId);
-    };
-  }, [transactionForm.fullName, isAddTransactionModalOpen, isUserDropdownOpen]);
+    return () => { active = false; };
+  }, [isAddTransactionModalOpen]);
 
   const visibleRows = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -210,20 +172,20 @@ export default function TransactionPage() {
     });
   }, [search, transactionRows]);
 
+  const filteredUserOptions = useMemo(() => {
+    const query = userSearch.trim().toLowerCase();
+    if (!query) return userOptions;
+    return userOptions.filter((u) => u.fullName.toLowerCase().includes(query));
+  }, [userOptions, userSearch]);
+
   function handleLogout() {
     clearToken();
     navigate("/login");
   }
 
   function resetTransactionForm() {
-    setTransactionForm({
-      fullName: "",
-      title: "",
-      amount: "",
-      paymentDate: "",
-    });
-    setSelectedUserId(null);
-    setUserOptions([]);
+    setTransactionForm({ userId: "", fullName: "", title: "", amount: "", paymentDate: "" });
+    setUserSearch("");
     setIsUserDropdownOpen(false);
     setSaveError(null);
   }
@@ -241,51 +203,67 @@ export default function TransactionPage() {
     setTransactionForm((currentForm) => ({ ...currentForm, [field]: value }));
   }
 
-  function handleFullNameInputChange(value: string) {
-    handleTransactionFormChange("fullName", value);
-    // Any manual edit invalidates a previous selection until a new one is made.
-    setSelectedUserId(null);
-    setIsUserDropdownOpen(true);
-  }
-
   function handleSelectUser(user: UserOption) {
-    setTransactionForm((currentForm) => ({ ...currentForm, fullName: formatUserName(user) }));
-    setSelectedUserId(user.id);
+    setTransactionForm((currentForm) => ({
+      ...currentForm,
+      userId: user.id,
+      fullName: user.fullName,
+    }));
+    setUserSearch(user.fullName);
     setIsUserDropdownOpen(false);
   }
 
+  function handleFullNameInputChange(value: string) {
+    // Typing in the field opens the dropdown and clears any previously
+    // selected user — they'll need to pick again from the filtered list.
+    setUserSearch(value);
+    setTransactionForm((currentForm) => ({ ...currentForm, userId: "", fullName: value }));
+    setIsUserDropdownOpen(true);
+  }
+
   async function handleSaveTransaction() {
-    const { fullName, title, amount, paymentDate } = transactionForm;
-
-    if (!selectedUserId || !fullName.trim() || !title.trim() || !amount.trim() || !paymentDate.trim()) {
-      return;
-    }
-
-    const numericAmount = Number(amount.replace(/[^0-9.-]/g, ""));
-    if (Number.isNaN(numericAmount)) {
-      setSaveError("Enter a valid amount.");
-      return;
-    }
-
-    setIsSavingTransaction(true);
+    const { userId, fullName, title, amount, paymentDate } = transactionForm;
     setSaveError(null);
 
-    try {
-      const saved = await createTransactionOnServer({
-        userId: selectedUserId,
-        fullName: fullName.trim(),
-        title: title.trim(),
-        amount: numericAmount,
-        date: paymentDate.trim(),
-      });
+    if (!fullName.trim()) { setSaveError("Select a member"); return; }
+    if (!title.trim()) { setSaveError("Select a title"); return; }
+    if (!amount.trim()) { setSaveError("Enter an amount"); return; }
+    if (!paymentDate.trim()) { setSaveError("Enter a payment date"); return; }
 
-      setTransactionRows((currentRows) => [
+    const numericAmount = Number(amount.replace(/[$,]/g, "").trim());
+    if (Number.isNaN(numericAmount)) { setSaveError("Amount must be a number"); return; }
+
+    // Parse the date — the backend date() helper requires a valid ISO/parseable
+    // date string. We pass the ISO form (YYYY-MM-DD) from the <input type="date">.
+    const parsedDate = new Date(paymentDate.trim());
+    if (Number.isNaN(parsedDate.getTime())) { setSaveError("Enter a valid date"); return; }
+
+    setSaveLoading(true);
+
+    try {
+      // POST to /admin/database/transactions — the generic table plugin
+      // (adminDatabaseRoutes) mounted at /api/admin/database handles this.
+      // The TransactionTitleSchema on the backend validates title, and
+      // fullNameForUser fills hostMember automatically when userId is provided.
+      const saved = await apiPost<{ id: string; date: string; fullName: string; title: string; amount: string }>(
+        "/admin/database/transactions",
         {
-          id: saved?.id ?? `tx-${Date.now()}`,
-          date: paymentDate.trim(),
+          ...(userId ? { userId } : {}),
           fullName: fullName.trim(),
           title: title.trim(),
-          amount: amount.trim(),
+          amount: numericAmount,
+          date: parsedDate.toISOString(),
+        }
+      );
+
+      // Reflect the new row immediately in the table without a full refetch.
+      setTransactionRows((currentRows) => [
+        {
+          id: saved.id ?? `tx-${Date.now()}`,
+          date: parsedDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+          fullName: fullName.trim(),
+          title: title.trim(),
+          amount: `$${numericAmount}`,
           status: "Completed",
         },
         ...currentRows,
@@ -293,11 +271,12 @@ export default function TransactionPage() {
 
       setSearch(fullName.trim());
       setIsAddTransactionModalOpen(false);
+      setToast("Transaction added successfully");
+      window.setTimeout(() => setToast(null), 3000);
     } catch (error) {
-      console.error(error);
-      setSaveError("Couldn't save the transaction. Please try again.");
+      setSaveError(error instanceof Error ? error.message : "Failed to save transaction");
     } finally {
-      setIsSavingTransaction(false);
+      setSaveLoading(false);
     }
   }
 
@@ -319,14 +298,6 @@ export default function TransactionPage() {
     },
     { label: "Logout", icon: FiLogOut, action: handleLogout, tone: "danger" },
   ];
-
-  const isSaveDisabled =
-    !selectedUserId ||
-    !transactionForm.fullName.trim() ||
-    !transactionForm.title.trim() ||
-    !transactionForm.amount.trim() ||
-    !transactionForm.paymentDate.trim() ||
-    isSavingTransaction;
 
   return (
     <div className="admin-dashboard transaction-page">
@@ -487,7 +458,28 @@ export default function TransactionPage() {
           </div>
         </section>
 
-        <section className="transaction-page__tools" />
+        <section className="transaction-page__tools">
+          {/* <div className="transaction-page__csv-dropzone">
+            <span>Paste CSV here or choose a file</span>
+          </div> */}
+
+          {/* <div className="transaction-page__tool-actions">
+            <button type="button" className="transaction-page__action-button transaction-page__action-button--gold">
+              Syn Google Sheet
+            </button>
+            <button type="button" className="transaction-page__action-button transaction-page__action-button--gold">
+              <FiRefreshCw size={16} />
+              <span>Refresh</span>
+            </button>
+            <button type="button" className="transaction-page__action-button transaction-page__action-button--gold">
+              Export Spreadsheet CSV
+            </button>
+            <button type="button" className="transaction-page__action-button transaction-page__action-button--gold">
+              <FiFileText size={16} />
+              <span>Print/Save CSV</span>
+            </button>
+          </div> */}
+        </section>
 
         <section className="admin-dashboard__stats transaction-page__summary">
           {SUMMARY_CARDS.map((card) => (
@@ -562,68 +554,79 @@ export default function TransactionPage() {
           <div className="admin-dashboard__modal-backdrop" onClick={handleCloseTransactionModal} />
 
           <div className="admin-dashboard__modal-panel transaction-page__modal-panel">
+            <h2 id="transaction-modal-title" className="admin-dashboard__modal-title">
+              Add Transaction
+            </h2>
+
+            {(saveError || usersError) && (
+              <div className="admin-dashboard__modal-error">{saveError || usersError}</div>
+            )}
+
             <div className="transaction-page__modal-grid">
-              <div className="admin-dashboard__modal-section transaction-page__combobox">
-                <label htmlFor="transaction-full-name" className="admin-dashboard__modal-label" id="transaction-modal-title">
-                  Full Name
+              {/* ── Full Name — member picker ─────────────────────── */}
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="transaction-full-name" className="admin-dashboard__modal-label">
+                  Full Name *
                 </label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain transaction-page__combobox-input">
+                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain transaction-page__name-wrap">
                   <input
                     id="transaction-full-name"
-                    value={transactionForm.fullName}
+                    value={userSearch}
                     onChange={(event) => handleFullNameInputChange(event.target.value)}
                     onFocus={() => setIsUserDropdownOpen(true)}
-                    onBlur={() => window.setTimeout(() => setIsUserDropdownOpen(false), 120)}
-                    placeholder="Search member by name or phone"
-                    aria-label="Full name"
+                    placeholder="Search member..."
                     autoComplete="off"
-                    role="combobox"
+                    aria-label="Full name"
                     aria-expanded={isUserDropdownOpen}
-                    aria-controls="transaction-full-name-listbox"
+                    aria-haspopup="listbox"
                   />
+                  {userSearch && (
+                    <button
+                      type="button"
+                      className="transaction-page__name-clear"
+                      onClick={() => { setUserSearch(""); setTransactionForm((f) => ({ ...f, userId: "", fullName: "" })); setIsUserDropdownOpen(false); }}
+                      aria-label="Clear name"
+                    >
+                      <FiX size={15} />
+                    </button>
+                  )}
 
                   {isUserDropdownOpen && (
-                    <ul
-                      id="transaction-full-name-listbox"
-                      className="transaction-page__combobox-list"
-                      role="listbox"
-                    >
-                      {isUserSearchLoading && (
-                        <li className="transaction-page__combobox-empty">Searching…</li>
-                      )}
-
-                      {!isUserSearchLoading && userOptions.length === 0 && (
-                        <li className="transaction-page__combobox-empty">No members found</li>
-                      )}
-
-                      {!isUserSearchLoading &&
-                        userOptions.map((user) => (
-                          <li key={user.id} role="option" aria-selected={selectedUserId === user.id}>
-                            <button
-                              type="button"
-                              className="transaction-page__combobox-option"
-                              onMouseDown={(event) => event.preventDefault()}
-                              onClick={() => handleSelectUser(user)}
-                            >
-                              <span>{formatUserName(user)}</span>
-                              <span className="transaction-page__combobox-meta">{user.phone}</span>
-                            </button>
+                    <ul className="transaction-page__name-dropdown" role="listbox" aria-label="Select member">
+                      {usersLoading ? (
+                        <li className="transaction-page__name-option transaction-page__name-option--info">
+                          Loading members...
+                        </li>
+                      ) : !filteredUserOptions.length ? (
+                        <li className="transaction-page__name-option transaction-page__name-option--info">
+                          No members found
+                        </li>
+                      ) : (
+                        filteredUserOptions.map((user) => (
+                          <li
+                            key={user.id}
+                            role="option"
+                            aria-selected={transactionForm.userId === user.id}
+                            className={[
+                              "transaction-page__name-option",
+                              transactionForm.userId === user.id ? "is-selected" : "",
+                            ].filter(Boolean).join(" ")}
+                            onMouseDown={(e) => { e.preventDefault(); handleSelectUser(user); }}
+                          >
+                            <span>{user.fullName}</span>
+                            {transactionForm.userId === user.id && <FiCheck size={14} />}
                           </li>
-                        ))}
+                        ))
+                      )}
                     </ul>
                   )}
                 </div>
-
-                {!selectedUserId && transactionForm.fullName.trim() && (
-                  <p className="transaction-page__combobox-hint">
-                    Select a member from the list to link this transaction.
-                  </p>
-                )}
               </div>
 
+              {/* ── Title ─────────────────────────────────────────── */}
               <div className="admin-dashboard__modal-section">
                 <label htmlFor="transaction-title" className="admin-dashboard__modal-label">
-                  Title
+                  Title *
                 </label>
                 <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain transaction-page__modal-select-wrap">
                   <select
@@ -643,44 +646,47 @@ export default function TransactionPage() {
                 </div>
               </div>
 
+              {/* ── Amount ────────────────────────────────────────── */}
               <div className="admin-dashboard__modal-section">
                 <label htmlFor="transaction-amount" className="admin-dashboard__modal-label">
-                  Amount
+                  Amount *
                 </label>
                 <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain">
                   <input
                     id="transaction-amount"
+                    type="number"
+                    inputMode="decimal"
                     value={transactionForm.amount}
                     onChange={(event) => handleTransactionFormChange("amount", event.target.value)}
-                    placeholder="$100"
+                    placeholder="100"
                     aria-label="Transaction amount"
                   />
                 </div>
               </div>
 
+              {/* ── Payment Date ──────────────────────────────────── */}
               <div className="admin-dashboard__modal-section">
                 <label htmlFor="transaction-payment-date" className="admin-dashboard__modal-label">
-                  Payment date
+                  Payment Date *
                 </label>
                 <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain">
                   <input
                     id="transaction-payment-date"
+                    type="date"
                     value={transactionForm.paymentDate}
                     onChange={(event) => handleTransactionFormChange("paymentDate", event.target.value)}
-                    placeholder="08 Jan 2026"
                     aria-label="Payment date"
                   />
                 </div>
               </div>
             </div>
 
-            {saveError && <p className="transaction-page__combobox-hint" role="alert">{saveError}</p>}
-
             <div className="admin-dashboard__modal-actions">
               <button
                 type="button"
                 className="admin-dashboard__modal-button admin-dashboard__modal-button--secondary"
                 onClick={handleCloseTransactionModal}
+                disabled={saveLoading}
               >
                 Cancel
               </button>
@@ -688,12 +694,25 @@ export default function TransactionPage() {
                 type="button"
                 className="admin-dashboard__modal-button admin-dashboard__modal-button--primary"
                 onClick={handleSaveTransaction}
-                disabled={isSaveDisabled}
+                disabled={
+                  !transactionForm.fullName.trim() ||
+                  !transactionForm.title.trim() ||
+                  !transactionForm.amount.trim() ||
+                  !transactionForm.paymentDate.trim() ||
+                  saveLoading
+                }
               >
-                {isSavingTransaction ? "Saving…" : "Save Changes"}
+                {saveLoading ? "Saving..." : "Save Transaction"}
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className="admin-dashboard__toast" role="status" aria-live="polite">
+          <FiCheck size={16} />
+          <span>{toast}</span>
         </div>
       )}
     </div>

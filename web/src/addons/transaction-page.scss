@@ -4,6 +4,68 @@
   color: var(--admin-brand-dark);
 }
 
+.transaction-page__name-wrap {
+  position: relative;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.transaction-page__name-clear {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  color: var(--admin-subtle);
+  cursor: pointer;
+  padding: 0;
+}
+
+.transaction-page__name-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 200;
+  margin: 0;
+  padding: 6px 0;
+  list-style: none;
+  background: #fff;
+  border: 1px solid rgba(20, 57, 40, 0.12);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(18, 38, 28, 0.12);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.transaction-page__name-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  color: var(--admin-text);
+
+  &:hover {
+    background: #f4faf6;
+  }
+
+  &.is-selected {
+    color: var(--admin-brand-dark);
+    font-weight: 600;
+  }
+
+  &--info {
+    color: var(--admin-subtle);
+    cursor: default;
+    font-style: italic;
+
+    &:hover { background: transparent; }
+  }
+}
+
 .transaction-page__profile-avatar {
   overflow: hidden;
   background: #d7e9dd;
