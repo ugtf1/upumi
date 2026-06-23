@@ -140,15 +140,18 @@ export default function TransactionPage() {
     setUsersLoading(true);
     setUsersError(null);
 
-    apiGet<{ id: string; fName?: string | null; lName?: string | null; email?: string | null; phone?: string | null }[]>(
+    apiGet<{ id: string; firstName?: string | null; lastName?: string | null; email?: string | null; phone?: string | null; userId?: string | null; user?: { id: string } | null }[]>(
       "/admin/members"
     )
       .then((users) => {
         if (!active) return;
         setUserOptions(
           users.map((user) => {
-            const name = [user.fName, user.lName].filter(Boolean).join(" ").trim();
-            return { id: user.id, fullName: name || user.email || user.phone || "Unnamed member" };
+            const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+            // Use user.user.id (the linked User row) for the FK, not the
+            // memberRecord's own id. Fall back to userId field if present.
+            const linkedUserId = user.user?.id ?? user.userId ?? user.id;
+            return { id: linkedUserId, fullName: name || user.email || user.phone || "Unnamed member" };
           })
         );
       })
