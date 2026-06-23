@@ -13,7 +13,9 @@ import {
   FiUsers,
 } from "react-icons/fi";
 
-import { clearToken } from "./api";
+// NOTE: this assumes `getToken` exists alongside `clearToken` in your ./api
+// module to retrieve the stored auth token. Adjust if your auth pattern differs.
+import { clearToken, getToken } from "./api";
 import "./admin-page.scss";
 import "./transaction-page.scss";
 
@@ -47,6 +49,14 @@ type TransactionFormState = {
   paymentDate: string;
 };
 
+// Minimal shape of a User as returned by GET /api/users — extend as needed.
+type UserOption = {
+  id: string;
+  fName: string | null;
+  lName: string | null;
+  phone: string;
+};
+
 const TRANSACTION_TITLE_OPTIONS = [
   "Raffle",
   "Insurance",
@@ -75,6 +85,49 @@ const YEAR_OPTIONS = [2024, 2025, 2026, 2027];
 const COUNT_OPTIONS = ["0", "1", "2", "3"];
 const STATUS_OPTIONS = ["All Members", "Active", "Pending", "Inactive"];
 
+function formatUserName(user: UserOption) {
+  return [user.fName, user.lName].filter(Boolean).join(" ") || user.phone;
+}
+
+async function searchUsers(query: string): Promise<UserOption[]> {
+  const token = getToken();
+  const response = await fetch(`/api/users?search=${encodeURIComponent(query)}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to load members");
+  }
+
+  const data = await response.json();
+  // Tolerate either `{ users: [...] }` or a bare array response shape.
+  return Array.isArray(data) ? data : data.users ?? [];
+}
+
+async function createTransactionOnServer(payload: {
+  userId: string;
+  fullName: string;
+  title: string;
+  amount: number;
+  date: string;
+}) {
+  const token = getToken();
+  const response = await fetch("/api/transactions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to save transaction");
+  }
+
+  return response.json();
+}
+
 export default function TransactionPage() {
   const navigate = useNavigate();
 
@@ -93,6 +146,14 @@ export default function TransactionPage() {
     amount: "",
     paymentDate: "",
   });
+
+  // --- Member lookup state for the Full Name combobox ---
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [userOptions, setUserOptions] = useState<UserOption[]>([]);
+  const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
+  const [isUserSearchLoading, setIsUserSearchLoading] = useState(false);
+  const [isSavingTransaction, setIsSavingTransaction] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAddTransactionModalOpen) return undefined;
@@ -113,6 +174,32 @@ export default function TransactionPage() {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [isAddTransactionModalOpen]);
+
+  // Debounced member search whenever the Full Name field changes while the
+  // modal is open and the dropdown is meant to be visible.
+  useEffect(() => {
+    if (!isAddTransactionModalOpen || !isUserDropdownOpen) return undefined;
+
+    let isActive = true;
+    setIsUserSearchLoading(true);
+
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const results = await searchUsers(transactionForm.fullName.trim());
+        if (isActive) setUserOptions(results);
+      } catch (error) {
+        console.error(error);
+        if (isActive) setUserOptions([]);
+      } finally {
+        if (isActive) setIsUserSearchLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      isActive = false;
+      window.clearTimeout(timeoutId);
+    };
+  }, [transactionForm.fullName, isAddTransactionModalOpen, isUserDropdownOpen]);
 
   const visibleRows = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -135,6 +222,10 @@ export default function TransactionPage() {
       amount: "",
       paymentDate: "",
     });
+    setSelectedUserId(null);
+    setUserOptions([]);
+    setIsUserDropdownOpen(false);
+    setSaveError(null);
   }
 
   function handleOpenTransactionModal() {
@@ -150,24 +241,64 @@ export default function TransactionPage() {
     setTransactionForm((currentForm) => ({ ...currentForm, [field]: value }));
   }
 
-  function handleSaveTransaction() {
-    const { fullName, title, amount, paymentDate } = transactionForm;
-    if (!fullName.trim() || !title.trim() || !amount.trim() || !paymentDate.trim()) return;
+  function handleFullNameInputChange(value: string) {
+    handleTransactionFormChange("fullName", value);
+    // Any manual edit invalidates a previous selection until a new one is made.
+    setSelectedUserId(null);
+    setIsUserDropdownOpen(true);
+  }
 
-    setTransactionRows((currentRows) => [
-      {
-        id: `tx-${Date.now()}`,
-        date: paymentDate.trim(),
+  function handleSelectUser(user: UserOption) {
+    setTransactionForm((currentForm) => ({ ...currentForm, fullName: formatUserName(user) }));
+    setSelectedUserId(user.id);
+    setIsUserDropdownOpen(false);
+  }
+
+  async function handleSaveTransaction() {
+    const { fullName, title, amount, paymentDate } = transactionForm;
+
+    if (!selectedUserId || !fullName.trim() || !title.trim() || !amount.trim() || !paymentDate.trim()) {
+      return;
+    }
+
+    const numericAmount = Number(amount.replace(/[^0-9.-]/g, ""));
+    if (Number.isNaN(numericAmount)) {
+      setSaveError("Enter a valid amount.");
+      return;
+    }
+
+    setIsSavingTransaction(true);
+    setSaveError(null);
+
+    try {
+      const saved = await createTransactionOnServer({
+        userId: selectedUserId,
         fullName: fullName.trim(),
         title: title.trim(),
-        amount: amount.trim(),
-        status: "Completed",
-      },
-      ...currentRows,
-    ]);
+        amount: numericAmount,
+        date: paymentDate.trim(),
+      });
 
-    setSearch(fullName.trim());
-    setIsAddTransactionModalOpen(false);
+      setTransactionRows((currentRows) => [
+        {
+          id: saved?.id ?? `tx-${Date.now()}`,
+          date: paymentDate.trim(),
+          fullName: fullName.trim(),
+          title: title.trim(),
+          amount: amount.trim(),
+          status: "Completed",
+        },
+        ...currentRows,
+      ]);
+
+      setSearch(fullName.trim());
+      setIsAddTransactionModalOpen(false);
+    } catch (error) {
+      console.error(error);
+      setSaveError("Couldn't save the transaction. Please try again.");
+    } finally {
+      setIsSavingTransaction(false);
+    }
   }
 
   const primaryNavigationItems: NavigationItem[] = [
@@ -188,6 +319,14 @@ export default function TransactionPage() {
     },
     { label: "Logout", icon: FiLogOut, action: handleLogout, tone: "danger" },
   ];
+
+  const isSaveDisabled =
+    !selectedUserId ||
+    !transactionForm.fullName.trim() ||
+    !transactionForm.title.trim() ||
+    !transactionForm.amount.trim() ||
+    !transactionForm.paymentDate.trim() ||
+    isSavingTransaction;
 
   return (
     <div className="admin-dashboard transaction-page">
@@ -348,28 +487,7 @@ export default function TransactionPage() {
           </div>
         </section>
 
-        <section className="transaction-page__tools">
-          {/* <div className="transaction-page__csv-dropzone">
-            <span>Paste CSV here or choose a file</span>
-          </div> */}
-
-          {/* <div className="transaction-page__tool-actions">
-            <button type="button" className="transaction-page__action-button transaction-page__action-button--gold">
-              Syn Google Sheet
-            </button>
-            <button type="button" className="transaction-page__action-button transaction-page__action-button--gold">
-              <FiRefreshCw size={16} />
-              <span>Refresh</span>
-            </button>
-            <button type="button" className="transaction-page__action-button transaction-page__action-button--gold">
-              Export Spreadsheet CSV
-            </button>
-            <button type="button" className="transaction-page__action-button transaction-page__action-button--gold">
-              <FiFileText size={16} />
-              <span>Print/Save CSV</span>
-            </button>
-          </div> */}
-        </section>
+        <section className="transaction-page__tools" />
 
         <section className="admin-dashboard__stats transaction-page__summary">
           {SUMMARY_CARDS.map((card) => (
@@ -445,19 +563,62 @@ export default function TransactionPage() {
 
           <div className="admin-dashboard__modal-panel transaction-page__modal-panel">
             <div className="transaction-page__modal-grid">
-              <div className="admin-dashboard__modal-section">
+              <div className="admin-dashboard__modal-section transaction-page__combobox">
                 <label htmlFor="transaction-full-name" className="admin-dashboard__modal-label" id="transaction-modal-title">
                   Full Name
                 </label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain">
+                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain transaction-page__combobox-input">
                   <input
                     id="transaction-full-name"
                     value={transactionForm.fullName}
-                    onChange={(event) => handleTransactionFormChange("fullName", event.target.value)}
-                    placeholder="Mrs. Abada Evi"
+                    onChange={(event) => handleFullNameInputChange(event.target.value)}
+                    onFocus={() => setIsUserDropdownOpen(true)}
+                    onBlur={() => window.setTimeout(() => setIsUserDropdownOpen(false), 120)}
+                    placeholder="Search member by name or phone"
                     aria-label="Full name"
+                    autoComplete="off"
+                    role="combobox"
+                    aria-expanded={isUserDropdownOpen}
+                    aria-controls="transaction-full-name-listbox"
                   />
+
+                  {isUserDropdownOpen && (
+                    <ul
+                      id="transaction-full-name-listbox"
+                      className="transaction-page__combobox-list"
+                      role="listbox"
+                    >
+                      {isUserSearchLoading && (
+                        <li className="transaction-page__combobox-empty">Searching…</li>
+                      )}
+
+                      {!isUserSearchLoading && userOptions.length === 0 && (
+                        <li className="transaction-page__combobox-empty">No members found</li>
+                      )}
+
+                      {!isUserSearchLoading &&
+                        userOptions.map((user) => (
+                          <li key={user.id} role="option" aria-selected={selectedUserId === user.id}>
+                            <button
+                              type="button"
+                              className="transaction-page__combobox-option"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => handleSelectUser(user)}
+                            >
+                              <span>{formatUserName(user)}</span>
+                              <span className="transaction-page__combobox-meta">{user.phone}</span>
+                            </button>
+                          </li>
+                        ))}
+                    </ul>
+                  )}
                 </div>
+
+                {!selectedUserId && transactionForm.fullName.trim() && (
+                  <p className="transaction-page__combobox-hint">
+                    Select a member from the list to link this transaction.
+                  </p>
+                )}
               </div>
 
               <div className="admin-dashboard__modal-section">
@@ -513,6 +674,8 @@ export default function TransactionPage() {
               </div>
             </div>
 
+            {saveError && <p className="transaction-page__combobox-hint" role="alert">{saveError}</p>}
+
             <div className="admin-dashboard__modal-actions">
               <button
                 type="button"
@@ -525,14 +688,9 @@ export default function TransactionPage() {
                 type="button"
                 className="admin-dashboard__modal-button admin-dashboard__modal-button--primary"
                 onClick={handleSaveTransaction}
-                disabled={
-                  !transactionForm.fullName.trim() ||
-                  !transactionForm.title.trim() ||
-                  !transactionForm.amount.trim() ||
-                  !transactionForm.paymentDate.trim()
-                }
+                disabled={isSaveDisabled}
               >
-                Save Changes
+                {isSavingTransaction ? "Saving…" : "Save Changes"}
               </button>
             </div>
           </div>
