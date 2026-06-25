@@ -692,9 +692,42 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         memberRecordId = created.id;
       }
     } else {
-      const existing = await prisma.memberRecord.findUnique({ where: { id } });
-      if (!existing) return reply.code(404).send({ message: 'Member not found' });
-      memberRecordId = existing.id;
+      // Try as a MemberRecord.id first.
+      const existingRecord = await prisma.memberRecord.findUnique({ where: { id } });
+      if (existingRecord) {
+        memberRecordId = existingRecord.id;
+      } else {
+        // The id might be a plain User.id — this happens for members surfaced
+        // via mapUserAsMember in GET /members (they have no MemberRecord row
+        // and their URL id is the User cuid without a 'user.' prefix).
+        const user = await prisma.user.findUnique({
+          where: { id },
+          select: { id: true, fName: true, lName: true, phone: true, email: true, createdAt: true },
+        });
+        if (!user) return reply.code(404).send({ message: 'Member not found' });
+
+        // Find an existing MemberRecord linked to this user, or create one
+        // so MonthlyDue has a row to foreign-key against.
+        const linkedRecord = await prisma.memberRecord.findFirst({ where: { userId: user.id } });
+        if (linkedRecord) {
+          memberRecordId = linkedRecord.id;
+        } else {
+          const created = await prisma.memberRecord.create({
+            data: {
+              memberKey: `user.${user.id}`,
+              status: 'Member',
+              firstName: user.fName ?? null,
+              lastName: user.lName ?? null,
+              joined: user.createdAt.toISOString(),
+              phone: user.phone ?? null,
+              email: user.email ?? null,
+              userId: user.id,
+              rawJson: {},
+            } as any,
+          });
+          memberRecordId = created.id;
+        }
+      }
     }
 
     const due = await (prisma as any).monthlyDue.upsert({
