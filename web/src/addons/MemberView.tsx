@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { IconType } from "react-icons";
 import {
@@ -17,7 +17,7 @@ import {
   FiUsers,
 } from "react-icons/fi";
 
-import { apiGet, apiPatch, clearToken } from "./api";
+import { apiGet, apiPatch, apiPost, clearToken } from "./api";
 import { MEMBER_STATUS_OPTIONS, type MemberDetailRecord, type MemberStatus, type PaymentHistoryRow } from "./member-data";
 import "./admin-page.scss";
 import "./member-page.scss";
@@ -37,10 +37,9 @@ type SummaryCard = {
 };
 
 type RecordPaymentFormState = {
-  month: number | "";
-  year: number;
-  amountPaid: string;
-  paymentDate: string;
+  year: string;
+  month: string;
+  duesPaid: string;
 };
 
 type EditMemberFormState = {
@@ -58,15 +57,47 @@ type EditMemberFormState = {
 };
 
 const VOTE_ROLE_OPTIONS = ["YES", "NO"] as const;
-const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-const MONTH_OPTIONS = MONTH_NAMES.map((label, index) => ({ value: index + 1, label }));
-const YEAR_OPTIONS = [2024, 2025, 2026, 2027];
+const MONTH_OPTIONS = [
+  { value: 1, label: "January" }, { value: 2, label: "February" },
+  { value: 3, label: "March" }, { value: 4, label: "April" },
+  { value: 5, label: "May" }, { value: 6, label: "June" },
+  { value: 7, label: "July" }, { value: 8, label: "August" },
+  { value: 9, label: "September" }, { value: 10, label: "October" },
+  { value: 11, label: "November" }, { value: 12, label: "December" },
+];
+const CURRENT_YEAR = new Date().getFullYear();
+const YEAR_OPTIONS = [CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1];
+const MONTH_NAMES = MONTH_OPTIONS.map((m) => m.label);
+
+function toNumericInputValue(value: string | number | undefined | null): string {
+  if (value === undefined || value === null) return "";
+  const numeric = Number(String(value).replace(/[^0-9.-]/g, ""));
+  return Number.isNaN(numeric) ? "" : String(numeric);
+}
+
+function formatCurrencyDisplay(value: string): string {
+  const numeric = Number(value);
+  if (Number.isNaN(numeric)) return value;
+  return `$${numeric.toLocaleString()}`;
+}
+
+function formatCurrencyAmount(value?: number | null): string {
+  return `$${Number(value ?? 0).toLocaleString()}`;
+}
+
+function formatDateDisplay(value?: string | null): string {
+  if (!value) return "-";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
+}
 
 type ApiMonthlyDue = {
   id: string;
   year: number;
   month: number;
   duesPaid: number;
+  present?: boolean | null;
   createdAt?: string;
 };
 
@@ -89,158 +120,101 @@ type ApiMemberDetail = {
   monthlyDues?: ApiMonthlyDue[];
 };
 
-const EMPTY_MEMBER_PROFILE: MemberDetailRecord = {
-  memberId: "",
-  name: "",
-  email: "",
-  phoneNumber: "",
-  address: "",
-  dateJoined: "",
-  attendance: "",
-  voteRole: "NO",
-  monthlyDues: "$0",
-  totalPaid: "$0",
-  outstanding: "$0",
-  status: "Inactive",
-  paymentHistory: [],
-};
-
-function toNumericInputValue(value: string | number | undefined | null): string {
-  if (value === undefined || value === null) return "";
-  const numeric = Number(String(value).replace(/[^0-9.-]/g, ""));
-  return Number.isNaN(numeric) ? "" : String(numeric);
-}
-
-function formatCurrencyDisplay(value: string): string {
-  const numeric = Number(value);
-  if (Number.isNaN(numeric)) return value;
-  return `$${numeric.toLocaleString()}`;
-}
-
-function formatCurrencyAmount(value?: number | null): string {
-  const numeric = Number(value ?? 0);
-  return `$${numeric.toLocaleString()}`;
-}
-
-function formatDateDisplay(value?: string | null): string {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
-}
-
-function normalizeMemberStatus(value?: string | null): MemberStatus {
-  return String(value ?? "").trim().toLowerCase() === "active" ? "Active" : "Inactive";
-}
-
-function normalizeVoteRole(value?: string | null): string {
-  const normalized = String(value ?? "").trim().toUpperCase();
-  return normalized === "YES" ? "YES" : "NO";
-}
-
 function mapPaymentHistory(rows: ApiMonthlyDue[] = []): PaymentHistoryRow[] {
   return rows
     .slice()
-    .sort((a, b) => (b.year - a.year) || (b.month - a.month))
+    .sort((a, b) => b.year !== a.year ? b.year - a.year : b.month - a.month)
     .map((row) => {
-    const monthName = MONTH_NAMES[Math.max(1, Math.min(12, row.month)) - 1] ?? String(row.month);
-    const amountPaid = Number(row.duesPaid ?? 0);
-    return {
-      id: row.id,
-      month: `${monthName} ${row.year}`,
-      amountPaid: formatCurrencyAmount(amountPaid),
-      status: amountPaid > 0 ? "Paid" : "Unpaid",
-      paymentDate: row.createdAt ? formatDateDisplay(row.createdAt) : "-",
-    };
-  });
+      const monthName = MONTH_NAMES[Math.max(1, Math.min(12, row.month)) - 1] ?? String(row.month);
+      const amount = Number(row.duesPaid ?? 0);
+      return {
+        id: row.id,
+        month: `${monthName} ${row.year}`,
+        amountPaid: formatCurrencyAmount(amount),
+        status: amount > 0 ? "Paid" : "Unpaid",
+        paymentDate: row.createdAt ? formatDateDisplay(row.createdAt) : "-",
+      };
+    });
 }
 
-function mapApiMemberDetail(row: ApiMemberDetail): MemberDetailRecord {
-  const firstName = row.firstName?.trim() ?? "";
-  const lastName = row.lastName?.trim() ?? "";
-
-  return {
-    memberId: row.displayMemberId || row.memberKey || row.id,
-    name: [firstName, lastName].filter(Boolean).join(" ") || row.email || "Unnamed member",
-    email: row.email || "-",
-    phoneNumber: row.phone || "-",
-    address: row.address || "",
-    dateJoined: formatDateDisplay(row.joined),
-    attendance: row.attendancePct || "",
-    voteRole: normalizeVoteRole(row.voter),
-    monthlyDues: formatCurrencyAmount(row.monthlyDuesAmount),
-    totalPaid: formatCurrencyAmount(row.totalPaid),
-    outstanding: formatCurrencyAmount(row.outstanding),
-    status: normalizeMemberStatus(row.status),
-    paymentHistory: mapPaymentHistory(row.monthlyDues),
-  };
-}
+const EMPTY_PROFILE: MemberDetailRecord = {
+  memberId: "", name: "", email: "", phoneNumber: "", address: "",
+  dateJoined: "", attendance: "", voteRole: "NO",
+  monthlyDues: "$0", totalPaid: "$0", outstanding: "$0",
+  status: "Inactive", paymentHistory: [],
+};
 
 export default function MemberViewPage() {
   const navigate = useNavigate();
   const { memberId = "" } = useParams();
   const [search, setSearch] = useState("");
-  const [memberProfile, setMemberProfile] = useState<MemberDetailRecord>(EMPTY_MEMBER_PROFILE);
+  const [memberProfile, setMemberProfile] = useState<MemberDetailRecord>(EMPTY_PROFILE);
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistoryRow[]>([]);
-  const [monthlyDueRecords, setMonthlyDueRecords] = useState<ApiMonthlyDue[]>([]);
   const [memberLoading, setMemberLoading] = useState(true);
   const [memberError, setMemberError] = useState<string | null>(null);
   const [isEditMemberModalOpen, setIsEditMemberModalOpen] = useState(false);
   const [isRecordPaymentModalOpen, setIsRecordPaymentModalOpen] = useState(false);
   const [editMemberForm, setEditMemberForm] = useState<EditMemberFormState>({
-    fName: "",
-    lName: "",
-    email: "",
-    phone: "",
-    address: "",
-    dateJoined: "",
-    voteRole: "",
-    monthlyDues: "",
-    totalPaid: "",
-    outstanding: "",
-    status: "Active",
+    fName: "", lName: "", email: "", phone: "", address: "",
+    dateJoined: "", voteRole: "", monthlyDues: "", totalPaid: "",
+    outstanding: "", status: "Active",
   });
   const [editMemberLoading, setEditMemberLoading] = useState(false);
   const [editMemberError, setEditMemberError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [recordPaymentForm, setRecordPaymentForm] = useState<RecordPaymentFormState>({
+    year: String(CURRENT_YEAR),
     month: "",
-    year: 2026,
-    amountPaid: "",
-    paymentDate: "",
+    duesPaid: "",
   });
   const [recordPaymentLoading, setRecordPaymentLoading] = useState(false);
   const [recordPaymentError, setRecordPaymentError] = useState<string | null>(null);
 
-  const loadMemberDetail = useCallback(async () => {
+  // Fetch member detail + payment history from the database on mount.
+  useEffect(() => {
+    let active = true;
     if (!memberId) {
       setMemberError("Member ID is missing");
       setMemberLoading(false);
-      return;
+      return undefined;
     }
 
     setMemberLoading(true);
     setMemberError(null);
 
-    try {
-      const row = await apiGet<ApiMemberDetail>(`/admin/members/${memberId}`);
-      const profile = mapApiMemberDetail(row);
-      setMemberProfile(profile);
-      setPaymentHistory(profile.paymentHistory);
-      setMonthlyDueRecords(row.monthlyDues ?? []);
-    } catch (error) {
-      setMemberProfile(EMPTY_MEMBER_PROFILE);
-      setPaymentHistory([]);
-      setMonthlyDueRecords([]);
-      setMemberError(error instanceof Error ? error.message : "Failed to load member");
-    } finally {
-      setMemberLoading(false);
-    }
-  }, [memberId]);
+    apiGet<ApiMemberDetail>(`/admin/members/${memberId}`)
+      .then((row) => {
+        if (!active) return;
+        const firstName = row.firstName?.trim() ?? "";
+        const lastName = row.lastName?.trim() ?? "";
+        const profile: MemberDetailRecord = {
+          memberId: row.displayMemberId || row.memberKey || row.id,
+          name: [firstName, lastName].filter(Boolean).join(" ") || row.email || "Unnamed member",
+          email: row.email || "-",
+          phoneNumber: row.phone || "-",
+          address: row.address || "",
+          dateJoined: formatDateDisplay(row.joined),
+          attendance: row.attendancePct || "",
+          voteRole: String(row.voter ?? "").trim().toUpperCase() === "YES" ? "YES" : "NO",
+          monthlyDues: formatCurrencyAmount(row.monthlyDuesAmount),
+          totalPaid: formatCurrencyAmount(row.totalPaid),
+          outstanding: formatCurrencyAmount(row.outstanding),
+          status: String(row.status ?? "").trim().toLowerCase() === "active" ? "Active" : "Inactive",
+          paymentHistory: mapPaymentHistory(row.monthlyDues),
+        };
+        setMemberProfile(profile);
+        setPaymentHistory(profile.paymentHistory);
+      })
+      .catch((error: Error) => {
+        if (!active) return;
+        setMemberError(error?.message ?? "Failed to load member");
+      })
+      .finally(() => {
+        if (active) setMemberLoading(false);
+      });
 
-  useEffect(() => {
-    void loadMemberDetail();
-  }, [loadMemberDetail]);
+    return () => { active = false; };
+  }, [memberId]);
 
   useEffect(() => {
     if (!isEditMemberModalOpen && !isRecordPaymentModalOpen) return undefined;
@@ -346,7 +320,12 @@ export default function MemberViewPage() {
         throw new Error("Outstanding must be a number");
       }
 
-      await apiPatch(`/admin/members/${memberId}`, {
+      // Call API to update the member record.
+      // Uses memberId from the route (e.g. "2944"). If your backend's
+      // /admin/users/:id route expects the Prisma User.id (cuid) rather
+      // than this display memberId, update member-data.ts to carry the
+      // real id through once this page is wired to a live API response.
+      await apiPatch(`/admin/users/${memberId}`, {
         fName,
         lName,
         email,
@@ -399,12 +378,7 @@ export default function MemberViewPage() {
     editMemberForm.outstanding.trim() !== "";
 
   function resetRecordPaymentForm() {
-    setRecordPaymentForm({
-      month: "",
-      year: 2026,
-      amountPaid: "",
-      paymentDate: "",
-    });
+    setRecordPaymentForm({ year: String(CURRENT_YEAR), month: "", duesPaid: "" });
     setRecordPaymentError(null);
   }
 
@@ -415,51 +389,49 @@ export default function MemberViewPage() {
 
   function handleCloseRecordPaymentModal() {
     setIsRecordPaymentModalOpen(false);
+    setRecordPaymentError(null);
   }
 
   function handleRecordPaymentChange(field: keyof RecordPaymentFormState, value: string) {
-    if (field === "month") {
-      setRecordPaymentForm((currentForm) => ({ ...currentForm, month: value ? Number(value) : "" }));
-      return;
-    }
-    if (field === "year") {
-      setRecordPaymentForm((currentForm) => ({ ...currentForm, year: Number(value) }));
-      return;
-    }
     setRecordPaymentForm((currentForm) => ({ ...currentForm, [field]: value }));
   }
 
   async function handleSaveRecordedPayment() {
     setRecordPaymentError(null);
 
-    const { month, year, amountPaid: rawAmount } = recordPaymentForm;
-    if (!month || !year || !rawAmount.trim()) return;
+    const year = Number(recordPaymentForm.year);
+    const month = Number(recordPaymentForm.month);
+    const duesPaid = Number(recordPaymentForm.duesPaid);
 
-    const duesPaid = Number(rawAmount.replace(/[^0-9.-]/g, ""));
-    if (Number.isNaN(duesPaid)) {
-      setRecordPaymentError("Enter a valid amount.");
-      return;
-    }
+    if (!recordPaymentForm.month) { setRecordPaymentError("Select a month"); return; }
+    if (!recordPaymentForm.duesPaid.trim()) { setRecordPaymentError("Enter an amount"); return; }
+    if (Number.isNaN(duesPaid) || duesPaid < 0) { setRecordPaymentError("Amount must be a valid number"); return; }
 
     setRecordPaymentLoading(true);
 
     try {
-      // MonthlyDue has a @@unique([memberRecordId, year, month]) constraint,
-      // so recording a payment for a month that already has an entry should
-      // update that row instead of creating a duplicate — mirrors how the
-      // hosting schedule's year/month uniqueness is handled on AdminPage.
-      const existing = monthlyDueRecords.find((row) => row.year === year && row.month === month);
+      // POST to the new /admin/members/:id/monthly-dues route.
+      // The memberId from the URL IS the MemberRecord.id the backend expects.
+      const saved = await apiPost<ApiMonthlyDue>(
+        `/admin/members/${memberId}/monthly-dues`,
+        { year, month, duesPaid }
+      );
 
-      if (existing) {
-        await apiPatch(`/admin/members/${memberId}/monthly-dues/${existing.id}`, { duesPaid });
-      } else {
-        await apiPost(`/admin/members/${memberId}/monthly-dues`, { year, month, duesPaid });
-      }
+      // Build the display row from the saved record and upsert into local state.
+      const monthName = MONTH_OPTIONS.find((m) => m.value === month)?.label ?? String(month);
+      const newRow: PaymentHistoryRow = {
+        id: saved.id,
+        month: `${monthName} ${year}`,
+        amountPaid: formatCurrencyAmount(saved.duesPaid),
+        status: saved.duesPaid > 0 ? "Paid" : "Unpaid",
+        paymentDate: saved.createdAt ? formatDateDisplay(saved.createdAt) : formatDateDisplay(new Date().toISOString()),
+      };
 
-      // Re-fetch so payment history, totals, and outstanding balance all
-      // reflect whatever the server computed, the same pattern used after
-      // editing the member profile and saving the hosting schedule.
-      await loadMemberDetail();
+      setPaymentHistory((current) => {
+        const existingIndex = current.findIndex((row) => row.id === saved.id || row.month === newRow.month);
+        if (existingIndex === -1) return [newRow, ...current];
+        return current.map((row, i) => (i === existingIndex ? newRow : row));
+      });
 
       setIsRecordPaymentModalOpen(false);
       setToast("Payment recorded successfully");
@@ -578,12 +550,6 @@ export default function MemberViewPage() {
         </section>
 
         <section className="member-view-page__content">
-          {memberLoading ? (
-            <div className="member-page__empty-state">Loading member details...</div>
-          ) : memberError ? (
-            <div className="member-page__empty-state">{memberError}</div>
-          ) : (
-            <>
           <div className="admin-dashboard__section-copy member-page__section-copy">
             <h2>Member Details</h2>
             <p>Manage all members in your organization</p>
@@ -637,50 +603,70 @@ export default function MemberViewPage() {
 
           <div className="admin-dashboard__section-copy member-page__section-copy">
             <h2>Payment History</h2>
-            <p>Record and track dues payments every month</p>
+            <p>
+              {memberLoading
+                ? "Loading..."
+                : `${paymentHistory.length} payment record${paymentHistory.length !== 1 ? "s" : ""}`}
+            </p>
           </div>
 
           <div className="admin-dashboard__table-shell member-view-page__table-shell">
-            <div className="admin-dashboard__table-wrap member-view-page__table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Month</th>
-                    <th>Amount Paid</th>
-                    <th>Status</th>
-                    <th>Payment Date</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paymentHistory.map((payment) => (
-                    <tr key={payment.id}>
-                      <td data-label="Month">{payment.month}</td>
-                      <td data-label="Amount Paid">{payment.amountPaid}</td>
-                      <td data-label="Status">
-                        <span
-                          className={[
-                            "admin-dashboard__status-pill",
-                            payment.status === "Paid" ? "is-good" : "is-bad",
-                          ].join(" ")}
-                        >
-                          {payment.status}
-                        </span>
-                      </td>
-                      <td data-label="Payment Date">{payment.paymentDate}</td>
-                      <td data-label="Action">
-                        <button type="button" className="member-view-page__table-action">
-                          Edit
-                        </button>
-                      </td>
+            {memberError ? (
+              <div className="admin-dashboard__modal-error">{memberError}</div>
+            ) : (
+              <div className="admin-dashboard__table-wrap member-view-page__table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Month</th>
+                      <th>Amount Paid</th>
+                      <th>Status</th>
+                      <th>Payment Date</th>
+                      <th>Action</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {memberLoading ? (
+                      <tr>
+                        <td colSpan={5} className="member-view-page__table-state">
+                          Loading payment history...
+                        </td>
+                      </tr>
+                    ) : !paymentHistory.length ? (
+                      <tr>
+                        <td colSpan={5} className="member-view-page__table-state">
+                          No payments recorded yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      paymentHistory.map((payment) => (
+                        <tr key={payment.id}>
+                          <td data-label="Month">{payment.month}</td>
+                          <td data-label="Amount Paid">{payment.amountPaid}</td>
+                          <td data-label="Status">
+                            <span
+                              className={[
+                                "admin-dashboard__status-pill",
+                                payment.status === "Paid" ? "is-good" : "is-bad",
+                              ].join(" ")}
+                            >
+                              {payment.status}
+                            </span>
+                          </td>
+                          <td data-label="Payment Date">{payment.paymentDate}</td>
+                          <td data-label="Action">
+                            <button type="button" className="member-view-page__table-action">
+                              Edit
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-            </>
-          )}
         </section>
       </main>
 
@@ -689,49 +675,70 @@ export default function MemberViewPage() {
           <div className="admin-dashboard__modal-backdrop" onClick={handleCloseRecordPaymentModal} />
 
           <div className="admin-dashboard__modal-panel member-view-page__modal-panel">
-            <div className="admin-dashboard__modal-section">
-              <label htmlFor="record-payment-month" className="admin-dashboard__modal-label" id="record-payment-modal-title">
-                Month
-              </label>
-              <div className="admin-dashboard__modal-input member-view-page__modal-input">
-                <FiCalendar size={20} />
-                <input
-                  id="record-payment-month"
-                  value={recordPaymentForm.month}
-                  onChange={(event) => handleRecordPaymentChange("month", event.target.value)}
-                  placeholder="Enter Month"
-                  aria-label="Payment month"
-                />
+            <h2 id="record-payment-modal-title" className="admin-dashboard__modal-title">
+              Record Payment
+            </h2>
+
+            {recordPaymentError && (
+              <div className="admin-dashboard__modal-error">{recordPaymentError}</div>
+            )}
+
+            <div className="member-view-page__modal-grid">
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="record-payment-year" className="admin-dashboard__modal-label">
+                  Year *
+                </label>
+                <div className="admin-dashboard__modal-input member-view-page__modal-input member-view-page__modal-select-wrap">
+                  <FiCalendar size={20} />
+                  <select
+                    id="record-payment-year"
+                    value={recordPaymentForm.year}
+                    onChange={(event) => handleRecordPaymentChange("year", event.target.value)}
+                    aria-label="Payment year"
+                    className="has-value"
+                  >
+                    {YEAR_OPTIONS.map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="record-payment-month" className="admin-dashboard__modal-label">
+                  Month *
+                </label>
+                <div className="admin-dashboard__modal-input member-view-page__modal-input member-view-page__modal-select-wrap">
+                  <FiCalendar size={20} />
+                  <select
+                    id="record-payment-month"
+                    value={recordPaymentForm.month}
+                    onChange={(event) => handleRecordPaymentChange("month", event.target.value)}
+                    aria-label="Payment month"
+                    className={recordPaymentForm.month ? "has-value" : ""}
+                  >
+                    <option value="">Select month</option>
+                    {MONTH_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 
             <div className="admin-dashboard__modal-section">
               <label htmlFor="record-payment-amount" className="admin-dashboard__modal-label">
-                Amount Paid
+                Amount Paid *
               </label>
               <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
                 <input
                   id="record-payment-amount"
-                  value={recordPaymentForm.amountPaid}
-                  onChange={(event) => handleRecordPaymentChange("amountPaid", event.target.value)}
-                  placeholder="Enter Amount"
+                  type="number"
+                  inputMode="decimal"
+                  value={recordPaymentForm.duesPaid}
+                  onChange={(event) => handleRecordPaymentChange("duesPaid", event.target.value)}
+                  placeholder="20"
                   aria-label="Amount paid"
-                />
-              </div>
-            </div>
-
-            <div className="admin-dashboard__modal-section">
-              <label htmlFor="record-payment-date" className="admin-dashboard__modal-label">
-                Payment Date
-              </label>
-              <div className="admin-dashboard__modal-input member-view-page__modal-input">
-                <FiCalendar size={20} />
-                <input
-                  id="record-payment-date"
-                  value={recordPaymentForm.paymentDate}
-                  onChange={(event) => handleRecordPaymentChange("paymentDate", event.target.value)}
-                  placeholder="29 - 04 - 2024"
-                  aria-label="Payment date"
                 />
               </div>
             </div>
@@ -741,6 +748,7 @@ export default function MemberViewPage() {
                 type="button"
                 className="admin-dashboard__modal-button admin-dashboard__modal-button--secondary"
                 onClick={handleCloseRecordPaymentModal}
+                disabled={recordPaymentLoading}
               >
                 Cancel
               </button>
@@ -749,12 +757,12 @@ export default function MemberViewPage() {
                 className="admin-dashboard__modal-button admin-dashboard__modal-button--primary"
                 onClick={handleSaveRecordedPayment}
                 disabled={
-                  !recordPaymentForm.month.trim() ||
-                  !recordPaymentForm.amountPaid.trim() ||
-                  !recordPaymentForm.paymentDate.trim()
+                  !recordPaymentForm.month ||
+                  !recordPaymentForm.duesPaid.trim() ||
+                  recordPaymentLoading
                 }
               >
-                Save Changes
+                {recordPaymentLoading ? "Saving..." : "Save Payment"}
               </button>
             </div>
           </div>

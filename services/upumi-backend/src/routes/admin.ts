@@ -646,6 +646,88 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     return updated;
   });
 
+  // Record or update a monthly due payment for a member.
+  // Uses upsert on the @@unique([memberRecordId, year, month]) constraint so
+  // re-submitting the same month overwrites rather than errors.
+  app.post('/members/:id/monthly-dues', { preHandler: requireRole('ADMIN') }, async (req: any, reply) => {
+    const id = String(req.params?.id ?? '');
+
+    const Body = z.object({
+      year: z.number().int().min(2000).max(2100),
+      month: z.number().int().min(1).max(12),
+      duesPaid: z.number().min(0),
+      present: z.boolean().optional(),
+    }).parse(req.body ?? {});
+
+    // Resolve the memberRecordId — handles both a real MemberRecord cuid and
+    // a 'user.<userId>' virtual id used for members who have no MemberRecord row.
+    let memberRecordId: string;
+
+    if (id.startsWith('user.')) {
+      const userId = id.slice('user.'.length);
+      // Find or create a MemberRecord for this user so MonthlyDue has something to link to.
+      const existing = await prisma.memberRecord.findFirst({ where: { userId } });
+      if (existing) {
+        memberRecordId = existing.id;
+      } else {
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { id: true, fName: true, lName: true, phone: true, email: true, createdAt: true },
+        });
+        if (!user) return reply.code(404).send({ message: 'Member not found' });
+
+        const created = await prisma.memberRecord.create({
+          data: {
+            memberKey: `user.${user.id}`,
+            status: 'Member',
+            firstName: user.fName ?? null,
+            lastName: user.lName ?? null,
+            joined: user.createdAt.toISOString(),
+            phone: user.phone ?? null,
+            email: user.email ?? null,
+            userId: user.id,
+            rawJson: {},
+          } as any,
+        });
+        memberRecordId = created.id;
+      }
+    } else {
+      const existing = await prisma.memberRecord.findUnique({ where: { id } });
+      if (!existing) return reply.code(404).send({ message: 'Member not found' });
+      memberRecordId = existing.id;
+    }
+
+    const due = await (prisma as any).monthlyDue.upsert({
+      where: {
+        memberRecordId_year_month: {
+          memberRecordId,
+          year: Body.year,
+          month: Body.month,
+        },
+      },
+      update: {
+        duesPaid: Body.duesPaid as any,
+        ...(Body.present !== undefined ? { present: Body.present } : {}),
+      },
+      create: {
+        memberRecordId,
+        year: Body.year,
+        month: Body.month,
+        duesPaid: Body.duesPaid as any,
+        ...(Body.present !== undefined ? { present: Body.present } : {}),
+      },
+    });
+
+    return {
+      id: due.id,
+      year: due.year,
+      month: due.month,
+      duesPaid: decimalToNumber(due.duesPaid) ?? 0,
+      present: due.present ?? null,
+      createdAt: due.createdAt,
+    };
+  });
+
   // Create a new user (admin)
   app.post('/users', { preHandler: requireRole('ADMIN') }, async (req) => {
     const Body = z.object({
