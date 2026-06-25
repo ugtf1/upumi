@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { IconType } from "react-icons";
 import {
@@ -37,7 +37,8 @@ type SummaryCard = {
 };
 
 type RecordPaymentFormState = {
-  month: string;
+  month: number | "";
+  year: number;
   amountPaid: string;
   paymentDate: string;
 };
@@ -58,6 +59,8 @@ type EditMemberFormState = {
 
 const VOTE_ROLE_OPTIONS = ["YES", "NO"] as const;
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const MONTH_OPTIONS = MONTH_NAMES.map((label, index) => ({ value: index + 1, label }));
+const YEAR_OPTIONS = [2024, 2025, 2026, 2027];
 
 type ApiMonthlyDue = {
   id: string;
@@ -136,7 +139,10 @@ function normalizeVoteRole(value?: string | null): string {
 }
 
 function mapPaymentHistory(rows: ApiMonthlyDue[] = []): PaymentHistoryRow[] {
-  return rows.map((row) => {
+  return rows
+    .slice()
+    .sort((a, b) => (b.year - a.year) || (b.month - a.month))
+    .map((row) => {
     const monthName = MONTH_NAMES[Math.max(1, Math.min(12, row.month)) - 1] ?? String(row.month);
     const amountPaid = Number(row.duesPaid ?? 0);
     return {
@@ -176,6 +182,7 @@ export default function MemberViewPage() {
   const [search, setSearch] = useState("");
   const [memberProfile, setMemberProfile] = useState<MemberDetailRecord>(EMPTY_MEMBER_PROFILE);
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistoryRow[]>([]);
+  const [monthlyDueRecords, setMonthlyDueRecords] = useState<ApiMonthlyDue[]>([]);
   const [memberLoading, setMemberLoading] = useState(true);
   const [memberError, setMemberError] = useState<string | null>(null);
   const [isEditMemberModalOpen, setIsEditMemberModalOpen] = useState(false);
@@ -198,45 +205,42 @@ export default function MemberViewPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [recordPaymentForm, setRecordPaymentForm] = useState<RecordPaymentFormState>({
     month: "",
+    year: 2026,
     amountPaid: "",
     paymentDate: "",
   });
+  const [recordPaymentLoading, setRecordPaymentLoading] = useState(false);
+  const [recordPaymentError, setRecordPaymentError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-
-    async function loadMemberDetail() {
-      if (!memberId) {
-        setMemberError("Member ID is missing");
-        setMemberLoading(false);
-        return;
-      }
-
-      setMemberLoading(true);
-      setMemberError(null);
-
-      try {
-        const row = await apiGet<ApiMemberDetail>(`/admin/members/${memberId}`);
-        if (!active) return;
-        const profile = mapApiMemberDetail(row);
-        setMemberProfile(profile);
-        setPaymentHistory(profile.paymentHistory);
-      } catch (error) {
-        if (!active) return;
-        setMemberProfile(EMPTY_MEMBER_PROFILE);
-        setPaymentHistory([]);
-        setMemberError(error instanceof Error ? error.message : "Failed to load member");
-      } finally {
-        if (active) setMemberLoading(false);
-      }
+  const loadMemberDetail = useCallback(async () => {
+    if (!memberId) {
+      setMemberError("Member ID is missing");
+      setMemberLoading(false);
+      return;
     }
 
-    void loadMemberDetail();
+    setMemberLoading(true);
+    setMemberError(null);
 
-    return () => {
-      active = false;
-    };
+    try {
+      const row = await apiGet<ApiMemberDetail>(`/admin/members/${memberId}`);
+      const profile = mapApiMemberDetail(row);
+      setMemberProfile(profile);
+      setPaymentHistory(profile.paymentHistory);
+      setMonthlyDueRecords(row.monthlyDues ?? []);
+    } catch (error) {
+      setMemberProfile(EMPTY_MEMBER_PROFILE);
+      setPaymentHistory([]);
+      setMonthlyDueRecords([]);
+      setMemberError(error instanceof Error ? error.message : "Failed to load member");
+    } finally {
+      setMemberLoading(false);
+    }
   }, [memberId]);
+
+  useEffect(() => {
+    void loadMemberDetail();
+  }, [loadMemberDetail]);
 
   useEffect(() => {
     if (!isEditMemberModalOpen && !isRecordPaymentModalOpen) return undefined;
@@ -397,9 +401,11 @@ export default function MemberViewPage() {
   function resetRecordPaymentForm() {
     setRecordPaymentForm({
       month: "",
+      year: 2026,
       amountPaid: "",
       paymentDate: "",
     });
+    setRecordPaymentError(null);
   }
 
   function handleOpenRecordPaymentModal() {
@@ -412,35 +418,57 @@ export default function MemberViewPage() {
   }
 
   function handleRecordPaymentChange(field: keyof RecordPaymentFormState, value: string) {
+    if (field === "month") {
+      setRecordPaymentForm((currentForm) => ({ ...currentForm, month: value ? Number(value) : "" }));
+      return;
+    }
+    if (field === "year") {
+      setRecordPaymentForm((currentForm) => ({ ...currentForm, year: Number(value) }));
+      return;
+    }
     setRecordPaymentForm((currentForm) => ({ ...currentForm, [field]: value }));
   }
 
-  function handleSaveRecordedPayment() {
-    const month = recordPaymentForm.month.trim();
-    const rawAmount = recordPaymentForm.amountPaid.trim();
-    const paymentDate = recordPaymentForm.paymentDate.trim();
+  async function handleSaveRecordedPayment() {
+    setRecordPaymentError(null);
 
-    if (!month || !rawAmount || !paymentDate) return;
+    const { month, year, amountPaid: rawAmount } = recordPaymentForm;
+    if (!month || !year || !rawAmount.trim()) return;
 
-    const amountPaid = rawAmount.startsWith("$") ? rawAmount : `$${rawAmount}`;
-    const nextPayment: PaymentHistoryRow = {
-      id: `payment-${Date.now()}`,
-      month,
-      amountPaid,
-      status: "Paid",
-      paymentDate,
-    };
+    const duesPaid = Number(rawAmount.replace(/[^0-9.-]/g, ""));
+    if (Number.isNaN(duesPaid)) {
+      setRecordPaymentError("Enter a valid amount.");
+      return;
+    }
 
-    setPaymentHistory((currentRows) => {
-      const existingIndex = currentRows.findIndex((row) => row.month.toLowerCase() === month.toLowerCase());
-      if (existingIndex === -1) {
-        return [nextPayment, ...currentRows];
+    setRecordPaymentLoading(true);
+
+    try {
+      // MonthlyDue has a @@unique([memberRecordId, year, month]) constraint,
+      // so recording a payment for a month that already has an entry should
+      // update that row instead of creating a duplicate — mirrors how the
+      // hosting schedule's year/month uniqueness is handled on AdminPage.
+      const existing = monthlyDueRecords.find((row) => row.year === year && row.month === month);
+
+      if (existing) {
+        await apiPatch(`/admin/members/${memberId}/monthly-dues/${existing.id}`, { duesPaid });
+      } else {
+        await apiPost(`/admin/members/${memberId}/monthly-dues`, { year, month, duesPaid });
       }
 
-      return currentRows.map((row, index) => (index === existingIndex ? nextPayment : row));
-    });
+      // Re-fetch so payment history, totals, and outstanding balance all
+      // reflect whatever the server computed, the same pattern used after
+      // editing the member profile and saving the hosting schedule.
+      await loadMemberDetail();
 
-    setIsRecordPaymentModalOpen(false);
+      setIsRecordPaymentModalOpen(false);
+      setToast("Payment recorded successfully");
+      window.setTimeout(() => setToast(null), 3000);
+    } catch (error) {
+      setRecordPaymentError(error instanceof Error ? error.message : "Failed to record payment");
+    } finally {
+      setRecordPaymentLoading(false);
+    }
   }
 
   const primaryNavigationItems: NavigationItem[] = [
