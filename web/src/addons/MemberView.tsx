@@ -320,12 +320,9 @@ export default function MemberViewPage() {
         throw new Error("Outstanding must be a number");
       }
 
-      // Call API to update the member record.
-      // Uses memberId from the route (e.g. "2944"). If your backend's
-      // /admin/users/:id route expects the Prisma User.id (cuid) rather
-      // than this display memberId, update member-data.ts to carry the
-      // real id through once this page is wired to a live API response.
-      await apiPatch(`/admin/users/${memberId}`, {
+      // PATCH /admin/members/:id — defined in admin.ts, handles both
+      // MemberRecord rows and user. prefixed virtual ids.
+      await apiPatch(`/admin/members/${memberId}`, {
         fName,
         lName,
         email,
