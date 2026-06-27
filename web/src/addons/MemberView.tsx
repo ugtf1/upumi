@@ -455,9 +455,14 @@ export default function MemberViewPage() {
     { label: "Logout", icon: FiLogOut, action: handleLogout, tone: "danger" },
   ];
 
+  const totalPaidFromHistory = paymentHistory.reduce((sum, row) => {
+    const numeric = Number(row.amountPaid.replace(/[$,]/g, ""));
+    return sum + (Number.isNaN(numeric) ? 0 : numeric);
+  }, 0);
+
   const summaryCards: SummaryCard[] = [
     { label: "Monthly Dues", value: memberProfile.monthlyDues },
-    { label: "Total Paid", value: memberProfile.totalPaid, tone: "success" },
+    { label: "Total Paid", value: `$${totalPaidFromHistory.toLocaleString()}`, tone: "success" },
     { label: "Outstanding", value: memberProfile.outstanding, tone: "danger" },
   ];
 
