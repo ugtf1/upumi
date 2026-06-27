@@ -76,6 +76,7 @@ function mapApiMember(m: ApiMember): MemberListItem {
   const name = [m.firstName, m.lastName].filter(Boolean).join(" ").trim() || m.email || "Unnamed";
   const pctRaw = Number(String(m.attendancePct ?? "0").replace(/[^0-9.]/g, ""));
   const attendancePercent = Number.isNaN(pctRaw) ? 0 : Math.min(100, pctRaw);
+  const presentMonths = Math.round(attendancePercent / 10);
   const voteRole = String(m.voter ?? "").trim().toUpperCase() === "YES" ? "Yes" : "No";
   return {
     id: m.id,
@@ -84,7 +85,7 @@ function mapApiMember(m: ApiMember): MemberListItem {
     email: m.email || "-",
     joined: m.joined ? new Date(m.joined).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "-",
     phone: m.phone || "-",
-    attendance: attendancePercent > 0 ? `${attendancePercent}%` : "No record",
+    attendance: `${presentMonths}/12 Months`,
     attendancePercent,
     voteRole,
     voteStatus: voteRole === "Yes" ? "Participated" : "Nil",
@@ -429,8 +430,7 @@ export default function MemberPage() {
                     {member.phone}
                   </a>
 
-                  <div
-                    className="member-page__attendance-card"
+                    <div className="member-page__attendance-card"
                     onMouseEnter={() => setHoveredMemberId(member.id)}
                     onMouseLeave={() => setHoveredMemberId(null)}
                   >
@@ -445,7 +445,6 @@ export default function MemberPage() {
                       <span className="member-page__progress-track">
                         <span style={{ width: `${member.attendancePercent}%` }} />
                       </span>
-                      <strong>{member.attendancePercent}%</strong>
                     </div>
 
                     {hoveredMemberId === member.id && (
