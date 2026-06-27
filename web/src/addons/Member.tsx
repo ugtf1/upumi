@@ -5,7 +5,6 @@ import { Role } from "./types/Role";
 import {
   FiCheck,
   FiCreditCard,
-  FiEye,
   FiFilter,
   FiHome,
   FiLogOut,
@@ -37,58 +36,36 @@ type MemberListItem = {
   phone: string;
   attendance: string;
   attendancePercent: number;
-  voteRole: "Yes" | "NO" | "No";
-  voteStatus: "Participated" | "Nil";
+  voteRole: string;
+  voteStatus: string;
 };
 
-type ApiMemberRow = {
+type ApiMember = {
   id: string;
   displayMemberId?: string | null;
   memberKey?: string | null;
   firstName?: string | null;
   lastName?: string | null;
   email?: string | null;
-  joined?: string | null;
   phone?: string | null;
-  voter?: string | null;
+  joined?: string | null;
   attendancePct?: string | null;
+  voter?: string | null;
 };
 
-function formatJoined(value?: string | null) {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
-}
-
-function parsePercent(value?: string | null) {
-  const numeric = Number(String(value ?? "").replace(/[^0-9.-]/g, ""));
-  if (!Number.isFinite(numeric)) return 0;
-  return Math.max(0, Math.min(100, numeric));
-}
-
-function normalizeVoteRole(value?: string | null): MemberListItem["voteRole"] {
-  const normalized = String(value ?? "").trim().toLowerCase();
-  if (normalized === "yes" || normalized === "y" || normalized === "true") return "Yes";
-  if (normalized === "no" || normalized === "n" || normalized === "false") return "NO";
-  return "No";
-}
-
-function mapApiMember(row: ApiMemberRow): MemberListItem {
-  const firstName = row.firstName?.trim() ?? "";
-  const lastName = row.lastName?.trim() ?? "";
-  const name = [firstName, lastName].filter(Boolean).join(" ") || row.email || "Unnamed member";
-  const attendancePercent = parsePercent(row.attendancePct);
-  const voteRole = normalizeVoteRole(row.voter);
-
+function mapApiMember(m: ApiMember): MemberListItem {
+  const name = [m.firstName, m.lastName].filter(Boolean).join(" ").trim() || m.email || "Unnamed";
+  const pctRaw = Number(String(m.attendancePct ?? "0").replace(/[^0-9.]/g, ""));
+  const attendancePercent = Number.isNaN(pctRaw) ? 0 : Math.min(100, pctRaw);
+  const voteRole = String(m.voter ?? "").trim().toUpperCase() === "YES" ? "Yes" : "No";
   return {
-    id: row.id,
+    id: m.id,
     name,
-    memberId: row.displayMemberId || row.memberKey || row.id,
-    email: row.email || "-",
-    joined: formatJoined(row.joined),
-    phone: row.phone || "-",
-    attendance: row.attendancePct ? `${row.attendancePct}` : "0%",
+    memberId: m.displayMemberId || m.memberKey || m.id,
+    email: m.email || "-",
+    joined: m.joined ? new Date(m.joined).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "-",
+    phone: m.phone || "-",
+    attendance: attendancePercent > 0 ? `${attendancePercent}%` : "No record",
     attendancePercent,
     voteRole,
     voteStatus: voteRole === "Yes" ? "Participated" : "Nil",
@@ -113,33 +90,22 @@ const INITIAL_ADD_MEMBER_FORM: AddMemberForm = {
 
 export default function MemberPage() {
   const navigate = useNavigate();
+  const [members, setMembers] = useState<MemberListItem[]>([]);
+  const [membersLoading, setMembersLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [isAddMemberModalOpen, setIsAddMemberModalOpen] = useState(false);
   const [addMemberForm, setAddMemberForm] = useState<AddMemberForm>(INITIAL_ADD_MEMBER_FORM);
   const [addMemberLoading, setAddMemberLoading] = useState(false);
   const [addMemberError, setAddMemberError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
-  const [members, setMembers] = useState<MemberListItem[]>([]);
-  const [membersLoading, setMembersLoading] = useState(true);
-  const [membersError, setMembersError] = useState<string | null>(null);
-
-  async function loadMembers() {
-    setMembersLoading(true);
-    setMembersError(null);
-
-    try {
-      const rows = await apiGet<ApiMemberRow[]>("/admin/members");
-      setMembers(rows.map(mapApiMember));
-    } catch (error) {
-      setMembersError(error instanceof Error ? error.message : "Failed to load members");
-    } finally {
-      setMembersLoading(false);
-    }
-  }
 
   useEffect(() => {
-    void loadMembers();
+    let active = true;
+    apiGet<ApiMember[]>("/admin/members")
+      .then((rows) => { if (active) setMembers(rows.map(mapApiMember)); })
+      .catch(() => {})
+      .finally(() => { if (active) setMembersLoading(false); });
+    return () => { active = false; };
   }, []);
 
   function handleOpenAddMemberModal() {
@@ -186,7 +152,6 @@ export default function MemberPage() {
       // Reset form and close modal
       setAddMemberForm(INITIAL_ADD_MEMBER_FORM);
       setIsAddMemberModalOpen(false);
-      await loadMembers();
 
       // Show success notification
       setToast("Member added successfully");
@@ -223,31 +188,12 @@ export default function MemberPage() {
         .toLowerCase()
         .includes(query)
     );
-  }, [members, search]);
+  }, [search, members]);
 
   function handleLogout() {
     clearToken();
     navigate("/login");
   }
-
-  function handleViewMember(member: MemberListItem) {
-    setOpenActionMenuId(null);
-    navigate(`/admin/member/${member.id}`);
-  }
-
-  useEffect(() => {
-    if (!openActionMenuId) return undefined;
-
-    function handleClickOutside(event: MouseEvent) {
-      const target = event.target as HTMLElement;
-      if (!target.closest(".member-page__row-actions")) {
-        setOpenActionMenuId(null);
-      }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [openActionMenuId]);
 
   const primaryNavigationItems: NavigationItem[] = [
     { label: "Dashboard", icon: FiHome, action: () => navigate("/admin") },
@@ -365,10 +311,10 @@ export default function MemberPage() {
           <div className="member-page__list" aria-label="Members">
             {membersLoading ? (
               <div className="member-page__empty-state">Loading members...</div>
-            ) : membersError ? (
-              <div className="member-page__empty-state">{membersError}</div>
             ) : !filteredMembers.length ? (
-              <div className="member-page__empty-state">No members match the current search.</div>
+              <div className="member-page__empty-state">
+                {search.trim() ? "No members match the current search." : "No members found."}
+              </div>
             ) : (
               filteredMembers.map((member) => (
                 <article className="member-page__row" key={member.id}>
@@ -413,34 +359,13 @@ export default function MemberPage() {
                     <small>{member.voteStatus}</small>
                   </div>
 
-                  <div className="member-page__row-actions">
-                    <button
-                      type="button"
-                      className="member-page__more-button"
-                      aria-label={`More actions for ${member.name}`}
-                      aria-haspopup="menu"
-                      aria-expanded={openActionMenuId === member.id}
-                      onClick={() =>
-                        setOpenActionMenuId((current) => (current === member.id ? null : member.id))
-                      }
-                    >
-                      <FiMoreVertical size={22} />
-                    </button>
-
-                    {openActionMenuId === member.id && (
-                      <div className="member-page__action-menu" role="menu">
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className="member-page__action-menu-item"
-                          onClick={() => handleViewMember(member)}
-                        >
-                          <FiEye size={16} />
-                          <span>View</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  <button
+                    type="button"
+                    className="member-page__more-button"
+                    aria-label={`More actions for ${member.name}`}
+                  >
+                    <FiMoreVertical size={22} />
+                  </button>
                 </article>
               ))
             )}

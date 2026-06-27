@@ -42,6 +42,12 @@ type RecordPaymentFormState = {
   duesPaid: string;
 };
 
+type RecordAttendanceFormState = {
+  year: string;
+  month: string;
+  status: "present" | "absent" | "";
+};
+
 type EditMemberFormState = {
   fName: string;
   lName: string;
@@ -169,6 +175,14 @@ export default function MemberViewPage() {
   });
   const [recordPaymentLoading, setRecordPaymentLoading] = useState(false);
   const [recordPaymentError, setRecordPaymentError] = useState<string | null>(null);
+  const [isRecordAttendanceModalOpen, setIsRecordAttendanceModalOpen] = useState(false);
+  const [attendanceForm, setAttendanceForm] = useState<RecordAttendanceFormState>({
+    year: String(CURRENT_YEAR),
+    month: "",
+    status: "",
+  });
+  const [recordAttendanceLoading, setRecordAttendanceLoading] = useState(false);
+  const [recordAttendanceError, setRecordAttendanceError] = useState<string | null>(null);
 
   // Fetch member detail + payment history from the database on mount.
   useEffect(() => {
@@ -382,6 +396,50 @@ export default function MemberViewPage() {
   function handleOpenRecordPaymentModal() {
     resetRecordPaymentForm();
     setIsRecordPaymentModalOpen(true);
+  }
+
+  function handleOpenRecordAttendanceModal() {
+    setAttendanceForm({ year: String(CURRENT_YEAR), month: "", status: "" });
+    setRecordAttendanceError(null);
+    setIsRecordAttendanceModalOpen(true);
+  }
+
+  function handleCloseRecordAttendanceModal() {
+    setIsRecordAttendanceModalOpen(false);
+    setRecordAttendanceError(null);
+  }
+
+  function handleAttendanceFormChange(field: keyof RecordAttendanceFormState, value: string) {
+    setAttendanceForm((f) => ({ ...f, [field]: value }));
+  }
+
+  async function handleSaveAttendance() {
+    setRecordAttendanceError(null);
+
+    if (!attendanceForm.month) { setRecordAttendanceError("Select a month"); return; }
+    if (!attendanceForm.status) { setRecordAttendanceError("Select a status"); return; }
+
+    setRecordAttendanceLoading(true);
+
+    try {
+      await apiPost(`/admin/members/${memberId}/attendance`, {
+        year: Number(attendanceForm.year),
+        month: Number(attendanceForm.month),
+        status: attendanceForm.status,
+      });
+
+      setIsRecordAttendanceModalOpen(false);
+      setToast(
+        attendanceForm.status === "present"
+          ? "Attendance marked as present"
+          : "Attendance marked as absent"
+      );
+      window.setTimeout(() => setToast(null), 3000);
+    } catch (error) {
+      setRecordAttendanceError(error instanceof Error ? error.message : "Failed to record attendance");
+    } finally {
+      setRecordAttendanceLoading(false);
+    }
   }
 
   function handleCloseRecordPaymentModal() {
@@ -599,6 +657,10 @@ export default function MemberViewPage() {
               <button type="button" className="member-view-page__outline-button" onClick={handleOpenRecordPaymentModal}>
                 <FiCreditCard size={16} />
                 <span>Record Payment</span>
+              </button>
+              <button type="button" className="member-view-page__outline-button" onClick={handleOpenRecordAttendanceModal}>
+                <FiCalendar size={16} />
+                <span>Record Attendance</span>
               </button>
             </div>
           </article>
@@ -989,6 +1051,103 @@ export default function MemberViewPage() {
                 disabled={!isEditMemberFormValid || editMemberLoading}
               >
                 {editMemberLoading ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isRecordAttendanceModalOpen && (
+        <div className="admin-dashboard__modal" role="dialog" aria-modal="true" aria-labelledby="record-attendance-modal-title">
+          <div className="admin-dashboard__modal-backdrop" onClick={handleCloseRecordAttendanceModal} />
+
+          <div className="admin-dashboard__modal-panel member-view-page__modal-panel">
+            <h2 id="record-attendance-modal-title" className="admin-dashboard__modal-title">
+              Record Attendance
+            </h2>
+
+            {recordAttendanceError && (
+              <div className="admin-dashboard__modal-error">{recordAttendanceError}</div>
+            )}
+
+            <div className="member-view-page__modal-grid">
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="attendance-year" className="admin-dashboard__modal-label">
+                  Year *
+                </label>
+                <div className="admin-dashboard__modal-input member-view-page__modal-input member-view-page__modal-select-wrap">
+                  <FiCalendar size={20} />
+                  <select
+                    id="attendance-year"
+                    value={attendanceForm.year}
+                    onChange={(e) => handleAttendanceFormChange("year", e.target.value)}
+                    aria-label="Attendance year"
+                    className="has-value"
+                  >
+                    {YEAR_OPTIONS.map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="attendance-month" className="admin-dashboard__modal-label">
+                  Month *
+                </label>
+                <div className="admin-dashboard__modal-input member-view-page__modal-input member-view-page__modal-select-wrap">
+                  <FiCalendar size={20} />
+                  <select
+                    id="attendance-month"
+                    value={attendanceForm.month}
+                    onChange={(e) => handleAttendanceFormChange("month", e.target.value)}
+                    aria-label="Attendance month"
+                    className={attendanceForm.month ? "has-value" : ""}
+                  >
+                    <option value="">Select month</option>
+                    {MONTH_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="admin-dashboard__modal-section">
+              <label htmlFor="attendance-status" className="admin-dashboard__modal-label">
+                Status *
+              </label>
+              <div className="admin-dashboard__modal-input member-view-page__modal-input member-view-page__modal-select-wrap">
+                <select
+                  id="attendance-status"
+                  value={attendanceForm.status}
+                  onChange={(e) => handleAttendanceFormChange("status", e.target.value)}
+                  aria-label="Attendance status"
+                  className={attendanceForm.status ? "has-value" : ""}
+                >
+                  <option value="">Select status</option>
+                  <option value="present">Present</option>
+                  <option value="absent">Absent</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="admin-dashboard__modal-actions">
+              <button
+                type="button"
+                className="admin-dashboard__modal-button admin-dashboard__modal-button--secondary"
+                onClick={handleCloseRecordAttendanceModal}
+                disabled={recordAttendanceLoading}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="admin-dashboard__modal-button admin-dashboard__modal-button--primary"
+                onClick={handleSaveAttendance}
+                disabled={!attendanceForm.month || !attendanceForm.status || recordAttendanceLoading}
+              >
+                {recordAttendanceLoading ? "Saving..." : "Save Attendance"}
               </button>
             </div>
           </div>

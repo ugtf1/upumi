@@ -244,7 +244,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         totalPaid: decimalToNumber(user.totalPaid) ?? 0,
         outstanding: decimalToNumber(user.outstanding) ?? 0,
         monthlyDues: [],
-        rawJson: '{}',
+        rawJson: {},
       };
     }
 
@@ -686,48 +686,15 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
             phone: user.phone ?? null,
             email: user.email ?? null,
             userId: user.id,
-            rawJson: '{}',
+            rawJson: {},
           } as any,
         });
         memberRecordId = created.id;
       }
     } else {
-      // Try as a MemberRecord.id first.
-      const existingRecord = await prisma.memberRecord.findUnique({ where: { id } });
-      if (existingRecord) {
-        memberRecordId = existingRecord.id;
-      } else {
-        // The id might be a plain User.id — this happens for members surfaced
-        // via mapUserAsMember in GET /members (they have no MemberRecord row
-        // and their URL id is the User cuid without a 'user.' prefix).
-        const user = await prisma.user.findUnique({
-          where: { id },
-          select: { id: true, fName: true, lName: true, phone: true, email: true, createdAt: true },
-        });
-        if (!user) return reply.code(404).send({ message: 'Member not found' });
-
-        // Find an existing MemberRecord linked to this user, or create one
-        // so MonthlyDue has a row to foreign-key against.
-        const linkedRecord = await prisma.memberRecord.findFirst({ where: { userId: user.id } });
-        if (linkedRecord) {
-          memberRecordId = linkedRecord.id;
-        } else {
-          const created = await prisma.memberRecord.create({
-            data: {
-              memberKey: `user.${user.id}`,
-              status: 'Member',
-              firstName: user.fName ?? null,
-              lastName: user.lName ?? null,
-              joined: user.createdAt.toISOString(),
-              phone: user.phone ?? null,
-              email: user.email ?? null,
-              userId: user.id,
-              rawJson: '{}',
-            } as any,
-          });
-          memberRecordId = created.id;
-        }
-      }
+      const existing = await prisma.memberRecord.findUnique({ where: { id } });
+      if (!existing) return reply.code(404).send({ message: 'Member not found' });
+      memberRecordId = existing.id;
     }
 
     const due = await (prisma as any).monthlyDue.upsert({
@@ -758,6 +725,87 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       duesPaid: decimalToNumber(due.duesPaid) ?? 0,
       present: due.present ?? null,
       createdAt: due.createdAt,
+    };
+  });
+
+  // Record or update attendance for a member for a given year/month.
+  // Attendance is stored as a single row per month (@@unique([year, month]))
+  // with all present member IDs comma-separated in `usersIn`.
+  // After each change we recompute and persist attendancePct on the MemberRecord
+  // so GET /members always returns the live value.
+  app.post('/members/:id/attendance', { preHandler: requireRole('ADMIN') }, async (req: any, reply) => {
+    const id = String(req.params?.id ?? '');
+
+    const Body = z.object({
+      year: z.number().int().min(2000).max(2100),
+      month: z.number().int().min(1).max(12),
+      status: z.enum(['present', 'absent']),
+    }).parse(req.body ?? {});
+
+    // Resolve the stable member identifier to store in usersIn.
+    // We store the MemberRecord.id for MemberRecord-backed members, or the
+    // User.id for user-only members. Either way it matches the `id` in the
+    // member list response so the frontend can cross-reference.
+    let memberRecordId: string | null = null;
+    let stableId: string;
+
+    if (id.startsWith('user.')) {
+      stableId = id.slice('user.'.length);
+    } else {
+      const record = await prisma.memberRecord.findUnique({ where: { id }, select: { id: true } });
+      if (record) {
+        stableId = record.id;
+        memberRecordId = record.id;
+      } else {
+        const user = await prisma.user.findUnique({ where: { id }, select: { id: true } });
+        if (!user) return reply.code(404).send({ message: 'Member not found' });
+        stableId = user.id;
+      }
+    }
+
+    // Fetch existing attendance row for this year/month (if any).
+    const existing = await prismaAny.attendance.findUnique({
+      where: { year_month: { year: Body.year, month: Body.month } },
+    });
+
+    let presentIds: string[] = existing
+      ? existing.usersIn.split(',').map((s: string) => s.trim()).filter(Boolean)
+      : [];
+
+    if (Body.status === 'present') {
+      if (!presentIds.includes(stableId)) presentIds.push(stableId);
+    } else {
+      presentIds = presentIds.filter((pid: string) => pid !== stableId);
+    }
+
+    const usersIn = presentIds.join(',');
+
+    const saved = await prismaAny.attendance.upsert({
+      where: { year_month: { year: Body.year, month: Body.month } },
+      update: { usersIn },
+      create: { year: Body.year, month: Body.month, usersIn },
+    });
+
+    // Recompute this member's attendancePct across ALL attendance records
+    // and write it back to MemberRecord so GET /members is always current.
+    if (memberRecordId) {
+      const allAttendance = await prismaAny.attendance.findMany({ select: { usersIn: true } });
+      const presentCount = allAttendance.filter((a: any) =>
+        a.usersIn.split(',').map((s: string) => s.trim()).filter(Boolean).includes(stableId)
+      ).length;
+      const pct = presentCount * 10;
+      await prisma.memberRecord.update({
+        where: { id: memberRecordId },
+        data: { attendancePct: String(pct) },
+      });
+    }
+
+    return {
+      id: saved.id,
+      year: saved.year,
+      month: saved.month,
+      status: Body.status,
+      presentCount: presentIds.length,
     };
   });
 
