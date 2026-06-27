@@ -4,6 +4,7 @@ import type { IconType } from "react-icons";
 import { Role } from "./types/Role";
 import {
   FiCheck,
+  FiCheckCircle,
   FiCreditCard,
   FiEye,
   FiFilter,
@@ -16,6 +17,7 @@ import {
   FiTrash2,
   FiUsers,
   FiX,
+  FiXCircle,
 } from "react-icons/fi";
 
 import { apiGet, apiPost, clearToken } from "./api";
@@ -41,6 +43,21 @@ type MemberListItem = {
   voteRole: string;
   voteStatus: string;
 };
+
+type AttendanceRow = {
+  id: string;
+  year: number;
+  month: number;
+  usersIn: string;
+};
+
+const MONTHS = [
+  "January", "February", "March", "April",
+  "May", "June", "July", "August",
+  "September", "October", "November", "December",
+];
+
+const CURRENT_YEAR = new Date().getFullYear();
 
 type ApiMember = {
   id: string;
@@ -94,6 +111,8 @@ export default function MemberPage() {
   const navigate = useNavigate();
   const [members, setMembers] = useState<MemberListItem[]>([]);
   const [membersLoading, setMembersLoading] = useState(true);
+  const [attendanceRows, setAttendanceRows] = useState<AttendanceRow[]>([]);
+  const [hoveredMemberId, setHoveredMemberId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MemberListItem | null>(null);
@@ -114,6 +133,16 @@ export default function MemberPage() {
     return () => { active = false; };
   }, []);
 
+  // Fetch all attendance records so the hover popover can show which months
+  // each member was present without an extra request per member.
+  useEffect(() => {
+    let active = true;
+    apiGet<AttendanceRow[]>("/admin/database/attendance")
+      .then((rows) => { if (active) setAttendanceRows(rows); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+
   // Close the action dropdown when the admin clicks anywhere outside it.
   useEffect(() => {
     if (!openMenuId) return undefined;
@@ -125,6 +154,19 @@ export default function MemberPage() {
     document.addEventListener("mousedown", onOutsideClick);
     return () => document.removeEventListener("mousedown", onOutsideClick);
   }, [openMenuId]);
+
+  // Returns a 12-element boolean array (index 0 = January) indicating
+  // whether the member was present in each month of CURRENT_YEAR.
+  function getMemberMonthlyAttendance(memberId: string): boolean[] {
+    const thisYearRows = attendanceRows.filter((row) => row.year === CURRENT_YEAR);
+    return MONTHS.map((_, index) => {
+      const monthNum = index + 1;
+      const row = thisYearRows.find((r) => r.month === monthNum);
+      if (!row) return false;
+      const ids = row.usersIn.split(",").map((s) => s.trim()).filter(Boolean);
+      return ids.includes(memberId);
+    });
+  }
 
   function handleViewMember(member: MemberListItem) {
     setOpenMenuId(null);
@@ -387,7 +429,11 @@ export default function MemberPage() {
                     {member.phone}
                   </a>
 
-                  <div className="member-page__attendance-card">
+                  <div
+                    className="member-page__attendance-card"
+                    onMouseEnter={() => setHoveredMemberId(member.id)}
+                    onMouseLeave={() => setHoveredMemberId(null)}
+                  >
                     <span className="member-page__attendance-title">Monthly Attendance</span>
                     <div className="member-page__attendance-line">
                       <span className="member-page__check member-page__check--green">
@@ -401,6 +447,33 @@ export default function MemberPage() {
                       </span>
                       <strong>{member.attendancePercent}%</strong>
                     </div>
+
+                    {hoveredMemberId === member.id && (
+                      <div className="member-page__attendance-popup">
+                        <p className="member-page__attendance-popup-year">{CURRENT_YEAR}</p>
+                        <ul className="member-page__attendance-popup-list">
+                          {MONTHS.map((monthName, index) => {
+                            const presence = getMemberMonthlyAttendance(member.id);
+                            const isPresent = presence[index];
+                            return (
+                              <li
+                                key={monthName}
+                                className={[
+                                  "member-page__attendance-popup-row",
+                                  isPresent ? "is-present" : "is-absent",
+                                ].join(" ")}
+                              >
+                                <span>{monthName}</span>
+                                {isPresent
+                                  ? <FiCheckCircle size={18} className="member-page__attendance-popup-icon member-page__attendance-popup-icon--present" />
+                                  : <FiXCircle size={18} className="member-page__attendance-popup-icon member-page__attendance-popup-icon--absent" />
+                                }
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    )}
                   </div>
 
                   <div className="member-page__vote-card">

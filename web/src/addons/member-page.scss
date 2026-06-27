@@ -3,6 +3,77 @@
 }
 
 
+/* ── Attendance hover popover ─────────────────────────────── */
+.member-page__attendance-card {
+  position: relative; // already exists — ensure this is set
+}
+
+.member-page__attendance-popup {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  width: 220px;
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid rgba(20, 57, 40, 0.12);
+  border-radius: 16px;
+  box-shadow: 0 12px 32px rgba(18, 38, 28, 0.14);
+}
+
+.member-page__attendance-popup-year {
+  margin: 0 0 10px;
+  color: var(--admin-subtle);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.member-page__attendance-popup-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.member-page__attendance-popup-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  border-radius: 10px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--admin-text);
+  background: #f8faf9;
+
+  &.is-present {
+    background: rgba(22, 163, 74, 0.06);
+    color: #14532d;
+  }
+
+  &.is-absent {
+    background: rgba(239, 68, 68, 0.05);
+    color: #7f1d1d;
+  }
+}
+
+.member-page__attendance-popup-icon {
+  flex: 0 0 auto;
+
+  &--present {
+    color: #16a34a;
+  }
+
+  &--absent {
+    color: #ef4444;
+  }
+}
+
 /* ── Action dropdown ─────────────────────────────────────── */
 .member-page__action-wrap {
   position: relative;
