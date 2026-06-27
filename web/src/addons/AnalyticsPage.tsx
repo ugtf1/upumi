@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import type { IconType } from "react-icons";
 import {
   FiBell,
   FiCalendar,
@@ -14,8 +13,6 @@ import {
   FiPlus,
   FiSearch,
   FiSettings,
-  FiTrendingDown,
-  FiTrendingUp,
   FiUsers,
   FiX,
 } from "react-icons/fi";
@@ -48,15 +45,6 @@ type FinancialSnapshot = {
   businessAccount: number;
   fundraiserAccount: number;
   balances: { label: string; amount: number }[];
-};
-
-type SummaryCardData = {
-  title: string;
-  subtitle: string;
-  value: string;
-  delta: string;
-  trend: "up" | "down";
-  icon: IconType;
 };
 
 const MONTHLY_VISUAL_DATA = [
@@ -112,6 +100,20 @@ type AdminMemberResponse = {
   lastName?: string | null;
   email?: string | null;
   phone?: string | null;
+  status?: string | null;
+};
+
+type TransactionApiRow = {
+  id: string;
+  amount: string | number;
+};
+
+type MonthlyDueApiRow = {
+  id: string;
+  memberRecordId: string;
+  year: number;
+  month: number;
+  duesPaid: string | number;
 };
 
 const MONTH_OPTIONS: { value: number; label: string }[] = [
@@ -137,41 +139,6 @@ function memberDisplayName(member: AdminMemberResponse): string {
   const fullName = [member.firstName, member.lastName].filter(Boolean).join(" ").trim();
   return fullName || member.email || member.phone || "Unnamed member";
 }
-
-const SUMMARY_CARDS: SummaryCardData[] = [
-  {
-    title: "Total Members",
-    subtitle: "This month",
-    value: "109",
-    delta: "0.43%",
-    trend: "up",
-    icon: FiUsers,
-  },
-  {
-    title: "Active Members",
-    subtitle: "This month",
-    value: "90",
-    delta: "0.43%",
-    trend: "up",
-    icon: FiUsers,
-  },
-  {
-    title: "Total Revenue",
-    subtitle: "This month",
-    value: "$10,265",
-    delta: "0.43%",
-    trend: "up",
-    icon: FiDollarSign,
-  },
-  {
-    title: "Pending Payment",
-    subtitle: "This month",
-    value: "$165",
-    delta: "0.98%",
-    trend: "down",
-    icon: FiClock,
-  },
-];
 
 const YEAR_OPTIONS = [2024, 2025, 2026, 2027];
 
@@ -215,6 +182,10 @@ export default function AdminPage() {
   const location = useLocation();
 
   const [ledgerSummary, setLedgerSummary] = useState<LedgerSummaryResponse | null>(null);
+  const [totalMembers, setTotalMembers] = useState<number | null>(null);
+  const [activeMembers, setActiveMembers] = useState<number | null>(null);
+  const [totalRevenue, setTotalRevenue] = useState<number | null>(null);
+  const [pendingPayment, setPendingPayment] = useState<number | null>(null);
   const [year, setYear] = useState(2026);
   const [search, setSearch] = useState("");
   const [hostingScheduleRows, setHostingScheduleRows] = useState<HostingScheduleApiRow[]>([]);
@@ -234,6 +205,60 @@ export default function AdminPage() {
   const [activeNav, setActiveNav] = useState("Dashboard");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  // Fetch stat card data in parallel on mount.
+  useEffect(() => {
+    let active = true;
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth() + 1;
+
+    // 1. Total + Active members
+    apiGet<AdminMemberResponse[]>("/admin/members")
+      .then((members) => {
+        if (!active) return;
+        setTotalMembers(members.length);
+        setActiveMembers(members.filter((m) => String(m.status ?? "").toLowerCase() === "active").length);
+      })
+      .catch(() => {});
+
+    // 2. Total Revenue = sum of all transactions + all monthly dues paid
+    Promise.all([
+      apiGet<TransactionApiRow[]>("/admin/database/transactions"),
+      apiGet<MonthlyDueApiRow[]>("/admin/database/dues"),
+    ])
+      .then(([transactions, dues]) => {
+        if (!active) return;
+        const txSum = transactions.reduce((sum, r) => sum + Number(r.amount ?? 0), 0);
+        const duesSum = dues.reduce((sum, r) => sum + Number(r.duesPaid ?? 0), 0);
+        setTotalRevenue(txSum + duesSum);
+      })
+      .catch(() => {});
+
+    // 3. Pending = members who have NOT paid dues for the current month/year.
+    // We fetch every MonthlyDue row, count members with a duesPaid > 0 entry
+    // for the current month, then multiply the unpaid count by the standard
+    // monthly dues ($20 default) to get the expected-but-missing amount.
+    Promise.all([
+      apiGet<AdminMemberResponse[]>("/admin/members"),
+      apiGet<MonthlyDueApiRow[]>("/admin/database/dues"),
+    ])
+      .then(([members, dues]) => {
+        if (!active) return;
+        const activeCount = members.filter((m) => String(m.status ?? "").toLowerCase() === "active").length;
+        const paidThisMonth = new Set(
+          dues
+            .filter((d) => d.year === currentYear && d.month === currentMonth && Number(d.duesPaid) > 0)
+            .map((d) => d.memberRecordId)
+        ).size;
+        const unpaidCount = Math.max(0, activeCount - paidThisMonth);
+        // Standard monthly dues amount — adjust if your org uses a different default.
+        const STANDARD_DUES = 20;
+        setPendingPayment(unpaidCount * STANDARD_DUES);
+      })
+      .catch(() => {});
+
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -610,7 +635,32 @@ export default function AdminPage() {
         {loading && <div className="admin-dashboard__alert">Loading live dashboard data...</div>}
 
         <section className="admin-dashboard__stats">
-          {SUMMARY_CARDS.map((card) => {
+          {([
+            {
+              title: "Total Members",
+              subtitle: "All registered members",
+              value: totalMembers === null ? "—" : totalMembers.toLocaleString(),
+              icon: FiUsers,
+            },
+            {
+              title: "Active Members",
+              subtitle: "Currently active",
+              value: activeMembers === null ? "—" : activeMembers.toLocaleString(),
+              icon: FiUsers,
+            },
+            {
+              title: "Total Revenue",
+              subtitle: "Transactions + dues paid",
+              value: totalRevenue === null ? "—" : `$${totalRevenue.toLocaleString()}`,
+              icon: FiDollarSign,
+            },
+            {
+              title: "Pending Payment",
+              subtitle: `Expected dues — ${new Date().toLocaleString("default", { month: "long" })} ${new Date().getFullYear()}`,
+              value: pendingPayment === null ? "—" : `$${pendingPayment.toLocaleString()}`,
+              icon: FiClock,
+            },
+          ] as { title: string; subtitle: string; value: string; icon: React.ComponentType<{ size?: number }> }[]).map((card) => {
             const Icon = card.icon;
             return (
               <article key={card.title} className="admin-dashboard__stat-card">
@@ -622,9 +672,6 @@ export default function AdminPage() {
                   <p>{card.subtitle}</p>
                   <div className="admin-dashboard__stat-footer">
                     <strong>{card.value}</strong>
-                    <span className={`admin-dashboard__trend admin-dashboard__trend--${card.trend}`}>
-                      {card.delta} {card.trend === "up" ? <FiTrendingUp size={14} /> : <FiTrendingDown size={14} />}
-                    </span>
                   </div>
                 </div>
               </article>
