@@ -3,7 +3,99 @@
 }
 
 
+/* ── Action dropdown ─────────────────────────────────────── */
+.member-page__action-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
 
+.member-page__more-button.is-active {
+  background: rgba(20, 57, 40, 0.08);
+  border-radius: 8px;
+}
+
+.member-page__action-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 100;
+  min-width: 140px;
+  padding: 6px 0;
+  background: #fff;
+  border: 1px solid rgba(20, 57, 40, 0.12);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(18, 38, 28, 0.12);
+}
+
+.member-page__action-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  color: var(--admin-text);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+
+  &:hover {
+    background: #f4faf6;
+  }
+
+  &--danger {
+    color: #e53e3e;
+
+    &:hover {
+      background: #fff5f5;
+    }
+  }
+}
+
+/* ── Delete confirmation modal ───────────────────────────── */
+.member-page__delete-panel {
+  max-width: 420px;
+  text-align: center;
+  gap: 12px;
+}
+
+.member-page__delete-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: #fff5f5;
+  color: #e53e3e;
+}
+
+.member-page__delete-title {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.member-page__delete-body {
+  margin: 0;
+  color: var(--admin-subtle);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+/* Danger variant for the confirm button */
+.admin-dashboard__modal-button--danger {
+  background: #e53e3e;
+  color: #fff;
+  border: none;
+
+  &:hover:not(:disabled) {
+    background: #c53030;
+  }
+}
 
 .member-page__main {
   gap: 24px;

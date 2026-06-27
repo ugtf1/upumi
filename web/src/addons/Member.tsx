@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { IconType } from "react-icons";
 import { Role } from "./types/Role";
 import {
   FiCheck,
   FiCreditCard,
+  FiEye,
   FiFilter,
   FiHome,
   FiLogOut,
@@ -12,6 +13,7 @@ import {
   FiPlus,
   FiSearch,
   FiSettings,
+  FiTrash2,
   FiUsers,
   FiX,
 } from "react-icons/fi";
@@ -93,11 +95,15 @@ export default function MemberPage() {
   const [members, setMembers] = useState<MemberListItem[]>([]);
   const [membersLoading, setMembersLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<MemberListItem | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [isAddMemberModalOpen, setIsAddMemberModalOpen] = useState(false);
   const [addMemberForm, setAddMemberForm] = useState<AddMemberForm>(INITIAL_ADD_MEMBER_FORM);
   const [addMemberLoading, setAddMemberLoading] = useState(false);
   const [addMemberError, setAddMemberError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -107,6 +113,55 @@ export default function MemberPage() {
       .finally(() => { if (active) setMembersLoading(false); });
     return () => { active = false; };
   }, []);
+
+  // Close the action dropdown when the admin clicks anywhere outside it.
+  useEffect(() => {
+    if (!openMenuId) return undefined;
+    function onOutsideClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenuId(null);
+      }
+    }
+    document.addEventListener("mousedown", onOutsideClick);
+    return () => document.removeEventListener("mousedown", onOutsideClick);
+  }, [openMenuId]);
+
+  function handleViewMember(member: MemberListItem) {
+    setOpenMenuId(null);
+    navigate(`/admin/member/${member.id}`);
+  }
+
+  function handleDeletePrompt(member: MemberListItem) {
+    setOpenMenuId(null);
+    setDeleteTarget(member);
+  }
+
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    try {
+      // The generic adminDatabaseRoutes plugin handles DELETE /:table/:id
+      // and is mounted at /api/admin/database — so deleting a user is:
+      // DELETE /api/admin/database/users/:id
+      const { API_BASE, getToken } = await import("./api");
+      const token = getToken();
+      await fetch(`${API_BASE}/admin/database/users/${deleteTarget.id}`, {
+        method: "DELETE",
+        headers: {
+          "content-type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      setMembers((current) => current.filter((m) => m.id !== deleteTarget.id));
+      setToast(`${deleteTarget.name} has been removed`);
+    } catch {
+      setToast("Failed to delete member — please try again");
+    } finally {
+      setDeleteLoading(false);
+      setDeleteTarget(null);
+      window.setTimeout(() => setToast(null), 3000);
+    }
+  }
 
   function handleOpenAddMemberModal() {
     setAddMemberForm(INITIAL_ADD_MEMBER_FORM);
@@ -359,13 +414,47 @@ export default function MemberPage() {
                     <small>{member.voteStatus}</small>
                   </div>
 
-                  <button
-                    type="button"
-                    className="member-page__more-button"
-                    aria-label={`More actions for ${member.name}`}
+                  <div
+                    className="member-page__action-wrap"
+                    ref={openMenuId === member.id ? menuRef : null}
                   >
-                    <FiMoreVertical size={22} />
-                  </button>
+                    <button
+                      type="button"
+                      className={[
+                        "member-page__more-button",
+                        openMenuId === member.id ? "is-active" : "",
+                      ].filter(Boolean).join(" ")}
+                      aria-label={`More actions for ${member.name}`}
+                      aria-expanded={openMenuId === member.id}
+                      aria-haspopup="menu"
+                      onClick={() => setOpenMenuId(openMenuId === member.id ? null : member.id)}
+                    >
+                      <FiMoreVertical size={22} />
+                    </button>
+
+                    {openMenuId === member.id && (
+                      <div className="member-page__action-menu" role="menu">
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="member-page__action-item"
+                          onClick={() => handleViewMember(member)}
+                        >
+                          <FiEye size={15} />
+                          <span>View</span>
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="member-page__action-item member-page__action-item--danger"
+                          onClick={() => handleDeletePrompt(member)}
+                        >
+                          <FiTrash2 size={15} />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </article>
               ))
             )}
@@ -490,6 +579,42 @@ export default function MemberPage() {
                 disabled={!isAddMemberFormValid || addMemberLoading}
               >
                 {addMemberLoading ? "Saving..." : "Save Member"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="admin-dashboard__modal" role="dialog" aria-modal="true" aria-labelledby="delete-member-modal-title">
+          <div className="admin-dashboard__modal-backdrop" onClick={() => !deleteLoading && setDeleteTarget(null)} />
+          <div className="admin-dashboard__modal-panel member-page__delete-panel">
+            <div className="member-page__delete-icon">
+              <FiTrash2 size={28} />
+            </div>
+            <h2 id="delete-member-modal-title" className="member-page__delete-title">
+              Remove Member
+            </h2>
+            <p className="member-page__delete-body">
+              Are you sure you want to remove <strong>{deleteTarget.name}</strong>? This action
+              cannot be undone.
+            </p>
+            <div className="admin-dashboard__modal-actions">
+              <button
+                type="button"
+                className="admin-dashboard__modal-button admin-dashboard__modal-button--secondary"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleteLoading}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="admin-dashboard__modal-button admin-dashboard__modal-button--danger"
+                onClick={handleConfirmDelete}
+                disabled={deleteLoading}
+              >
+                {deleteLoading ? "Removing..." : "Yes, Remove"}
               </button>
             </div>
           </div>
