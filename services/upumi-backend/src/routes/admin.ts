@@ -244,7 +244,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         totalPaid: decimalToNumber(user.totalPaid) ?? 0,
         outstanding: decimalToNumber(user.outstanding) ?? 0,
         monthlyDues: [],
-        rawJson: {},
+        rawJson: '{}',
       };
     }
 
@@ -686,7 +686,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
             phone: user.phone ?? null,
             email: user.email ?? null,
             userId: user.id,
-            rawJson: {},
+            rawJson: '{}',
           } as any,
         });
         memberRecordId = created.id;
@@ -722,7 +722,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
               phone: user.phone ?? null,
               email: user.email ?? null,
               userId: user.id,
-              rawJson: {},
+              rawJson: '{}',
             } as any,
           });
           memberRecordId = created.id;
