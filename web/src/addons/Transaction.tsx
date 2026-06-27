@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { IconType } from "react-icons";
 import {
@@ -29,7 +29,6 @@ type NavigationItem = {
 type SummaryCard = {
   title: string;
   amount: string;
-  delta: string;
   tone: "income" | "expense";
 };
 
@@ -66,17 +65,37 @@ type TransactionFormState = {
   paymentDate: string;
 };
 
+// Shape returned by GET /admin/database/expenses (raw Prisma row).
+type ExpenseApiRow = {
+  id: string;
+  reason: string;
+  title: string;
+  amount: string | number;
+  date: string;
+  createdAt?: string;
+};
+
+type ExpenseRow = {
+  id: string;
+  date: string;
+  reason: string;
+  title: string;
+  amount: string;
+};
+
+type ExpenseFormState = {
+  reason: string;
+  title: string;
+  amount: string;
+  date: string;
+};
+
 const TRANSACTION_TITLE_OPTIONS = [
   "Raffle",
   "Insurance",
   "Wrapper",
   "UPUA 25 Raffle",
   "Levy",
-];
-
-const SUMMARY_CARDS: SummaryCard[] = [
-  { title: "Income", amount: "$980", delta: "+50.5%", tone: "income" },
-  { title: "Expense", amount: "$240", delta: "+12.5%", tone: "expense" },
 ];
 
 const YEAR_OPTIONS = [2024, 2025, 2026, 2027];
@@ -91,18 +110,29 @@ export default function TransactionPage() {
   const [transactionRows, setTransactionRows] = useState<TransactionRow[]>([]);
   const [txLoading, setTxLoading] = useState(true);
   const [txError, setTxError] = useState<string | null>(null);
+  const [expenseRows, setExpenseRows] = useState<ExpenseRow[]>([]);
+  const [expLoading, setExpLoading] = useState(true);
+  const [expError, setExpError] = useState<string | null>(null);
   const [sheetUrl, setSheetUrl] = useState("");
   const [memberCount, setMemberCount] = useState("0");
   const [memberStatus, setMemberStatus] = useState("All Members");
   const [activeTab, setActiveTab] = useState<"Income" | "Expense">("Income");
   const [selectedFileName, setSelectedFileName] = useState("No file chosen");
+  const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const [isAddTransactionModalOpen, setIsAddTransactionModalOpen] = useState(false);
+  const [isAddExpenseModalOpen, setIsAddExpenseModalOpen] = useState(false);
   const [transactionForm, setTransactionForm] = useState<TransactionFormState>({
     userId: "",
     fullName: "",
     title: "",
     amount: "",
     paymentDate: "",
+  });
+  const [expenseForm, setExpenseForm] = useState<ExpenseFormState>({
+    reason: "",
+    title: "",
+    amount: "",
+    date: "",
   });
   const [userOptions, setUserOptions] = useState<UserOption[]>([]);
   const [userSearch, setUserSearch] = useState("");
@@ -111,7 +141,10 @@ export default function TransactionPage() {
   const [usersError, setUsersError] = useState<string | null>(null);
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [expenseSaveLoading, setExpenseSaveLoading] = useState(false);
+  const [expenseSaveError, setExpenseSaveError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const addMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!isAddTransactionModalOpen) return undefined;
@@ -207,6 +240,40 @@ export default function TransactionPage() {
     return () => { active = false; };
   }, []);
 
+  // Close Add New dropdown on outside click.
+  useEffect(() => {
+    if (!isAddMenuOpen) return undefined;
+    function onOutside(e: MouseEvent) {
+      if (addMenuRef.current && !addMenuRef.current.contains(e.target as Node)) {
+        setIsAddMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onOutside);
+    return () => document.removeEventListener("mousedown", onOutside);
+  }, [isAddMenuOpen]);
+
+  // Fetch all expenses on mount.
+  useEffect(() => {
+    let active = true;
+    setExpLoading(true);
+    apiGet<ExpenseApiRow[]>("/admin/database/expenses")
+      .then((rows) => {
+        if (!active) return;
+        setExpenseRows(
+          rows.map((row) => ({
+            id: row.id,
+            date: new Date(row.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+            reason: row.reason,
+            title: row.title,
+            amount: `$${Number(row.amount).toLocaleString()}`,
+          }))
+        );
+      })
+      .catch((error: Error) => { if (active) setExpError(error?.message ?? "Failed to load expenses"); })
+      .finally(() => { if (active) setExpLoading(false); });
+    return () => { active = false; };
+  }, []);
+
   const visibleRows = useMemo(() => {
     const query = search.trim().toLowerCase();
     return transactionRows.filter((row) => {
@@ -222,6 +289,24 @@ export default function TransactionPage() {
     return userOptions.filter((u) => u.fullName.toLowerCase().includes(query));
   }, [userOptions, userSearch]);
 
+  const visibleExpenseRows = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return expenseRows.filter((row) => {
+      if (!query) return true;
+      return `${row.date} ${row.reason} ${row.title} ${row.amount}`.toLowerCase().includes(query);
+    });
+  }, [search, expenseRows]);
+
+  const incomeTotal = useMemo(() => {
+    const total = transactionRows.reduce((sum, row) => sum + Number(row.amount.replace(/[$,]/g, "")), 0);
+    return `$${total.toLocaleString()}`;
+  }, [transactionRows]);
+
+  const expenseTotal = useMemo(() => {
+    const total = expenseRows.reduce((sum, row) => sum + Number(row.amount.replace(/[$,]/g, "")), 0);
+    return `$${total.toLocaleString()}`;
+  }, [expenseRows]);
+
   function handleLogout() {
     clearToken();
     navigate("/login");
@@ -235,8 +320,71 @@ export default function TransactionPage() {
   }
 
   function handleOpenTransactionModal() {
+    setIsAddMenuOpen(false);
     resetTransactionForm();
     setIsAddTransactionModalOpen(true);
+  }
+
+  function handleOpenExpenseModal() {
+    setIsAddMenuOpen(false);
+    setExpenseForm({ reason: "", title: "", amount: "", date: "" });
+    setExpenseSaveError(null);
+    setIsAddExpenseModalOpen(true);
+  }
+
+  function handleCloseExpenseModal() {
+    setIsAddExpenseModalOpen(false);
+    setExpenseSaveError(null);
+  }
+
+  function handleExpenseFormChange(field: keyof ExpenseFormState, value: string) {
+    setExpenseForm((f) => ({ ...f, [field]: value }));
+  }
+
+  async function handleSaveExpense() {
+    setExpenseSaveError(null);
+
+    if (!expenseForm.reason.trim()) { setExpenseSaveError("Enter a reason"); return; }
+    if (!expenseForm.title.trim()) { setExpenseSaveError("Enter a title"); return; }
+    if (!expenseForm.amount.trim()) { setExpenseSaveError("Enter an amount"); return; }
+    if (!expenseForm.date.trim()) { setExpenseSaveError("Enter a date"); return; }
+
+    const numericAmount = Number(expenseForm.amount.replace(/[$,]/g, "").trim());
+    if (Number.isNaN(numericAmount)) { setExpenseSaveError("Amount must be a number"); return; }
+
+    const parsedDate = new Date(expenseForm.date.trim());
+    if (Number.isNaN(parsedDate.getTime())) { setExpenseSaveError("Enter a valid date"); return; }
+
+    setExpenseSaveLoading(true);
+
+    try {
+      const saved = await apiPost<ExpenseApiRow>("/admin/database/expenses", {
+        reason: expenseForm.reason.trim(),
+        title: expenseForm.title.trim(),
+        amount: numericAmount,
+        date: parsedDate.toISOString(),
+      });
+
+      setExpenseRows((current) => [
+        {
+          id: saved.id ?? `exp-${Date.now()}`,
+          date: parsedDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+          reason: expenseForm.reason.trim(),
+          title: expenseForm.title.trim(),
+          amount: `$${numericAmount.toLocaleString()}`,
+        },
+        ...current,
+      ]);
+
+      setActiveTab("Expense");
+      setIsAddExpenseModalOpen(false);
+      setToast("Expense added successfully");
+      window.setTimeout(() => setToast(null), 3000);
+    } catch (error) {
+      setExpenseSaveError(error instanceof Error ? error.message : "Failed to save expense");
+    } finally {
+      setExpenseSaveLoading(false);
+    }
   }
 
   function handleCloseTransactionModal() {
@@ -431,10 +579,39 @@ export default function TransactionPage() {
               <FiFilter size={18} />
             </button>
 
-            <button type="button" className="transaction-page__add-button" onClick={handleOpenTransactionModal}>
-              <FiPlus size={18} />
-              <span>Add New</span>
-            </button>
+            <div className="transaction-page__add-wrap" ref={addMenuRef}>
+              <button
+                type="button"
+                className="transaction-page__add-button"
+                onClick={() => setIsAddMenuOpen((prev) => !prev)}
+                aria-haspopup="menu"
+                aria-expanded={isAddMenuOpen}
+              >
+                <FiPlus size={18} />
+                <span>Add New</span>
+              </button>
+
+              {isAddMenuOpen && (
+                <div className="transaction-page__add-menu" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="transaction-page__add-menu-item"
+                    onClick={handleOpenTransactionModal}
+                  >
+                    Add Transaction
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="transaction-page__add-menu-item"
+                    onClick={handleOpenExpenseModal}
+                  >
+                    Add Expense
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </section>
 
@@ -526,13 +703,15 @@ export default function TransactionPage() {
         </section>
 
         <section className="admin-dashboard__stats transaction-page__summary">
-          {SUMMARY_CARDS.map((card) => (
+          {([
+            { title: "Income", amount: incomeTotal, tone: "income" as const },
+            { title: "Expense", amount: expenseTotal, tone: "expense" as const },
+          ] as SummaryCard[]).map((card) => (
             <article key={card.title} className="admin-dashboard__stat-card transaction-page__summary-card">
               <div className="transaction-page__summary-head">
                 <div className="admin-dashboard__stat-icon transaction-page__summary-icon">
                   <FiDollarSign size={20} />
                 </div>
-                <span className={`transaction-page__summary-delta is-${card.tone}`}>{card.delta}</span>
               </div>
 
               <div className="admin-dashboard__stat-copy transaction-page__summary-copy">
@@ -557,57 +736,97 @@ export default function TransactionPage() {
             ))}
           </div>
 
-          <div className="transaction-page__section-copy">
-            <h2>Recent Transactions</h2>
-            <p>{txLoading ? "Loading..." : `${visibleRows.length} transaction${visibleRows.length !== 1 ? "s" : ""}`}</p>
-          </div>
-
-          <div className="admin-dashboard__table-shell transaction-page__table-shell">
-            {txError ? (
-              <div className="admin-dashboard__modal-error">{txError}</div>
-            ) : (
-              <div className="admin-dashboard__table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Full Name</th>
-                      <th>Title</th>
-                      <th>Amount</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {txLoading ? (
-                      <tr>
-                        <td colSpan={5} className="transaction-page__table-state">
-                          Loading transactions...
-                        </td>
-                      </tr>
-                    ) : !visibleRows.length ? (
-                      <tr>
-                        <td colSpan={5} className="transaction-page__table-state">
-                          {search.trim() ? "No transactions match your search." : "No transactions recorded yet."}
-                        </td>
-                      </tr>
-                    ) : (
-                      visibleRows.map((row) => (
-                        <tr key={row.id}>
-                          <td>{row.date}</td>
-                          <td>{row.fullName}</td>
-                          <td>{row.title}</td>
-                          <td>{row.amount}</td>
-                          <td>
-                            <span className="transaction-page__status">{row.status}</span>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+          {activeTab === "Income" ? (
+            <>
+              <div className="transaction-page__section-copy">
+                <h2>Recent Transactions</h2>
+                <p>{txLoading ? "Loading..." : `${visibleRows.length} transaction${visibleRows.length !== 1 ? "s" : ""}`}</p>
               </div>
-            )}
-          </div>
+
+              <div className="admin-dashboard__table-shell transaction-page__table-shell">
+                {txError ? (
+                  <div className="admin-dashboard__modal-error">{txError}</div>
+                ) : (
+                  <div className="admin-dashboard__table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Full Name</th>
+                          <th>Title</th>
+                          <th>Amount</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {txLoading ? (
+                          <tr><td colSpan={5} className="transaction-page__table-state">Loading transactions...</td></tr>
+                        ) : !visibleRows.length ? (
+                          <tr><td colSpan={5} className="transaction-page__table-state">
+                            {search.trim() ? "No transactions match your search." : "No transactions recorded yet."}
+                          </td></tr>
+                        ) : (
+                          visibleRows.map((row) => (
+                            <tr key={row.id}>
+                              <td>{row.date}</td>
+                              <td>{row.fullName}</td>
+                              <td>{row.title}</td>
+                              <td>{row.amount}</td>
+                              <td><span className="transaction-page__status">{row.status}</span></td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="transaction-page__section-copy">
+                <h2>Recent Expenses</h2>
+                <p>{expLoading ? "Loading..." : `${visibleExpenseRows.length} expense${visibleExpenseRows.length !== 1 ? "s" : ""}`}</p>
+              </div>
+
+              <div className="admin-dashboard__table-shell transaction-page__table-shell">
+                {expError ? (
+                  <div className="admin-dashboard__modal-error">{expError}</div>
+                ) : (
+                  <div className="admin-dashboard__table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Reason</th>
+                          <th>Title</th>
+                          <th>Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {expLoading ? (
+                          <tr><td colSpan={4} className="transaction-page__table-state">Loading expenses...</td></tr>
+                        ) : !visibleExpenseRows.length ? (
+                          <tr><td colSpan={4} className="transaction-page__table-state">
+                            {search.trim() ? "No expenses match your search." : "No expenses recorded yet."}
+                          </td></tr>
+                        ) : (
+                          visibleExpenseRows.map((row) => (
+                            <tr key={row.id}>
+                              <td>{row.date}</td>
+                              <td>{row.reason}</td>
+                              <td>{row.title}</td>
+                              <td>{row.amount}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </section>
       </main>
 
@@ -765,6 +984,111 @@ export default function TransactionPage() {
                 }
               >
                 {saveLoading ? "Saving..." : "Save Transaction"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isAddExpenseModalOpen && (
+        <div className="admin-dashboard__modal" role="dialog" aria-modal="true" aria-labelledby="expense-modal-title">
+          <div className="admin-dashboard__modal-backdrop" onClick={handleCloseExpenseModal} />
+
+          <div className="admin-dashboard__modal-panel transaction-page__modal-panel">
+            <h2 id="expense-modal-title" className="admin-dashboard__modal-title">
+              Add Expense
+            </h2>
+
+            {expenseSaveError && (
+              <div className="admin-dashboard__modal-error">{expenseSaveError}</div>
+            )}
+
+            <div className="transaction-page__modal-grid">
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="expense-reason" className="admin-dashboard__modal-label">
+                  Reason *
+                </label>
+                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain">
+                  <input
+                    id="expense-reason"
+                    value={expenseForm.reason}
+                    onChange={(e) => handleExpenseFormChange("reason", e.target.value)}
+                    placeholder="e.g. Hall rental"
+                    aria-label="Expense reason"
+                  />
+                </div>
+              </div>
+
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="expense-title" className="admin-dashboard__modal-label">
+                  Title *
+                </label>
+                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain">
+                  <input
+                    id="expense-title"
+                    value={expenseForm.title}
+                    onChange={(e) => handleExpenseFormChange("title", e.target.value)}
+                    placeholder="e.g. Venue"
+                    aria-label="Expense title"
+                  />
+                </div>
+              </div>
+
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="expense-amount" className="admin-dashboard__modal-label">
+                  Amount *
+                </label>
+                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain">
+                  <input
+                    id="expense-amount"
+                    type="number"
+                    inputMode="decimal"
+                    value={expenseForm.amount}
+                    onChange={(e) => handleExpenseFormChange("amount", e.target.value)}
+                    placeholder="0"
+                    aria-label="Expense amount"
+                  />
+                </div>
+              </div>
+
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="expense-date" className="admin-dashboard__modal-label">
+                  Date *
+                </label>
+                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain">
+                  <input
+                    id="expense-date"
+                    type="date"
+                    value={expenseForm.date}
+                    onChange={(e) => handleExpenseFormChange("date", e.target.value)}
+                    aria-label="Expense date"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="admin-dashboard__modal-actions">
+              <button
+                type="button"
+                className="admin-dashboard__modal-button admin-dashboard__modal-button--secondary"
+                onClick={handleCloseExpenseModal}
+                disabled={expenseSaveLoading}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="admin-dashboard__modal-button admin-dashboard__modal-button--primary"
+                onClick={handleSaveExpense}
+                disabled={
+                  !expenseForm.reason.trim() ||
+                  !expenseForm.title.trim() ||
+                  !expenseForm.amount.trim() ||
+                  !expenseForm.date.trim() ||
+                  expenseSaveLoading
+                }
+              >
+                {expenseSaveLoading ? "Saving..." : "Save Expense"}
               </button>
             </div>
           </div>

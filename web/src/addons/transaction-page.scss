@@ -4,6 +4,41 @@
   color: var(--admin-brand-dark);
 }
 
+.transaction-page__add-wrap {
+  position: relative;
+}
+
+.transaction-page__add-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 100;
+  min-width: 160px;
+  padding: 6px 0;
+  background: #fff;
+  border: 1px solid rgba(20, 57, 40, 0.12);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(18, 38, 28, 0.12);
+}
+
+.transaction-page__add-menu-item {
+  width: 100%;
+  display: block;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  color: var(--admin-text);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+
+  &:hover {
+    background: #f4faf6;
+  }
+}
+
 .transaction-page__table-state {
   padding: 32px 16px !important;
   text-align: center;
