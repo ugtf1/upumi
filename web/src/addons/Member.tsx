@@ -134,34 +134,13 @@ export default function MemberPage() {
     return () => { active = false; };
   }, []);
 
-  // Fetch all attendance records.
+  // Fetch all attendance records. Attendance percent and hover details are
+  // computed at render time from this data, so there's no race condition
+  // between the members fetch and the attendance fetch.
   useEffect(() => {
     let active = true;
     apiGet<AttendanceRow[]>("/admin/database/attendance")
-      .then((rows) => {
-        if (!active) return;
-        setAttendanceRows(rows);
-
-        // Recompute attendance percent for every member from the real
-        // attendance data, overriding the stale attendancePct from the API.
-        // Each present month = 10%. This ensures newly added members whose
-        // MemberRecord.attendancePct hasn't been written yet still show correctly.
-        setMembers((current) =>
-          current.map((member) => {
-            const thisYearRows = rows.filter((r) => r.year === CURRENT_YEAR);
-            const presentCount = thisYearRows.filter((r) =>
-              r.usersIn.split(",").map((s) => s.trim()).filter(Boolean).includes(member.id)
-            ).length;
-            const attendancePercent = Math.min(100, presentCount * 10);
-            const presentMonths = presentCount;
-            return {
-              ...member,
-              attendance: `${presentMonths}/12 Months`,
-              attendancePercent,
-            };
-          })
-        );
-      })
+      .then((rows) => { if (active) setAttendanceRows(rows); })
       .catch(() => {});
     return () => { active = false; };
   }, []);
@@ -178,17 +157,19 @@ export default function MemberPage() {
     return () => document.removeEventListener("mousedown", onOutsideClick);
   }, [openMenuId]);
 
-  // Returns a 12-element boolean array (index 0 = January) indicating
-  // whether the member was present in each month of CURRENT_YEAR.
-  function getMemberMonthlyAttendance(memberId: string): boolean[] {
+  // Compute monthly attendance for a member from the live attendanceRows state.
+  // Returns the 12-month presence array AND the present count — both derived
+  // from the same data so the card label and hover popup are always in sync.
+  function getMemberMonthlyAttendance(memberId: string): { presence: boolean[]; presentCount: number } {
     const thisYearRows = attendanceRows.filter((row) => row.year === CURRENT_YEAR);
-    return MONTHS.map((_, index) => {
+    const presence = MONTHS.map((_, index) => {
       const monthNum = index + 1;
       const row = thisYearRows.find((r) => r.month === monthNum);
       if (!row) return false;
       const ids = row.usersIn.split(",").map((s) => s.trim()).filter(Boolean);
       return ids.includes(memberId);
     });
+    return { presence, presentCount: presence.filter(Boolean).length };
   }
 
   function handleViewMember(member: MemberListItem) {
@@ -452,50 +433,56 @@ export default function MemberPage() {
                     {member.phone}
                   </a>
 
-                    <div className="member-page__attendance-card"
-                    onMouseEnter={() => setHoveredMemberId(member.id)}
-                    onMouseLeave={() => setHoveredMemberId(null)}
-                  >
-                    <span className="member-page__attendance-title">Monthly Attendance</span>
-                    <div className="member-page__attendance-line">
-                      <span className="member-page__check member-page__check--green">
-                        <FiCheck size={15} />
-                      </span>
-                      <strong>{member.attendance}</strong>
-                    </div>
-                    <div className="member-page__progress-row">
-                      <span className="member-page__progress-track">
-                        <span style={{ width: `${member.attendancePercent}%` }} />
-                      </span>
-                    </div>
+                  {(() => {
+                    const { presence, presentCount } = getMemberMonthlyAttendance(member.id);
+                    const attendancePercent = Math.min(100, presentCount * 10);
+                    return (
+                      <div
+                        className="member-page__attendance-card"
+                        onMouseEnter={() => setHoveredMemberId(member.id)}
+                        onMouseLeave={() => setHoveredMemberId(null)}
+                      >
+                        <span className="member-page__attendance-title">Monthly Attendance</span>
+                        <div className="member-page__attendance-line">
+                          <span className="member-page__check member-page__check--green">
+                            <FiCheck size={15} />
+                          </span>
+                          <strong>{presentCount}/12 Months</strong>
+                        </div>
+                        <div className="member-page__progress-row">
+                          <span className="member-page__progress-track">
+                            <span style={{ width: `${attendancePercent}%` }} />
+                          </span>
+                        </div>
 
-                    {hoveredMemberId === member.id && (
-                      <div className="member-page__attendance-popup">
-                        <p className="member-page__attendance-popup-year">{CURRENT_YEAR}</p>
-                        <ul className="member-page__attendance-popup-list">
-                          {MONTHS.map((monthName, index) => {
-                            const presence = getMemberMonthlyAttendance(member.id);
-                            const isPresent = presence[index];
-                            return (
-                              <li
-                                key={monthName}
-                                className={[
-                                  "member-page__attendance-popup-row",
-                                  isPresent ? "is-present" : "is-absent",
-                                ].join(" ")}
-                              >
-                                <span>{monthName}</span>
-                                {isPresent
-                                  ? <FiCheckCircle size={18} className="member-page__attendance-popup-icon member-page__attendance-popup-icon--present" />
-                                  : <FiXCircle size={18} className="member-page__attendance-popup-icon member-page__attendance-popup-icon--absent" />
-                                }
-                              </li>
-                            );
-                          })}
-                        </ul>
+                        {hoveredMemberId === member.id && (
+                          <div className="member-page__attendance-popup">
+                            <p className="member-page__attendance-popup-year">{CURRENT_YEAR}</p>
+                            <ul className="member-page__attendance-popup-list">
+                              {MONTHS.map((monthName, index) => {
+                                const isPresent = presence[index];
+                                return (
+                                  <li
+                                    key={monthName}
+                                    className={[
+                                      "member-page__attendance-popup-row",
+                                      isPresent ? "is-present" : "is-absent",
+                                    ].join(" ")}
+                                  >
+                                    <span>{monthName}</span>
+                                    {isPresent
+                                      ? <FiCheckCircle size={18} className="member-page__attendance-popup-icon member-page__attendance-popup-icon--present" />
+                                      : <FiXCircle size={18} className="member-page__attendance-popup-icon member-page__attendance-popup-icon--absent" />
+                                    }
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
+                    );
+                  })()}
 
                   <div className="member-page__vote-card">
                     <span>Vote Role</span>
