@@ -686,15 +686,44 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
             phone: user.phone ?? null,
             email: user.email ?? null,
             userId: user.id,
-            rawJson: {},
+            rawJson: '{}',
           } as any,
         });
         memberRecordId = created.id;
       }
     } else {
-      const existing = await prisma.memberRecord.findUnique({ where: { id } });
-      if (!existing) return reply.code(404).send({ message: 'Member not found' });
-      memberRecordId = existing.id;
+      // Try as MemberRecord.id first (spreadsheet-imported members).
+      const existingRecord = await prisma.memberRecord.findUnique({ where: { id } });
+      if (existingRecord) {
+        memberRecordId = existingRecord.id;
+      } else {
+        // The id is a plain User.id — members added via the Add Member form.
+        // mapUserAsMember returns id: user.id without any 'user.' prefix.
+        const linkedRecord = await prisma.memberRecord.findFirst({ where: { userId: id } });
+        if (linkedRecord) {
+          memberRecordId = linkedRecord.id;
+        } else {
+          const user = await prisma.user.findUnique({
+            where: { id },
+            select: { id: true, fName: true, lName: true, phone: true, email: true, createdAt: true },
+          });
+          if (!user) return reply.code(404).send({ message: 'Member not found' });
+          const created = await prisma.memberRecord.create({
+            data: {
+              memberKey: `user.${user.id}`,
+              status: 'Member',
+              firstName: user.fName ?? null,
+              lastName: user.lName ?? null,
+              joined: user.createdAt.toISOString(),
+              phone: user.phone ?? null,
+              email: user.email ?? null,
+              userId: user.id,
+              rawJson: '{}',
+            } as any,
+          });
+          memberRecordId = created.id;
+        }
+      }
     }
 
     const due = await (prisma as any).monthlyDue.upsert({
@@ -742,24 +771,49 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       status: z.enum(['present', 'absent']),
     }).parse(req.body ?? {});
 
-    // Resolve the stable member identifier to store in usersIn.
-    // We store the MemberRecord.id for MemberRecord-backed members, or the
-    // User.id for user-only members. Either way it matches the `id` in the
-    // member list response so the frontend can cross-reference.
+    // Resolve the stable member identifier to store in usersIn AND the
+    // MemberRecord to update attendancePct on. For plain User.id members
+    // (no 'user.' prefix, mapUserAsMember), find or create a MemberRecord.
     let memberRecordId: string | null = null;
     let stableId: string;
 
     if (id.startsWith('user.')) {
       stableId = id.slice('user.'.length);
+      const linked = await prisma.memberRecord.findFirst({ where: { userId: stableId } });
+      memberRecordId = linked?.id ?? null;
     } else {
       const record = await prisma.memberRecord.findUnique({ where: { id }, select: { id: true } });
       if (record) {
         stableId = record.id;
         memberRecordId = record.id;
       } else {
-        const user = await prisma.user.findUnique({ where: { id }, select: { id: true } });
+        // Plain User.id (members added via the Add Member form).
+        const user = await prisma.user.findUnique({
+          where: { id },
+          select: { id: true, fName: true, lName: true, phone: true, email: true, createdAt: true },
+        });
         if (!user) return reply.code(404).send({ message: 'Member not found' });
         stableId = user.id;
+        // Find or create a MemberRecord so attendancePct can be persisted.
+        const linked = await prisma.memberRecord.findFirst({ where: { userId: user.id } });
+        if (linked) {
+          memberRecordId = linked.id;
+        } else {
+          const created = await prisma.memberRecord.create({
+            data: {
+              memberKey: `user.${user.id}`,
+              status: 'Member',
+              firstName: user.fName ?? null,
+              lastName: user.lName ?? null,
+              joined: user.createdAt.toISOString(),
+              phone: user.phone ?? null,
+              email: user.email ?? null,
+              userId: user.id,
+              rawJson: '{}',
+            } as any,
+          });
+          memberRecordId = created.id;
+        }
       }
     }
 
@@ -866,7 +920,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         phone: user.phone,
         email: user.email,
         voter: 'No',
-        rawJson: {
+        rawJson: JSON.stringify({
           Status: 'Member',
           First: user.fName ?? '',
           Last: user.lName ?? '',
@@ -874,7 +928,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
           Phone: user.phone,
           Email: user.email ?? '',
           Voter: 'No',
-        },
+        }),
         userId: user.id,
       } as any,
     });

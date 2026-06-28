@@ -134,12 +134,34 @@ export default function MemberPage() {
     return () => { active = false; };
   }, []);
 
-  // Fetch all attendance records so the hover popover can show which months
-  // each member was present without an extra request per member.
+  // Fetch all attendance records.
   useEffect(() => {
     let active = true;
     apiGet<AttendanceRow[]>("/admin/database/attendance")
-      .then((rows) => { if (active) setAttendanceRows(rows); })
+      .then((rows) => {
+        if (!active) return;
+        setAttendanceRows(rows);
+
+        // Recompute attendance percent for every member from the real
+        // attendance data, overriding the stale attendancePct from the API.
+        // Each present month = 10%. This ensures newly added members whose
+        // MemberRecord.attendancePct hasn't been written yet still show correctly.
+        setMembers((current) =>
+          current.map((member) => {
+            const thisYearRows = rows.filter((r) => r.year === CURRENT_YEAR);
+            const presentCount = thisYearRows.filter((r) =>
+              r.usersIn.split(",").map((s) => s.trim()).filter(Boolean).includes(member.id)
+            ).length;
+            const attendancePercent = Math.min(100, presentCount * 10);
+            const presentMonths = presentCount;
+            return {
+              ...member,
+              attendance: `${presentMonths}/12 Months`,
+              attendancePercent,
+            };
+          })
+        );
+      })
       .catch(() => {});
     return () => { active = false; };
   }, []);
