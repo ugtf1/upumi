@@ -186,22 +186,27 @@ export default function MemberPage() {
     if (!deleteTarget) return;
     setDeleteLoading(true);
     try {
-      // The generic adminDatabaseRoutes plugin handles DELETE /:table/:id
-      // and is mounted at /api/admin/database — so deleting a user is:
-      // DELETE /api/admin/database/users/:id
+      // DELETE /admin/members/:id — handles MemberRecord-backed members,
+      // User-only members, and cleans up both the User and MemberRecord rows.
       const { API_BASE, getToken } = await import("./api");
       const token = getToken();
-      await fetch(`${API_BASE}/admin/database/users/${deleteTarget.id}`, {
+      const res = await fetch(`${API_BASE}/admin/members/${deleteTarget.id}`, {
         method: "DELETE",
         headers: {
           "content-type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.message ?? `Delete failed (${res.status})`);
+      }
+
       setMembers((current) => current.filter((m) => m.id !== deleteTarget.id));
       setToast(`${deleteTarget.name} has been removed`);
-    } catch {
-      setToast("Failed to delete member — please try again");
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Failed to delete member — please try again");
     } finally {
       setDeleteLoading(false);
       setDeleteTarget(null);

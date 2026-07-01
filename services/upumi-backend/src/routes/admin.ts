@@ -646,6 +646,43 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     return updated;
   });
 
+  // Delete a member. Handles three cases:
+  //  1. MemberRecord-backed (spreadsheet import): delete MemberRecord + linked User
+  //  2. User-only (Add Member form, plain User.id): delete User (cascades to MemberRecord if linked)
+  //  3. 'user.' prefixed id: strip prefix then treat as User.id
+  app.delete('/members/:id', { preHandler: requireRole('ADMIN') }, async (req: any, reply) => {
+    const id = String(req.params?.id ?? '');
+
+    if (id.startsWith('user.')) {
+      const userId = id.slice('user.'.length);
+      await prisma.user.delete({ where: { id: userId } }).catch(() => null);
+      return { ok: true };
+    }
+
+    // Try as MemberRecord.id first.
+    const record = await prisma.memberRecord.findUnique({
+      where: { id },
+      select: { id: true, userId: true },
+    });
+
+    if (record) {
+      // Delete the MemberRecord (cascades to MonthlyDue etc).
+      await prisma.memberRecord.delete({ where: { id: record.id } });
+      // Also delete the linked User if one exists.
+      if (record.userId) {
+        await prisma.user.delete({ where: { id: record.userId } }).catch(() => null);
+      }
+      return { ok: true };
+    }
+
+    // Fall back: treat id as a plain User.id (mapUserAsMember path).
+    const user = await prisma.user.findUnique({ where: { id }, select: { id: true } });
+    if (!user) return reply.code(404).send({ message: 'Member not found' });
+
+    await prisma.user.delete({ where: { id } });
+    return { ok: true };
+  });
+
   // Record or update a monthly due payment for a member.
   // Uses upsert on the @@unique([memberRecordId, year, month]) constraint so
   // re-submitting the same month overwrites rather than errors.
