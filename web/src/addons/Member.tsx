@@ -193,7 +193,6 @@ export default function MemberPage() {
       const res = await fetch(`${API_BASE}/admin/members/${deleteTarget.id}`, {
         method: "DELETE",
         headers: {
-          "content-type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       });
