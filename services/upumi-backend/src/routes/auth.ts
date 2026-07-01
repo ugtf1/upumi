@@ -62,6 +62,20 @@ async function requestOtp(phone: string, reply: FastifyReply) {
     },
   });
 
+  const twilioConfigured = Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN);
+
+  if (!twilioConfigured) {
+    // Dev-only fallback: never return the OTP in the API response, since this
+    // endpoint is unauthenticated and would leak login codes to anyone who
+    // can reach it. Only log locally, and only outside production.
+    if (process.env.NODE_ENV === 'production') {
+      reply.log.error('Twilio is not configured in production; refusing to fall back to console OTP');
+      return reply.code(500).send({ message: 'SMS delivery is not configured' });
+    }
+    reply.log.warn(`[DEV ONLY] Twilio not configured. OTP for ${user.phone}: ${otp}`);
+    return reply.send({ requiresOtp: true, message: 'OTP sent (check server logs, Twilio not configured)' });
+  }
+
   await sendOtpSms(user.phone, otp);
   return reply.send({ requiresOtp: true, message: 'OTP sent' });
 }
