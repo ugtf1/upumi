@@ -65,14 +65,17 @@ async function requestOtp(phone: string, reply: FastifyReply) {
   const twilioConfigured = Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN);
 
   if (!twilioConfigured) {
-    // Dev-only fallback: never return the OTP in the API response, since this
-    // endpoint is unauthenticated and would leak login codes to anyone who
-    // can reach it. Only log locally, and only outside production.
-    if (process.env.NODE_ENV === 'production') {
-      reply.log.error('Twilio is not configured in production; refusing to fall back to console OTP');
+    // Explicit, intentional opt-in only — do NOT gate this on NODE_ENV.
+    // Cloud Run images/build pipelines often set NODE_ENV=production even
+    // on services meant purely for dev/testing, so NODE_ENV isn't a
+    // trustworthy signal for "safe to log OTPs." This flag must be set
+    // deliberately on the specific service where you want the fallback,
+    // and should never be set on anything customer-facing.
+    if (process.env.ALLOW_OTP_LOG_FALLBACK !== 'true') {
+      reply.log.error('Twilio is not configured and ALLOW_OTP_LOG_FALLBACK is not set; refusing to send OTP');
       return reply.code(500).send({ message: 'SMS delivery is not configured' });
     }
-    reply.log.warn(`[DEV ONLY] Twilio not configured. OTP for ${user.phone}: ${otp}`);
+    reply.log.warn(`[DEV FALLBACK] Twilio not configured. OTP for ${user.phone}: ${otp}`);
     return reply.send({ requiresOtp: true, message: 'OTP sent (check server logs, Twilio not configured)' });
   }
 
