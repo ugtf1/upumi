@@ -1,9 +1,9 @@
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import type { IconType } from "react-icons";
 import { FiCreditCard, FiHome, FiLogOut, FiSettings, FiUsers } from "react-icons/fi";
 
-import { clearToken, getMemberProfile } from "./api";
+import { clearToken } from "./api";
 import "./admin-page.scss";
 import "./member-dashboard.scss";
 import "./member-settings-page.scss";
