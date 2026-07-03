@@ -106,3 +106,32 @@ export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
     body: body ? JSON.stringify(body) : undefined,
   });
 }
+
+// ── Member-facing API helpers ─────────────────────────────────────────────────
+
+// GET /me/profile — returns the logged-in member's profile, linked MemberRecord,
+// and all their MonthlyDue rows.
+export async function getMemberProfile(): Promise<any> {
+  return apiGet<any>("/me/profile");
+}
+
+// GET /analytics/summary?year=YYYY — org-wide KPIs: total members, active count,
+// dues totals, membership mix breakdown.
+export async function getAnalyticsSummary(year: number): Promise<any> {
+  return apiGet<any>(`/analytics/summary?year=${year}`);
+}
+
+// GET /analytics/ledger?year=YYYY — YTD income/expense and account balances.
+export async function getLedgerSummary(year: number): Promise<any> {
+  return apiGet<any>(`/analytics/ledger?year=${year}`);
+}
+
+// GET /analytics/monthly?year=YYYY&month=MM — single-month breakdown.
+export async function getMonthlyReport(year: number, month: number): Promise<any> {
+  return apiGet<any>(`/analytics/monthly?year=${year}&month=${month}`);
+}
+
+// GET /admin/database/hostingSchedule — all hosting schedule rows.
+export async function getHostingSchedule(): Promise<any[]> {
+  return apiGet<any[]>("/admin/database/hostingSchedule");
+}

@@ -9,17 +9,49 @@ import {
   FiUsers,
 } from "react-icons/fi";
 
-import { clearToken } from "./api";
+import { clearToken, getMemberProfile, apiGet } from "./api";
 import memberImage from "./upu-logo.svg";
 import "./admin-page.scss";
 import "./transaction-page.scss";
 
-type SummaryCard = {
+type ExpenseRow = {
+  id: string;
+  date: string;
+  reason: string;
   title: string;
   amount: string;
-  delta: string;
-  tone: "income" | "expense";
 };
+
+type TransactionApiRow = {
+  id: string;
+  userId?: string | null;
+  fullName: string;
+  title: string;
+  amount: string | number;
+  date: string;
+};
+
+type ExpenseApiRow = {
+  id: string;
+  reason: string;
+  title: string;
+  amount: string | number;
+  date: string;
+};
+
+type MemberProfileResponse = {
+  member?: {
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+  } | null;
+  monthlyDues?: {
+    year: number;
+    month: number;
+    duesPaid?: number | null;
+  }[];
+};
+
 
 type TransactionRow = {
   id: string;
@@ -38,27 +70,12 @@ type TransactionFormState = {
 };
 
 const TRANSACTION_TITLE_OPTIONS = [
+  "Monthly Dues",
   "Raffle",
   "Insurance",
   "Wrapper",
-  "UPUA 25 raffle",
+  "UPUA 25 Raffle",
   "Levy",
-];
-
-const SUMMARY_CARDS: SummaryCard[] = [
-  { title: "Income", amount: "$980", delta: "+50.5%", tone: "income" },
-  { title: "Expense", amount: "$240", delta: "+12.5%", tone: "expense" },
-];
-
-const TRANSACTION_ROWS: TransactionRow[] = [
-  { id: "tx-1", date: "03 Jan 2026", fullName: "Agbara Onome", title: "Raffle", amount: "$303", status: "Completed" },
-  { id: "tx-2", date: "03 Jan 2026", fullName: "Agbara Onome", title: "SSW", amount: "$303", status: "Completed" },
-  { id: "tx-3", date: "03 Jan 2026", fullName: "Agbara Onome", title: "Raffle", amount: "$303", status: "Completed" },
-  { id: "tx-4", date: "03 Jan 2026", fullName: "Agbara Onome", title: "Anamb.", amount: "$303", status: "Completed" },
-  { id: "tx-5", date: "03 Jan 2026", fullName: "Agbara Onome", title: "Raffle", amount: "$303", status: "Completed" },
-  { id: "tx-6", date: "03 Jan 2026", fullName: "Agbara Onome", title: "Raffle", amount: "$303", status: "Completed" },
-  { id: "tx-7", date: "03 Jan 2026", fullName: "Agbara Onome", title: "Raffle", amount: "$303", status: "Completed" },
-  { id: "tx-8", date: "03 Jan 2026", fullName: "Agbara Onome", title: "Raffle", amount: "$303", status: "Completed" },
 ];
 
 const MEMBER_ROUTE_CONFIG: Record<string, { path: string; label: string }> = {
@@ -105,12 +122,88 @@ export default function MemberTransaction() {
 
   // const [year, setYear] = useState(2026);
   const [search, setSearch] = useState("");
-  const [transactionRows, setTransactionRows] = useState(TRANSACTION_ROWS);
-  // const [sheetUrl, setSheetUrl] = useState("");
-  // const [memberCount, setMemberCount] = useState("0");
-  // const [memberStatus, setMemberStatus] = useState("All Members");
+  const [transactionRows, setTransactionRows] = useState<TransactionRow[]>([]);
+  const [expenseRows, setExpenseRows] = useState<ExpenseRow[]>([]);
+  const [txLoading, setTxLoading] = useState(true);
+  const [expLoading, setExpLoading] = useState(true);
+  const [txError, setTxError] = useState<string | null>(null);
+  const [expError, setExpError] = useState<string | null>(null);
+  const [memberProfile, setMemberProfile] = useState<MemberProfileResponse | null>(null);
+
+  // Fetch member profile + all transactions
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setTxLoading(true);
+        setTxError(null);
+
+        const [profile, allTransactions] = await Promise.all([
+          getMemberProfile() as Promise<MemberProfileResponse>,
+          apiGet<TransactionApiRow[]>("/admin/database/transactions").catch(() => [] as TransactionApiRow[]),
+        ]);
+
+        setMemberProfile(profile);
+
+        const memberName = profile?.member
+          ? `${profile.member.firstName ?? ""} ${profile.member.lastName ?? ""}`.trim() || "Member"
+          : "Member";
+
+        const txRows: TransactionRow[] = allTransactions.map((tx) => ({
+          id: tx.id,
+          date: tx.date
+            ? new Date(tx.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+            : "-",
+          fullName: tx.fullName || memberName,
+          title: tx.title,
+          amount: `$${Number(tx.amount ?? 0).toLocaleString()}`,
+          status: "Completed",
+        }));
+
+        const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+        const dueRows: TransactionRow[] = (profile?.monthlyDues ?? []).map((d) => ({
+          id: `dues-${d.year}-${d.month}`,
+          date: `${monthNames[(d.month ?? 1) - 1] ?? ""} ${d.year}`,
+          fullName: memberName,
+          title: "Monthly Dues",
+          amount: `$${Number(d.duesPaid ?? 0).toLocaleString()}`,
+          status: d.duesPaid && d.duesPaid > 0 ? "Paid" : "Pending",
+        }));
+
+        setTransactionRows([...txRows, ...dueRows]);
+      } catch (err) {
+        setTxError(err instanceof Error ? err.message : "Failed to load transactions");
+      } finally {
+        setTxLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  // Fetch all expenses
+  useEffect(() => {
+    let active = true;
+    setExpLoading(true);
+    apiGet<ExpenseApiRow[]>("/admin/database/expenses")
+      .then((rows) => {
+        if (!active) return;
+        setExpenseRows(
+          rows.map((row) => ({
+            id: row.id,
+            date: row.date
+              ? new Date(row.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+              : "-",
+            reason: row.reason,
+            title: row.title,
+            amount: `$${Number(row.amount ?? 0).toLocaleString()}`,
+          }))
+        );
+      })
+      .catch((err: Error) => { if (active) setExpError(err?.message ?? "Failed to load expenses"); })
+      .finally(() => { if (active) setExpLoading(false); });
+    return () => { active = false; };
+  }, []);
+
   const [activeTab, setActiveTab] = useState<"Income" | "Expense">("Income");
-  // const [selectedFileName, setSelectedFileName] = useState("No file chosen");
   const [isAddTransactionModalOpen, setIsAddTransactionModalOpen] = useState(false);
   const [transactionForm, setTransactionForm] = useState<TransactionFormState>({
     fullName: "",
@@ -143,10 +236,27 @@ export default function MemberTransaction() {
     const query = search.trim().toLowerCase();
     return transactionRows.filter((row) => {
       if (!query) return true;
-      const haystack = `${row.date} ${row.fullName} ${row.title} ${row.amount} ${row.status}`.toLowerCase();
-      return haystack.includes(query);
+      return `${row.date} ${row.fullName} ${row.title} ${row.amount} ${row.status}`.toLowerCase().includes(query);
     });
   }, [search, transactionRows]);
+
+  const visibleExpenseRows = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return expenseRows.filter((row) => {
+      if (!query) return true;
+      return `${row.date} ${row.reason} ${row.title} ${row.amount}`.toLowerCase().includes(query);
+    });
+  }, [search, expenseRows]);
+
+  const incomeTotal = useMemo(() => {
+    const total = transactionRows.reduce((sum, r) => sum + Number(r.amount.replace(/[$,]/g, "")), 0);
+    return `$${total.toLocaleString()}`;
+  }, [transactionRows]);
+
+  const expenseTotal = useMemo(() => {
+    const total = expenseRows.reduce((sum, r) => sum + Number(r.amount.replace(/[$,]/g, "")), 0);
+    return `$${total.toLocaleString()}`;
+  }, [expenseRows]);
 
   function handleLogout() {
     clearToken();
@@ -252,8 +362,14 @@ export default function MemberTransaction() {
                 <img src={memberImage} alt="Member profile" />
               </div>
               <div>
-                <div className="admin-dashboard__profile-name">Member</div>
-                <div className="admin-dashboard__profile-email">agbaraonome@gmail.com</div>
+                <div className="admin-dashboard__profile-name">
+                  {memberProfile?.member
+                    ? `${memberProfile.member.firstName || ""} ${memberProfile.member.lastName || ""}`.trim() || "Member"
+                    : "Member"}
+                </div>
+                <div className="admin-dashboard__profile-email">
+                  {memberProfile?.member?.email || "member@upumi.org"}
+                </div>
               </div>
             </div>
           </div>
@@ -357,15 +473,16 @@ export default function MemberTransaction() {
         </section>
 
         <section className="admin-dashboard__stats transaction-page__summary">
-          {SUMMARY_CARDS.map((card) => (
+          {([
+            { title: "Income", amount: incomeTotal, tone: "income" as const },
+            { title: "Expense", amount: expenseTotal, tone: "expense" as const },
+          ]).map((card) => (
             <article key={card.title} className="admin-dashboard__stat-card transaction-page__summary-card">
               <div className="transaction-page__summary-head">
                 <div className="admin-dashboard__stat-icon transaction-page__summary-icon">
                   <FiDollarSign size={20} />
                 </div>
-                <span className={`transaction-page__summary-delta is-${card.tone}`}>{card.delta}</span>
               </div>
-
               <div className="admin-dashboard__stat-copy transaction-page__summary-copy">
                 <h2>{card.title}</h2>
                 <strong className={card.tone === "expense" ? "is-expense" : ""}>{card.amount}</strong>
@@ -388,39 +505,97 @@ export default function MemberTransaction() {
             ))}
           </div>
 
-          <div className="transaction-page__section-copy">
-            <h2>Recent Transaction</h2>
-            <p>View Most Recent Transaction</p>
-          </div>
+          {activeTab === "Income" ? (
+            <>
+              <div className="transaction-page__section-copy">
+                <h2>Recent Transactions</h2>
+                <p>{txLoading ? "Loading..." : `${visibleRows.length} transaction${visibleRows.length !== 1 ? "s" : ""}`}</p>
+              </div>
 
-          <div className="admin-dashboard__table-shell transaction-page__table-shell">
-            <div className="admin-dashboard__table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Full Name</th>
-                    <th>Title</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleRows.map((row) => (
-                    <tr key={row.id}>
-                      <td>{row.date}</td>
-                      <td>{row.fullName}</td>
-                      <td>{row.title}</td>
-                      <td>{row.amount}</td>
-                      <td>
-                        <span className="transaction-page__status">{row.status}</span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+              <div className="admin-dashboard__table-shell transaction-page__table-shell">
+                {txError ? (
+                  <div className="admin-dashboard__modal-error">{txError}</div>
+                ) : (
+                  <div className="admin-dashboard__table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Full Name</th>
+                          <th>Title</th>
+                          <th>Amount</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {txLoading ? (
+                          <tr><td colSpan={5} className="transaction-page__table-state">Loading transactions...</td></tr>
+                        ) : !visibleRows.length ? (
+                          <tr><td colSpan={5} className="transaction-page__table-state">
+                            {search.trim() ? "No transactions match your search." : "No transactions recorded yet."}
+                          </td></tr>
+                        ) : (
+                          visibleRows.map((row) => (
+                            <tr key={row.id}>
+                              <td>{row.date}</td>
+                              <td>{row.fullName}</td>
+                              <td>{row.title}</td>
+                              <td>{row.amount}</td>
+                              <td><span className="transaction-page__status">{row.status}</span></td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="transaction-page__section-copy">
+                <h2>Recent Expenses</h2>
+                <p>{expLoading ? "Loading..." : `${visibleExpenseRows.length} expense${visibleExpenseRows.length !== 1 ? "s" : ""}`}</p>
+              </div>
+
+              <div className="admin-dashboard__table-shell transaction-page__table-shell">
+                {expError ? (
+                  <div className="admin-dashboard__modal-error">{expError}</div>
+                ) : (
+                  <div className="admin-dashboard__table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Reason</th>
+                          <th>Title</th>
+                          <th>Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {expLoading ? (
+                          <tr><td colSpan={4} className="transaction-page__table-state">Loading expenses...</td></tr>
+                        ) : !visibleExpenseRows.length ? (
+                          <tr><td colSpan={4} className="transaction-page__table-state">
+                            {search.trim() ? "No expenses match your search." : "No expenses recorded yet."}
+                          </td></tr>
+                        ) : (
+                          visibleExpenseRows.map((row) => (
+                            <tr key={row.id}>
+                              <td>{row.date}</td>
+                              <td>{row.reason}</td>
+                              <td>{row.title}</td>
+                              <td>{row.amount}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </section>
       </main>
 

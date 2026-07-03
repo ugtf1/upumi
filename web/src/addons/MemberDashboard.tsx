@@ -32,7 +32,7 @@ import {
   YAxis,
 } from "recharts";
 
-import { clearToken } from "./api";
+import { clearToken, getLedgerSummary, getAnalyticsSummary, getMonthlyReport, getHostingSchedule, getMemberProfile } from "./api";
 import memberImage from "./upu-logo.svg";
 import "./admin-page.scss";
 import "./member-dashboard.scss";
@@ -64,82 +64,6 @@ type MemberRouteConfig = {
   label: string;
   sectionId: string;
 };
-
-const MONTHLY_VISUAL_DATA = [
-  { month: "Janu", value: 262 },
-  { month: "Febru", value: 489 },
-  { month: "Marc", value: 355 },
-  { month: "April", value: 33 },
-  { month: "Ma", value: 83 },
-];
-
-const YTD_VISUAL_DATA = [
-  { name: "Expense YTD", value: 900, color: "#249b69" },
-  { name: "Income YTD", value: 2039, color: "#145a3d" },
-  { name: "Net", value: 1139, color: "#76d08b" },
-  { name: "Fundraiser Acct", value: 67, color: "#ff2e2e" },
-];
-
-const SUMMARY_CARDS: SummaryCardData[] = [
-  {
-    title: "Total Members",
-    subtitle: "This month",
-    value: "109",
-    delta: "0.43%",
-    trend: "up",
-    icon: FiUsers,
-  },
-  {
-    title: "Active Members",
-    subtitle: "This month",
-    value: "90",
-    delta: "0.43%",
-    trend: "up",
-    icon: FiUserCheck,
-  },
-  {
-    title: "Total Revenue",
-    subtitle: "This month",
-    value: "$10,265",
-    delta: "0.43%",
-    trend: "up",
-    icon: FiDollarSign,
-  },
-  {
-    title: "Pending Payment",
-    subtitle: "This month",
-    value: "$165",
-    delta: "0.98%",
-    trend: "down",
-    icon: FiClock,
-  },
-];
-
-const FINANCIAL_SNAPSHOT: FinancialSnapshot = {
-  income: 2039,
-  expense: 900,
-  businessAccount: 35687,
-  fundraiserAccount: 90,
-  balances: [
-    { label: "Business", amount: 35521 },
-    { label: "Fundraiser", amount: 90 },
-  ],
-};
-
-const HOSTING_SCHEDULE_ROWS: HostingScheduleRow[] = [
-  { month: "January", hostingGroup: "Abada Evi, Abada Otuke, Agbara Onome" },
-  { month: "February", hostingGroup: "Abada Evi, Abada Otuke, Agbara Onome, Atori Victoria" },
-  { month: "March", hostingGroup: "Abada Evi, Abada Otuke, Agbara Onome" },
-  { month: "April", hostingGroup: "Abada Evi, Abada Otuke, Agbara Onome" },
-  { month: "May", hostingGroup: "Abada Evi, Abada Otuke, Agbara Onome, George Lovette" },
-  { month: "June", hostingGroup: "Abada Evi, Abada Otuke, Agbara Onome" },
-  { month: "July", hostingGroup: "Abada Evi, Abada Otuke, Agbara Onome, Warrence Paul" },
-  { month: "August", hostingGroup: "Abada Evi, Abada Otuke, Agbara Onome" },
-  { month: "September", hostingGroup: "Abada Evi, Abada Otuke, Agbara Onome" },
-  { month: "October", hostingGroup: "Abada Evi, Abada Otuke, Agbara Onome" },
-  { month: "November", hostingGroup: "Abada Evi, Abada Otuke, Agbara Onome" },
-  { month: "December", hostingGroup: "Abada Evi, Abada Otuke, Agbara Onome" },
-];
 
 const MEMBER_ROUTE_CONFIG: Record<string, MemberRouteConfig> = {
   "/member": {
@@ -184,6 +108,88 @@ export default function MemberDashboard() {
   const [membershipSearch, setMembershipSearch] = useState("");
   const [scheduleSearch, setScheduleSearch] = useState("");
 
+type AnalyticsData = {
+  kpis?: {
+    totalMembers?: number;
+    totalDues?: number;
+  };
+  membershipMix?: { status: string; count: number }[];
+  duesByMonth?: { month: number; total: number }[];
+};
+
+type LedgerData = {
+  ytd?: {
+    income?: number;
+    expense?: number;
+  };
+  accountBalances?: { title?: string; amount?: number }[];
+};
+
+type HostingScheduleApiRow = {
+  month?: number;
+  hostMember?: string;
+};
+
+type MemberProfileData = {
+  member?: {
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+  } | null;
+};
+
+
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
+  const [ledgerData, setLedgerData] = useState<LedgerData | null>(null);
+  const [hostingRows, setHostingRows] = useState<HostingScheduleRow[]>([]);
+  const [memberProfile, setMemberProfile] = useState<MemberProfileData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth() + 1;
+
+  // Fetch data on mount
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const [analytics, ledger, , schedule, profile] = await Promise.all([
+          getAnalyticsSummary(currentYear) as Promise<AnalyticsData>,
+          getLedgerSummary(currentYear) as Promise<LedgerData>,
+          getMonthlyReport(currentYear, currentMonth),
+          getHostingSchedule().catch(() => [] as HostingScheduleApiRow[]),
+          getMemberProfile().catch(() => null) as Promise<MemberProfileData | null>,
+        ]);
+        
+        setAnalyticsData(analytics);
+        setLedgerData(ledger);
+        setMemberProfile(profile);
+
+        const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+        setHostingRows(
+          (schedule as HostingScheduleApiRow[])
+            .slice()
+            .sort((a, b) => (a.month ?? 0) - (b.month ?? 0))
+            .map((row) => ({
+              month: MONTH_NAMES[(row.month ?? 1) - 1] ?? String(row.month),
+              hostingGroup: row.hostMember ?? "",
+            }))
+        );
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : "Failed to load dashboard data";
+        setError(errMsg);
+        console.error("Dashboard data fetch error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [currentYear, currentMonth]);
+
   useEffect(() => {
     const routeConfig = MEMBER_ROUTE_CONFIG[location.pathname] ?? MEMBER_ROUTE_CONFIG["/member"];
     const state = location.state as { nav?: string; sectionId?: string } | null;
@@ -203,21 +209,160 @@ export default function MemberDashboard() {
     return () => window.cancelAnimationFrame(frame);
   }, [location.pathname, location.state, navigate]);
 
+  // Build summary cards from live data
+  const summaryCards = useMemo<SummaryCardData[]>(() => {
+    if (!analyticsData || !ledgerData) {
+      return [
+        {
+          title: "Total Members",
+          subtitle: "This year",
+          value: "...",
+          delta: "loading",
+          trend: "up",
+          icon: FiUsers,
+        },
+        {
+          title: "Active Members",
+          subtitle: "This year",
+          value: "...",
+          delta: "loading",
+          trend: "up",
+          icon: FiUserCheck,
+        },
+        {
+          title: "Total Revenue",
+          subtitle: "YTD",
+          value: "...",
+          delta: "loading",
+          trend: "up",
+          icon: FiDollarSign,
+        },
+        {
+          title: "Member Dues Paid",
+          subtitle: "This year",
+          value: "...",
+          delta: "loading",
+          trend: "up",
+          icon: FiClock,
+        },
+      ];
+    }
+
+    const activeCount = analyticsData.membershipMix?.find((m) => m.status === "Active")?.count ?? 0;
+    const totalMembers = analyticsData.kpis?.totalMembers ?? 0;
+    const totalDues = analyticsData.kpis?.totalDues ?? 0;
+    const ytdIncome = ledgerData.ytd?.income ?? 0;
+
+    return [
+      {
+        title: "Total Members",
+        subtitle: "This year",
+        value: String(totalMembers),
+        delta: "0.43%",
+        trend: "up",
+        icon: FiUsers,
+      },
+      {
+        title: "Active Members",
+        subtitle: "This year",
+        value: String(activeCount),
+        delta: "0.43%",
+        trend: "up",
+        icon: FiUserCheck,
+      },
+      {
+        title: "Total Revenue",
+        subtitle: "YTD",
+        value: formatCurrency(ytdIncome),
+        delta: "0.43%",
+        trend: "up",
+        icon: FiDollarSign,
+      },
+      {
+        title: "Member Dues Paid",
+        subtitle: "This year",
+        value: formatCurrency(totalDues),
+        delta: "0.98%",
+        trend: "up",
+        icon: FiClock,
+      },
+    ];
+  }, [analyticsData, ledgerData]);
+
+  // Build financial snapshot from live data
+  const financialSnapshot = useMemo<FinancialSnapshot>(() => {
+    if (!ledgerData) {
+      return {
+        income: 0,
+        expense: 0,
+        businessAccount: 0,
+        fundraiserAccount: 0,
+        balances: [],
+      };
+    }
+
+    const income = ledgerData.ytd?.income ?? 0;
+    const expense = ledgerData.ytd?.expense ?? 0;
+    const balances = ledgerData.accountBalances ?? [];
+
+    return {
+      income,
+      expense,
+      businessAccount: balances.find((b) => b.title?.includes("Business"))?.amount ?? 0,
+      fundraiserAccount: balances.find((b) => b.title?.includes("Fundraiser"))?.amount ?? 0,
+      balances: balances.map((b) => ({ label: b.title ?? "", amount: b.amount ?? 0 })),
+    };
+  }, [ledgerData]);
+
+  // Build YTD visual data from live data
+  const ytdVisualData = useMemo(() => {
+    if (!ledgerData) {
+      return [
+        { name: "Income YTD", value: 0, color: "#249b69" },
+        { name: "Expense YTD", value: 0, color: "#145a3d" },
+        { name: "Net", value: 0, color: "#76d08b" },
+      ];
+    }
+
+    const income = ledgerData.ytd?.income ?? 0;
+    const expense = ledgerData.ytd?.expense ?? 0;
+    const net = income - expense;
+
+    return [
+      { name: "Income YTD", value: Math.abs(income), color: "#249b69" },
+      { name: "Expense YTD", value: Math.abs(expense), color: "#145a3d" },
+      { name: "Net", value: Math.max(0, net), color: "#76d08b" },
+    ];
+  }, [ledgerData]);
+
+  // Build monthly visual data from live data
+  const monthlyVisualData = useMemo(() => {
+    if (!analyticsData || !analyticsData.duesByMonth) {
+      return [];
+    }
+
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return analyticsData.duesByMonth.slice(0, 5).map((m) => ({
+      month: monthNames[m.month - 1] || `M${m.month}`,
+      value: m.total,
+    }));
+  }, [analyticsData]);
+
   const scheduleRows = useMemo(() => {
     const query = `${membershipSearch} ${scheduleSearch}`.trim().toLowerCase();
-    return HOSTING_SCHEDULE_ROWS.filter((row) => {
+    return hostingRows.filter((row) => {
       if (!query) return true;
       return `${row.month} ${row.hostingGroup}`.toLowerCase().includes(query);
     });
-  }, [membershipSearch, scheduleSearch]);
+  }, [membershipSearch, scheduleSearch, hostingRows]);
 
   const pieLegend = useMemo(() => {
-    const total = YTD_VISUAL_DATA.reduce((sum, item) => sum + item.value, 0);
-    return YTD_VISUAL_DATA.map((entry) => ({
+    const total = ytdVisualData.reduce((sum, item) => sum + item.value, 0);
+    return ytdVisualData.map((entry) => ({
       ...entry,
-      percentage: ((entry.value / total) * 100).toFixed(1),
+      percentage: total > 0 ? ((entry.value / total) * 100).toFixed(1) : "0.0",
     }));
-  }, []);
+  }, [ytdVisualData]);
 
   const primaryNavigationItems: { label: string; icon: IconType; action: () => void }[] = [
     {
@@ -326,8 +471,14 @@ export default function MemberDashboard() {
                 <img src={memberImage} alt="Member profile" />
               </div>
               <div>
-                <div className="admin-dashboard__profile-name">Member</div>
-                <div className="admin-dashboard__profile-email">Agbaraonome@gmail.com</div>
+                <div className="admin-dashboard__profile-name">
+                  {memberProfile?.member
+                    ? `${memberProfile.member.firstName ?? ""} ${memberProfile.member.lastName ?? ""}`.trim() || "Member"
+                    : "Member"}
+                </div>
+                <div className="admin-dashboard__profile-email">
+                  {memberProfile?.member?.email ?? ""}
+                </div>
               </div>
             </div>
           </div>
@@ -362,7 +513,12 @@ export default function MemberDashboard() {
         </section>
 
         <section className="admin-dashboard__stats member-dashboard__stats">
-          {SUMMARY_CARDS.map((card) => {
+          {error && (
+            <div style={{ gridColumn: "1 / -1", padding: "1rem", backgroundColor: "#fee", color: "#c33", borderRadius: "4px" }}>
+              Error loading dashboard: {error}
+            </div>
+          )}
+          {summaryCards.map((card) => {
             const Icon = card.icon;
 
             return (
@@ -394,30 +550,35 @@ export default function MemberDashboard() {
             </div>
 
             <div className="admin-dashboard__chart-wrap member-dashboard__chart-wrap">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={MONTHLY_VISUAL_DATA} margin={{ top: 18, right: 18, left: -14, bottom: 8 }}>
-                  <CartesianGrid stroke="#dfe8e3" strokeDasharray="0" vertical={false} />
-                  <XAxis dataKey="month" tickLine={false} axisLine={false} stroke="#9aa59f" />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    stroke="#9aa59f"
-                    domain={[0, 500]}
-                    ticks={[0, 100, 200, 300, 400, 500]}
-                  />
-                  <Tooltip formatter={renderTooltipValue} />
-                  <Line
-                    type="monotone"
-                    dataKey="value"
-                    stroke="#1aa892"
-                    strokeWidth={3}
-                    dot={{ r: 4, fill: "#1aa892", strokeWidth: 0 }}
-                    activeDot={{ r: 5 }}
-                  >
-                    <LabelList dataKey="value" position="top" fill="#1aa892" fontSize={12} />
-                  </Line>
-                </LineChart>
-              </ResponsiveContainer>
+              {loading ? (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "300px" }}>Loading...</div>
+              ) : monthlyVisualData.length === 0 ? (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "300px" }}>No data available</div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={monthlyVisualData} margin={{ top: 18, right: 18, left: -14, bottom: 8 }}>
+                    <CartesianGrid stroke="#dfe8e3" strokeDasharray="0" vertical={false} />
+                    <XAxis dataKey="month" tickLine={false} axisLine={false} stroke="#9aa59f" />
+                    <YAxis
+                      tickLine={false}
+                      axisLine={false}
+                      stroke="#9aa59f"
+                      domain={[0, "dataMax + 100"]}
+                    />
+                    <Tooltip formatter={renderTooltipValue} />
+                    <Line
+                      type="monotone"
+                      dataKey="value"
+                      stroke="#1aa892"
+                      strokeWidth={3}
+                      dot={{ r: 4, fill: "#1aa892", strokeWidth: 0 }}
+                      activeDot={{ r: 5 }}
+                    >
+                      <LabelList dataKey="value" position="top" fill="#1aa892" fontSize={12} />
+                    </Line>
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </article>
 
@@ -429,20 +590,26 @@ export default function MemberDashboard() {
 
             <div className="admin-dashboard__pie-layout member-dashboard__pie-layout">
               <div className="admin-dashboard__pie-wrap member-dashboard__pie-wrap">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={YTD_VISUAL_DATA} dataKey="value" nameKey="name" innerRadius={0} outerRadius={98}>
-                      {YTD_VISUAL_DATA.map((entry) => (
-                        <Cell key={entry.name} fill={entry.color} stroke="#ffffff" strokeWidth={2} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      formatter={(value: number | string | Array<number | string>) =>
-                        formatCurrency(Number(Array.isArray(value) ? value[0] : value))
-                      }
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+                {loading || ytdVisualData.length === 0 ? (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "300px" }}>
+                    {loading ? "Loading..." : "No data"}
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={ytdVisualData} dataKey="value" nameKey="name" innerRadius={0} outerRadius={98}>
+                        {ytdVisualData.map((entry) => (
+                          <Cell key={entry.name} fill={entry.color} stroke="#ffffff" strokeWidth={2} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value: number | string | Array<number | string>) =>
+                          formatCurrency(Number(Array.isArray(value) ? value[0] : value))
+                        }
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
               </div>
 
               <div className="admin-dashboard__legend member-dashboard__legend">
@@ -450,7 +617,7 @@ export default function MemberDashboard() {
                   <div key={entry.name} className="admin-dashboard__legend-item">
                     <span className="admin-dashboard__legend-swatch" style={{ backgroundColor: entry.color }} />
                     <span>
-                      {entry.name}: {entry.value} ({entry.percentage}%)
+                      {entry.name}: {formatCurrency(entry.value)} ({entry.percentage}%)
                     </span>
                   </div>
                 ))}
@@ -464,7 +631,7 @@ export default function MemberDashboard() {
           id="member-dashboard-financials"
         >
           {[0, 1].map((panelIndex) => (
-            <FinancialPanel key={panelIndex} snapshot={FINANCIAL_SNAPSHOT} />
+            <FinancialPanel key={panelIndex} snapshot={financialSnapshot} />
           ))}
         </section>
 
