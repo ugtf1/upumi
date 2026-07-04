@@ -512,6 +512,81 @@ export async function analyticsRoutes(app: FastifyInstance) {
     };
   });
 
+  // Alias routes so frontend helpers calling /analytics/ledger and
+  // /analytics/monthly resolve without renaming existing routes.
+  app.get('/ledger', { preHandler: [requireAuth] }, async (req: any) => {
+    const year = toInt(req.query?.year, new Date().getFullYear());
+    const workbookRows = await fetchWorkbookLikeRows();
+
+    const balanceRows: { last: string; first: string; duesPaidYear: number | null; balanceYear: number | null; total: number | null }[] = [];
+
+    for (const r of workbookRows) {
+      const rowType = normalizeRowType(r.rowType);
+      const raw = (r.rawJson ?? {}) as RawRow;
+      const money = workbookMoneyFields(raw, year);
+
+      if (rowType.includes('balance')) {
+        balanceRows.push({
+          last: r.lastName ?? strCell(raw['Last']) ?? '',
+          first: r.firstName ?? strCell(raw['First']) ?? '',
+          duesPaidYear: money.duesPaidYear,
+          balanceYear: money.balanceYear ?? money.total,
+          total: money.total,
+        });
+      }
+    }
+
+    const incomeYtd = balanceRows
+      .filter(r => r.last.trim().toLowerCase() === 'total' && r.first.trim().toLowerCase() === 'income')
+      .reduce((s, r) => s + Number(r.duesPaidYear ?? r.total ?? 0), 0);
+
+    const expenseYtd = balanceRows
+      .filter(r => r.last.trim().toLowerCase() === 'total' && r.first.trim().toLowerCase() === 'expense')
+      .reduce((s, r) => s + Math.abs(Number(r.duesPaidYear ?? r.total ?? 0)), 0);
+
+    const accountBalances = balanceRows
+      .filter(r => r.last.trim().toLowerCase() === 'account')
+      .map(r => ({
+        title: r.first.trim() || 'Account',
+        amount: Number(r.duesPaidYear ?? r.balanceYear ?? r.total ?? 0),
+      }))
+      .filter(r => r.amount !== 0)
+      .sort((a, b) => a.title.localeCompare(b.title));
+
+    return {
+      year,
+      accountBalances,
+      ytd: {
+        income: incomeYtd,
+        expense: expenseYtd,
+        net: incomeYtd - expenseYtd,
+      },
+    };
+  });
+
+  app.get('/monthly', { preHandler: [requireAuth] }, async (req: any) => {
+    const year = toInt(req.query?.year, new Date().getFullYear());
+    const month = Math.max(1, Math.min(12, toInt(req.query?.month, new Date().getMonth() + 1)));
+    // Delegate to the existing monthly-report handler logic by re-querying.
+    const dues = await prisma.monthlyDue.findMany({
+      where: { year, month, duesPaid: { gt: 0 as any } },
+      orderBy: { duesPaid: 'desc' },
+      include: { member: { select: { id: true, firstName: true, lastName: true, status: true } } },
+    });
+
+    return {
+      year,
+      month,
+      periodLabel: `${monthNames[month - 1]} ${year}`,
+      duesPayments: dues.map((d) => ({
+        id: d.id,
+        amount: decimalToNumber(d.duesPaid) ?? 0,
+        present: d.present ?? null,
+        member: d.member ?? null,
+      })),
+    };
+  });
+
   app.get("/member-details/:id", { preHandler: [requireAuth] }, async (req: any, reply) => {
     const id = String(req.params?.id ?? "");
     const row = await prismaAny.workbookRow.findUnique({

@@ -43,8 +43,8 @@ export default function LoginPage() {
 
       setOtpSent(true);
       setNotice(res.message || "OTP sent");
-    } catch (e: any) {
-      const message = String(e?.message ?? "Login failed");
+    } catch (e: unknown) {
+      const message = String((e as Error)?.message ?? "Login failed");
       setErr(message.includes("record not found") ? "record not found" : message);
     } finally {
       setLoading(false);
@@ -59,8 +59,8 @@ export default function LoginPage() {
     try {
       const res = await apiPost<VerifyOtpResponse>("/auth/verify-otp", { phone, otp });
       completeLogin(res.token, res.redirectPath);
-    } catch (e: any) {
-      setErr(e?.message ?? "OTP verification failed");
+    } catch (e: unknown) {
+      setErr((e as Error)?.message ?? "OTP verification failed");
     } finally {
       setLoading(false);
     }
@@ -79,7 +79,7 @@ export default function LoginPage() {
             onChange={(e) => setPhone(e.target.value)}
             autoComplete="tel"
             disabled={otpSent}
-            placeholder="08020909745"
+            placeholder="Phone Number"
           />
         </label>
 
