@@ -13,6 +13,8 @@ import {
   FiLogOut,
   FiSearch,
   FiSettings,
+  FiTrendingDown,
+  FiTrendingUp,
   FiUserCheck,
   FiUsers,
 } from "react-icons/fi";
@@ -30,7 +32,7 @@ import {
   YAxis,
 } from "recharts";
 
-import { clearToken, getHostingSchedule, getMemberProfile, apiGet } from "./api";
+import { clearToken, getLedgerSummary, getAnalyticsSummary, getMonthlyReport, getHostingSchedule, getMemberProfile, apiGet } from "./api";
 import memberImage from "./upu-logo.svg";
 import "./admin-page.scss";
 import "./member-dashboard.scss";
@@ -39,6 +41,8 @@ type SummaryCardData = {
   title: string;
   subtitle: string;
   value: string;
+  delta: string;
+  trend: "up" | "down";
   icon: IconType;
 };
 
@@ -48,24 +52,6 @@ type FinancialSnapshot = {
   businessAccount: number;
   fundraiserAccount: number;
   balances: { label: string; amount: number }[];
-};
-
-type AdminMemberResponse = {
-  id: string;
-  status?: string | null;
-};
-
-type TransactionApiRow = {
-  id: string;
-  amount: string | number;
-};
-
-type DuesApiRow = {
-  id: string;
-  memberRecordId: string;
-  year: number;
-  month: number;
-  duesPaid: string | number;
 };
 
 type HostingScheduleRow = {
@@ -122,103 +108,69 @@ export default function MemberDashboard() {
   const [membershipSearch, setMembershipSearch] = useState("");
   const [scheduleSearch, setScheduleSearch] = useState("");
 
-  type LedgerData = {
-    ytd?: {
-      income?: number;
-      expense?: number;
-    };
-    accountBalances?: { title?: string; amount?: number }[];
+type AnalyticsData = {
+  kpis?: {
+    totalMembers?: number;
+    totalDues?: number;
   };
+  membershipMix?: { status: string; count: number }[];
+  duesByMonth?: { month: number; total: number }[];
+};
 
-  type HostingScheduleApiRow = {
-    month?: number;
-    hostMember?: string;
+type LedgerData = {
+  ytd?: {
+    income?: number;
+    expense?: number;
   };
+  accountBalances?: { title?: string; amount?: number }[];
+};
 
-  type MemberProfileData = {
-    member?: {
-      firstName?: string | null;
-      lastName?: string | null;
-      email?: string | null;
-    } | null;
-  };
+type HostingScheduleApiRow = {
+  month?: number;
+  hostMember?: string;
+};
 
-  const [totalMembers, setTotalMembers] = useState<number | null>(null);
-  const [activeMembers, setActiveMembersCount] = useState<number | null>(null);
-  const [totalRevenue, setTotalRevenue] = useState<number | null>(null);
-  const [pendingPayment, setPendingPayment] = useState<number | null>(null);
+type MemberProfileData = {
+  member?: {
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+  } | null;
+};
+
+
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
   const [ledgerData, setLedgerData] = useState<LedgerData | null>(null);
   const [hostingRows, setHostingRows] = useState<HostingScheduleRow[]>([]);
   const [memberProfile, setMemberProfile] = useState<MemberProfileData | null>(null);
+  const [liveMemberCount, setLiveMemberCount] = useState<number | null>(null);
+  const [liveActiveCount, setLiveActiveCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
 
-  // Fetch data on mount — same sources as AdminPage for stat cards
+  // Fetch data on mount
   useEffect(() => {
-    let active = true;
-
-    const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-
-    // Stat card 1 & 2: Total + Active members
-    apiGet<AdminMemberResponse[]>("/admin/members")
-      .then((members) => {
-        if (!active) return;
-        setTotalMembers(members.length);
-        setActiveMembersCount(members.filter((m) => String(m.status ?? "").toLowerCase() === "active").length);
-      })
-      .catch(() => {});
-
-    // Stat card 3: Total Revenue = transactions + dues paid
-    Promise.all([
-      apiGet<TransactionApiRow[]>("/admin/database/transactions"),
-      apiGet<DuesApiRow[]>("/admin/database/dues"),
-    ])
-      .then(([transactions, dues]) => {
-        if (!active) return;
-        const txSum = transactions.reduce((sum, r) => sum + Number(r.amount ?? 0), 0);
-        const duesSum = dues.reduce((sum, r) => sum + Number(r.duesPaid ?? 0), 0);
-        setTotalRevenue(txSum + duesSum);
-      })
-      .catch(() => {});
-
-    // Stat card 4: Pending payment (unpaid members × standard dues)
-    Promise.all([
-      apiGet<AdminMemberResponse[]>("/admin/members"),
-      apiGet<DuesApiRow[]>("/admin/database/dues"),
-    ])
-      .then(([members, dues]) => {
-        if (!active) return;
-        const activeCount = members.filter((m) => String(m.status ?? "").toLowerCase() === "active").length;
-        const paidThisMonth = new Set(
-          dues
-            .filter((d) => d.year === currentYear && d.month === currentMonth && Number(d.duesPaid) > 0)
-            .map((d) => d.memberRecordId)
-        ).size;
-        const unpaidCount = Math.max(0, activeCount - paidThisMonth);
-        const STANDARD_DUES = 20;
-        setPendingPayment(unpaidCount * STANDARD_DUES);
-      })
-      .catch(() => {});
-
-    // Ledger + hosting schedule + profile
-    const fetchRest = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
         setError(null);
-
-        const [ledger, schedule, profile] = await Promise.all([
-          apiGet<LedgerData>(`/analytics/ledger-summary?year=${currentYear}&month=${currentMonth}`).catch(() => null),
+        
+        const [analytics, ledger, , schedule, profile] = await Promise.all([
+          getAnalyticsSummary(currentYear) as Promise<AnalyticsData>,
+          getLedgerSummary(currentYear) as Promise<LedgerData>,
+          getMonthlyReport(currentYear, currentMonth),
           getHostingSchedule().catch(() => [] as HostingScheduleApiRow[]),
           getMemberProfile().catch(() => null) as Promise<MemberProfileData | null>,
         ]);
-
-        if (!active) return;
+        
+        setAnalyticsData(analytics);
         setLedgerData(ledger);
         setMemberProfile(profile);
 
+        const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
         setHostingRows(
           (schedule as HostingScheduleApiRow[])
             .slice()
@@ -229,15 +181,15 @@ export default function MemberDashboard() {
             }))
         );
       } catch (err) {
-        if (!active) return;
-        setError(err instanceof Error ? err.message : "Failed to load dashboard data");
+        const errMsg = err instanceof Error ? err.message : "Failed to load dashboard data";
+        setError(errMsg);
+        console.error("Dashboard data fetch error:", err);
       } finally {
-        if (active) setLoading(false);
+        setLoading(false);
       }
     };
 
-    fetchRest();
-    return () => { active = false; };
+    fetchData();
   }, [currentYear, currentMonth]);
 
   useEffect(() => {
@@ -259,35 +211,96 @@ export default function MemberDashboard() {
     return () => window.cancelAnimationFrame(frame);
   }, [location.pathname, location.state, navigate]);
 
-  // Build summary cards — same 4 cards as AdminPage
+  // Fetch live member counts directly — same source as the admin dashboard.
+  useEffect(() => {
+    let active = true;
+    apiGet<{ id: string; status?: string | null }[]>("/admin/members")
+      .then((members) => {
+        if (!active) return;
+        setLiveMemberCount(members.length);
+        setLiveActiveCount(members.filter((m) => String(m.status ?? "").toLowerCase() === "active").length);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
   const summaryCards = useMemo<SummaryCardData[]>(() => {
+    if (!analyticsData || !ledgerData) {
+      return [
+        {
+          title: "Total Members",
+          subtitle: "All registered members",
+          value: liveMemberCount !== null ? String(liveMemberCount) : "...",
+          delta: "",
+          trend: "up",
+          icon: FiUsers,
+        },
+        {
+          title: "Active Members",
+          subtitle: "Currently active",
+          value: liveActiveCount !== null ? String(liveActiveCount) : "...",
+          delta: "",
+          trend: "up",
+          icon: FiUserCheck,
+        },
+        {
+          title: "Total Revenue",
+          subtitle: "YTD",
+          value: "...",
+          delta: "",
+          trend: "up",
+          icon: FiDollarSign,
+        },
+        {
+          title: "Member Dues Paid",
+          subtitle: "This year",
+          value: "...",
+          delta: "",
+          trend: "up",
+          icon: FiClock,
+        },
+      ];
+    }
+
+    const activeCount = liveActiveCount ?? analyticsData.membershipMix?.find((m) => m.status === "Active")?.count ?? 0;
+    const totalMembers = liveMemberCount ?? analyticsData.kpis?.totalMembers ?? 0;
+    const totalDues = analyticsData.kpis?.totalDues ?? 0;
+    const ytdIncome = ledgerData.ytd?.income ?? 0;
+
     return [
       {
         title: "Total Members",
         subtitle: "All registered members",
-        value: totalMembers === null ? "—" : totalMembers.toLocaleString(),
+        value: String(totalMembers),
+        delta: "",
+        trend: "up",
         icon: FiUsers,
       },
       {
         title: "Active Members",
         subtitle: "Currently active",
-        value: activeMembers === null ? "—" : activeMembers.toLocaleString(),
+        value: String(activeCount),
+        delta: "",
+        trend: "up",
         icon: FiUserCheck,
       },
       {
         title: "Total Revenue",
-        subtitle: "Transactions + dues paid",
-        value: totalRevenue === null ? "—" : `$${totalRevenue.toLocaleString()}`,
+        subtitle: "YTD income",
+        value: formatCurrency(ytdIncome),
+        delta: "",
+        trend: "up",
         icon: FiDollarSign,
       },
       {
-        title: "Pending Payment",
-        subtitle: `Expected dues — ${new Date().toLocaleString("default", { month: "long" })} ${new Date().getFullYear()}`,
-        value: pendingPayment === null ? "—" : `$${pendingPayment.toLocaleString()}`,
+        title: "Member Dues Paid",
+        subtitle: "This year",
+        value: formatCurrency(totalDues),
+        delta: "",
+        trend: "up",
         icon: FiClock,
       },
     ];
-  }, [totalMembers, activeMembers, totalRevenue, pendingPayment]);
+  }, [analyticsData, ledgerData, liveMemberCount, liveActiveCount]);
 
   // Build financial snapshot from live data
   const financialSnapshot = useMemo<FinancialSnapshot>(() => {
@@ -335,8 +348,18 @@ export default function MemberDashboard() {
     ];
   }, [ledgerData]);
 
-  // Monthly visual data (stub — no analytics endpoint used anymore)
-  const monthlyVisualData: { month: string; value: number }[] = [];
+  // Build monthly visual data from live data
+  const monthlyVisualData = useMemo(() => {
+    if (!analyticsData || !analyticsData.duesByMonth) {
+      return [];
+    }
+
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return analyticsData.duesByMonth.slice(0, 5).map((m) => ({
+      month: monthNames[m.month - 1] || `M${m.month}`,
+      value: m.total,
+    }));
+  }, [analyticsData]);
 
   const scheduleRows = useMemo(() => {
     const query = `${membershipSearch} ${scheduleSearch}`.trim().toLowerCase();
@@ -522,6 +545,9 @@ export default function MemberDashboard() {
                   <p>{card.subtitle}</p>
                   <div className="admin-dashboard__stat-footer">
                     <strong>{card.value}</strong>
+                    <span className={`admin-dashboard__trend admin-dashboard__trend--${card.trend}`}>
+                      {card.delta} {card.trend === "up" ? <FiTrendingUp size={14} /> : <FiTrendingDown size={14} />}
+                    </span>
                   </div>
                 </div>
               </article>
