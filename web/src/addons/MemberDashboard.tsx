@@ -145,6 +145,7 @@ type MemberProfileData = {
   const [memberProfile, setMemberProfile] = useState<MemberProfileData | null>(null);
   const [liveMemberCount, setLiveMemberCount] = useState<number | null>(null);
   const [liveActiveCount, setLiveActiveCount] = useState<number | null>(null);
+  const [totalRevenue, setTotalRevenue] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -211,9 +212,11 @@ type MemberProfileData = {
     return () => window.cancelAnimationFrame(frame);
   }, [location.pathname, location.state, navigate]);
 
-  // Fetch live member counts directly — same source as the admin dashboard.
+  // Fetch live member counts + total revenue directly — same source as admin dashboard.
   useEffect(() => {
     let active = true;
+
+    // 1. Total + Active members
     apiGet<{ id: string; status?: string | null }[]>("/admin/members")
       .then((members) => {
         if (!active) return;
@@ -221,6 +224,20 @@ type MemberProfileData = {
         setLiveActiveCount(members.filter((m) => String(m.status ?? "").toLowerCase() === "active").length);
       })
       .catch(() => {});
+
+    // 2. Total Revenue = sum of all transactions + all monthly dues paid (same as admin)
+    Promise.all([
+      apiGet<{ id: string; amount: string | number }[]>("/admin/database/transactions"),
+      apiGet<{ id: string; duesPaid: string | number }[]>("/admin/database/dues"),
+    ])
+      .then(([transactions, dues]) => {
+        if (!active) return;
+        const txSum = transactions.reduce((sum, r) => sum + Number(r.amount ?? 0), 0);
+        const duesSum = dues.reduce((sum, r) => sum + Number(r.duesPaid ?? 0), 0);
+        setTotalRevenue(txSum + duesSum);
+      })
+      .catch(() => {});
+
     return () => { active = false; };
   }, []);
   const summaryCards = useMemo<SummaryCardData[]>(() => {
@@ -244,8 +261,8 @@ type MemberProfileData = {
         },
         {
           title: "Total Revenue",
-          subtitle: "YTD",
-          value: "...",
+          subtitle: "Transactions + dues paid",
+          value: totalRevenue !== null ? `$${totalRevenue.toLocaleString()}` : "...",
           delta: "",
           trend: "up",
           icon: FiDollarSign,
@@ -264,7 +281,6 @@ type MemberProfileData = {
     const activeCount = liveActiveCount ?? analyticsData.membershipMix?.find((m) => m.status === "Active")?.count ?? 0;
     const totalMembers = liveMemberCount ?? analyticsData.kpis?.totalMembers ?? 0;
     const totalDues = analyticsData.kpis?.totalDues ?? 0;
-    const ytdIncome = ledgerData.ytd?.income ?? 0;
 
     return [
       {
@@ -285,8 +301,8 @@ type MemberProfileData = {
       },
       {
         title: "Total Revenue",
-        subtitle: "YTD income",
-        value: formatCurrency(ytdIncome),
+        subtitle: "Transactions + dues paid",
+        value: totalRevenue !== null ? `$${totalRevenue.toLocaleString()}` : "...",
         delta: "",
         trend: "up",
         icon: FiDollarSign,
@@ -300,7 +316,7 @@ type MemberProfileData = {
         icon: FiClock,
       },
     ];
-  }, [analyticsData, ledgerData, liveMemberCount, liveActiveCount]);
+  }, [analyticsData, ledgerData, liveMemberCount, liveActiveCount, totalRevenue]);
 
   // Build financial snapshot from live data
   const financialSnapshot = useMemo<FinancialSnapshot>(() => {
