@@ -39,17 +39,26 @@ type ExpenseApiRow = {
   date: string;
 };
 
+type DuesApiRow = {
+  id: string;
+  memberRecordId: string;
+  year: number;
+  month: number;
+  duesPaid: string | number;
+  memberRecord?: {
+    user?: {
+      firstName?: string | null;
+      lastName?: string | null;
+    } | null;
+  } | null;
+};
+
 type MemberProfileResponse = {
   member?: {
     firstName?: string | null;
     lastName?: string | null;
     email?: string | null;
   } | null;
-  monthlyDues?: {
-    year: number;
-    month: number;
-    duesPaid?: number | null;
-  }[];
 };
 
 
@@ -62,21 +71,7 @@ type TransactionRow = {
   status: string;
 };
 
-type TransactionFormState = {
-  fullName: string;
-  title: string;
-  amount: string;
-  paymentDate: string;
-};
 
-const TRANSACTION_TITLE_OPTIONS = [
-  "Monthly Dues",
-  "Raffle",
-  "Insurance",
-  "Wrapper",
-  "UPUA 25 Raffle",
-  "Levy",
-];
 
 const MEMBER_ROUTE_CONFIG: Record<string, { path: string; label: string }> = {
   "/member": { path: "/member", label: "Community Dashboard" },
@@ -130,16 +125,17 @@ export default function MemberTransaction() {
   const [expError, setExpError] = useState<string | null>(null);
   const [memberProfile, setMemberProfile] = useState<MemberProfileResponse | null>(null);
 
-  // Fetch member profile + all transactions
+  // Fetch member profile + all transactions + all dues
   useEffect(() => {
     const fetchData = async () => {
       try {
         setTxLoading(true);
         setTxError(null);
 
-        const [profile, allTransactions] = await Promise.all([
+        const [profile, allTransactions, allDues] = await Promise.all([
           getMemberProfile() as Promise<MemberProfileResponse>,
           apiGet<TransactionApiRow[]>("/admin/database/transactions").catch(() => [] as TransactionApiRow[]),
+          apiGet<DuesApiRow[]>("/admin/database/dues").catch(() => [] as DuesApiRow[]),
         ]);
 
         setMemberProfile(profile);
@@ -160,14 +156,22 @@ export default function MemberTransaction() {
         }));
 
         const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-        const dueRows: TransactionRow[] = (profile?.monthlyDues ?? []).map((d) => ({
-          id: `dues-${d.year}-${d.month}`,
-          date: `${monthNames[(d.month ?? 1) - 1] ?? ""} ${d.year}`,
-          fullName: memberName,
-          title: "Monthly Dues",
-          amount: `$${Number(d.duesPaid ?? 0).toLocaleString()}`,
-          status: d.duesPaid && d.duesPaid > 0 ? "Paid" : "Pending",
-        }));
+        // Build dues rows from ALL members' dues records
+        const dueRows: TransactionRow[] = allDues
+          .filter((d) => Number(d.duesPaid ?? 0) > 0)
+          .map((d) => {
+            const firstName = d.memberRecord?.user?.firstName ?? "";
+            const lastName = d.memberRecord?.user?.lastName ?? "";
+            const dueMemberName = `${firstName} ${lastName}`.trim() || "Member";
+            return {
+              id: `dues-${d.id}`,
+              date: `${monthNames[(d.month ?? 1) - 1] ?? ""} ${d.year}`,
+              fullName: dueMemberName,
+              title: "Monthly Dues",
+              amount: `$${Number(d.duesPaid ?? 0).toLocaleString()}`,
+              status: "Paid",
+            };
+          });
 
         setTransactionRows([...txRows, ...dueRows]);
       } catch (err) {
@@ -204,33 +208,6 @@ export default function MemberTransaction() {
   }, []);
 
   const [activeTab, setActiveTab] = useState<"Income" | "Expense">("Income");
-  const [isAddTransactionModalOpen, setIsAddTransactionModalOpen] = useState(false);
-  const [transactionForm, setTransactionForm] = useState<TransactionFormState>({
-    fullName: "",
-    title: "",
-    amount: "",
-    paymentDate: "",
-  });
-
-  useEffect(() => {
-    if (!isAddTransactionModalOpen) return undefined;
-
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setIsAddTransactionModalOpen(false);
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = originalOverflow;
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isAddTransactionModalOpen]);
 
   const visibleRows = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -261,45 +238,6 @@ export default function MemberTransaction() {
   function handleLogout() {
     clearToken();
     navigate("/login");
-  }
-
-  function resetTransactionForm() {
-    setTransactionForm({
-      fullName: "",
-      title: "",
-      amount: "",
-      paymentDate: "",
-    });
-  }
-
-  function handleCloseTransactionModal() {
-    resetTransactionForm();
-    setIsAddTransactionModalOpen(false);
-  }
-
-  function handleTransactionFormChange(field: keyof TransactionFormState, value: string) {
-    setTransactionForm((currentForm) => ({ ...currentForm, [field]: value }));
-  }
-
-  function handleSaveTransaction() {
-    const { fullName, title, amount, paymentDate } = transactionForm;
-    if (!fullName.trim() || !title.trim() || !amount.trim() || !paymentDate.trim()) return;
-
-    setTransactionRows((currentRows) => [
-      {
-        id: `tx-${Date.now()}`,
-        date: paymentDate.trim(),
-        fullName: fullName.trim(),
-        title: title.trim(),
-        amount: amount.trim(),
-        status: "Completed",
-      },
-      ...currentRows,
-    ]);
-
-    setSearch(fullName.trim());
-    resetTransactionForm();
-    setIsAddTransactionModalOpen(false);
   }
 
   return (
@@ -598,106 +536,6 @@ export default function MemberTransaction() {
           )}
         </section>
       </main>
-
-      {isAddTransactionModalOpen && (
-        <div className="admin-dashboard__modal" role="dialog" aria-modal="true" aria-labelledby="transaction-modal-title">
-          <div className="admin-dashboard__modal-backdrop" onClick={handleCloseTransactionModal} />
-
-          <div className="admin-dashboard__modal-panel transaction-page__modal-panel">
-            <div className="transaction-page__modal-grid">
-              <div className="admin-dashboard__modal-section">
-                <label htmlFor="transaction-full-name" className="admin-dashboard__modal-label" id="transaction-modal-title">
-                  Full Name
-                </label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain">
-                  <input
-                    id="transaction-full-name"
-                    value={transactionForm.fullName}
-                    onChange={(event) => handleTransactionFormChange("fullName", event.target.value)}
-                    placeholder="Mrs. Abada Evi"
-                    aria-label="Full name"
-                  />
-                </div>
-              </div>
-
-              <div className="admin-dashboard__modal-section">
-                <label htmlFor="transaction-title" className="admin-dashboard__modal-label">
-                  Title
-                </label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain transaction-page__modal-select-wrap">
-                  <select
-                    id="transaction-title"
-                    value={transactionForm.title}
-                    onChange={(event) => handleTransactionFormChange("title", event.target.value)}
-                    aria-label="Transaction title"
-                    className={transactionForm.title ? "has-value" : ""}
-                  >
-                    <option value="">Select</option>
-                    {TRANSACTION_TITLE_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="admin-dashboard__modal-section">
-                <label htmlFor="transaction-amount" className="admin-dashboard__modal-label">
-                  Amount
-                </label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain">
-                  <input
-                    id="transaction-amount"
-                    value={transactionForm.amount}
-                    onChange={(event) => handleTransactionFormChange("amount", event.target.value)}
-                    placeholder="$100"
-                    aria-label="Transaction amount"
-                  />
-                </div>
-              </div>
-
-              <div className="admin-dashboard__modal-section">
-                <label htmlFor="transaction-payment-date" className="admin-dashboard__modal-label">
-                  Payment date
-                </label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain">
-                  <input
-                    id="transaction-payment-date"
-                    value={transactionForm.paymentDate}
-                    onChange={(event) => handleTransactionFormChange("paymentDate", event.target.value)}
-                    placeholder="08 Jan 2026"
-                    aria-label="Payment date"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="admin-dashboard__modal-actions">
-              <button
-                type="button"
-                className="admin-dashboard__modal-button admin-dashboard__modal-button--secondary"
-                onClick={handleCloseTransactionModal}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="admin-dashboard__modal-button admin-dashboard__modal-button--primary"
-                onClick={handleSaveTransaction}
-                disabled={
-                  !transactionForm.fullName.trim() ||
-                  !transactionForm.title.trim() ||
-                  !transactionForm.amount.trim() ||
-                  !transactionForm.paymentDate.trim()
-                }
-              >
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
