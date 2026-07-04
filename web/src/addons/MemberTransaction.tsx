@@ -5,6 +5,7 @@ import {
   FiCreditCard,
   FiDollarSign,
   FiLogOut,
+  FiSearch,
   FiSettings,
   FiUsers,
 } from "react-icons/fi";
@@ -408,6 +409,15 @@ export default function MemberTransaction() {
         </section> */}
 
         <section className="transaction-page__tools">
+          <label className="admin-dashboard__search transaction-page__search">
+            <FiSearch size={18} />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search member, title, amount..."
+              aria-label="Search transactions"
+            />
+          </label>
         </section>
 
         <section className="admin-dashboard__stats transaction-page__summary">
