@@ -32,7 +32,7 @@ import {
   YAxis,
 } from "recharts";
 
-import { clearToken, getLedgerSummary, getAnalyticsSummary, getMonthlyReport, getHostingSchedule, getMemberProfile, apiGet } from "./api";
+import { clearToken, getLedgerSummary, getAnalyticsSummary, getMonthlyReport, getHostingSchedule, getMemberProfile, getMemberSafeMemberList, getAllTransactionsReadOnly, getAllDuesReadOnly } from "./api";
 import memberImage from "./upu-logo.svg";
 import "./admin-page.scss";
 import "./member-dashboard.scss";
@@ -215,10 +215,11 @@ type MemberProfileData = {
     const currentYearLocal = new Date().getFullYear();
     const currentMonthLocal = new Date().getMonth() + 1;
 
-    // 1. Total + Active members
-    apiGet<{ id: string; status?: string | null }[]>("/admin/members")
-      .then((members) => {
+    // 1. Total + Active members — member-safe mirror of admin's /members list
+    getMemberSafeMemberList()
+      .then((rows) => {
         if (!active) return;
+        const members = rows as { id: string; status?: string | null }[];
         setLiveMemberCount(members.length);
         setLiveActiveCount(members.filter((m) => String(m.status ?? "").toLowerCase() === "active").length);
       })
@@ -226,11 +227,13 @@ type MemberProfileData = {
 
     // 2. Total Revenue = sum of all transactions + all monthly dues paid (same as admin)
     Promise.all([
-      apiGet<{ id: string; amount: string | number }[]>("/admin/database/transactions"),
-      apiGet<{ id: string; memberRecordId?: string; year?: number; month?: number; duesPaid: string | number }[]>("/admin/database/dues"),
+      getAllTransactionsReadOnly(),
+      getAllDuesReadOnly(),
     ])
-      .then(([transactions, dues]) => {
+      .then(([txRows, dueRows]) => {
         if (!active) return;
+        const transactions = txRows as { id: string; amount: string | number }[];
+        const dues = dueRows as { id: string; memberRecordId?: string; year?: number; month?: number; duesPaid: string | number }[];
         const txSum = transactions.reduce((sum, r) => sum + Number(r.amount ?? 0), 0);
         const duesSum = dues.reduce((sum, r) => sum + Number(r.duesPaid ?? 0), 0);
         setTotalRevenue(txSum + duesSum);
@@ -239,11 +242,13 @@ type MemberProfileData = {
 
     // 3. Pending Payment = active members who haven't paid dues this month × $20 (same as admin)
     Promise.all([
-      apiGet<{ id: string; status?: string | null }[]>("/admin/members"),
-      apiGet<{ id: string; memberRecordId?: string; year?: number; month?: number; duesPaid: string | number }[]>("/admin/database/dues"),
+      getMemberSafeMemberList(),
+      getAllDuesReadOnly(),
     ])
-      .then(([members, dues]) => {
+      .then(([memberRows, dueRows]) => {
         if (!active) return;
+        const members = memberRows as { id: string; status?: string | null }[];
+        const dues = dueRows as { id: string; memberRecordId?: string; year?: number; month?: number; duesPaid: string | number }[];
         const activeCount = members.filter((m) => String(m.status ?? "").toLowerCase() === "active").length;
         const paidThisMonth = new Set(
           dues
@@ -353,10 +358,8 @@ type MemberProfileData = {
     }));
   }, [analyticsData]);
 
-  const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-
   const scheduleRowsForYear = useMemo<HostingScheduleRow[]>(() => {
-    const MONTH_NAMES = [
+    const monthNames = [
       "January",
       "February",
       "March",
@@ -376,10 +379,10 @@ type MemberProfileData = {
       .slice()
       .sort((a, b) => (a.month ?? 0) - (b.month ?? 0))
       .map((row) => ({
-        month: MONTH_NAMES[(row.month ?? 1) - 1] ?? String(row.month),
+        month: monthNames[(row.month ?? 1) - 1] ?? String(row.month),
         hostingGroup: row.hostMember ?? "",
       }));
-  }, [hostingScheduleRows, scheduleYear, MONTH_NAMES]);
+  }, [hostingScheduleRows, scheduleYear]);
 
   const scheduleRows = useMemo(() => {
     const query = `${membershipSearch} ${scheduleSearch}`.trim().toLowerCase();

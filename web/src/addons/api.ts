@@ -1,5 +1,4 @@
-const rawBase = (import.meta as unknown as { env?: { VITE_API_BASE?: string } }).env
-  ?.VITE_API_BASE as string | undefined;
+const rawBase = (import.meta as unknown as { env?: { VITE_API_BASE?: string } }).env?.VITE_API_BASE;
 const isLocalhost =
   typeof window !== "undefined" &&
   (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
@@ -133,7 +132,31 @@ export async function getMonthlyReport(year: number, month: number): Promise<unk
   return apiGet<unknown>(`/analytics/monthly?year=${year}&month=${month}`);
 }
 
-// GET /admin/database/hostingSchedule — all hosting schedule rows.
+// GET /me/members — read-only, member-safe mirror of admin's member list.
+// Any signed-in user (member or admin) can call this; it returns the same
+// merged MemberRecord + orphan User list as /admin/members, so counts match.
+export async function getMemberSafeMemberList(): Promise<unknown[]> {
+  return apiGet<unknown[]>("/me/members");
+}
+
+// GET /members/database/hostingSchedule — member-safe read of the hosting
+// schedule table (memberDatabaseRoutes on the backend requires only login,
+// not the ADMIN role).
 export async function getHostingSchedule(): Promise<unknown[]> {
-  return apiGet<unknown[]>("/admin/database/hostingSchedule");
+  return apiGet<unknown[]>("/members/database/hostingSchedule");
+}
+
+// GET /members/database/transactions — member-safe read of all transactions.
+export async function getAllTransactionsReadOnly(): Promise<unknown[]> {
+  return apiGet<unknown[]>("/members/database/transactions");
+}
+
+// GET /members/database/expenses — member-safe read of all expenses.
+export async function getAllExpensesReadOnly(): Promise<unknown[]> {
+  return apiGet<unknown[]>("/members/database/expenses");
+}
+
+// GET /members/database/dues — member-safe read of all monthly dues.
+export async function getAllDuesReadOnly(): Promise<unknown[]> {
+  return apiGet<unknown[]>("/members/database/dues");
 }

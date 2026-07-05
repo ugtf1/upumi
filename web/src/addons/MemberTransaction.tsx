@@ -9,7 +9,7 @@ import {
   FiUsers,
 } from "react-icons/fi";
 
-import { clearToken, apiGet } from "./api";
+import { clearToken, getAllTransactionsReadOnly, getAllExpensesReadOnly } from "./api";
 import memberImage from "./upu-logo.svg";
 import "./admin-page.scss";
 import "./transaction-page.scss";
@@ -120,9 +120,10 @@ export default function MemberTransaction() {
     let active = true;
     setTxLoading(true);
     setTxError(null);
-    apiGet<TransactionApiRow[]>("/admin/database/transactions")
-      .then((rows) => {
+    getAllTransactionsReadOnly()
+      .then((data) => {
         if (!active) return;
+        const rows = data as TransactionApiRow[];
         setTransactionRows(
           rows.map((tx) => ({
             id: tx.id,
@@ -145,9 +146,10 @@ export default function MemberTransaction() {
   useEffect(() => {
     let active = true;
     setExpLoading(true);
-    apiGet<ExpenseApiRow[]>("/admin/database/expenses")
-      .then((rows) => {
+    getAllExpensesReadOnly()
+      .then((data) => {
         if (!active) return;
+        const rows = data as ExpenseApiRow[];
         setExpenseRows(
           rows.map((row) => ({
             id: row.id,
