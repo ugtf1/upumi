@@ -121,9 +121,10 @@ export async function getAnalyticsSummary(year: number): Promise<any> {
   return apiGet<any>(`/analytics/summary?year=${year}`);
 }
 
-// GET /analytics/ledger?year=YYYY — YTD income/expense and account balances.
+// GET /analytics/ledger-summary?year=YYYY — the exact same endpoint the admin
+// dashboard calls, so member and admin dashboards always show identical figures.
 export async function getLedgerSummary(year: number): Promise<any> {
-  return apiGet<any>(`/analytics/ledger?year=${year}`);
+  return apiGet<any>(`/analytics/ledger-summary?year=${year}`);
 }
 
 // GET /analytics/monthly?year=YYYY&month=MM — single-month breakdown.
