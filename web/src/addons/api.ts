@@ -1,4 +1,5 @@
-const rawBase = (import.meta as any)?.env?.VITE_API_BASE as string | undefined;
+const rawBase = (import.meta as unknown as { env?: { VITE_API_BASE?: string } }).env
+  ?.VITE_API_BASE as string | undefined;
 const isLocalhost =
   typeof window !== "undefined" &&
   (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
@@ -111,28 +112,28 @@ export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
 
 // GET /me/profile — returns the logged-in member's profile, linked MemberRecord,
 // and all their MonthlyDue rows.
-export async function getMemberProfile(): Promise<any> {
-  return apiGet<any>("/me/profile");
+export async function getMemberProfile(): Promise<unknown> {
+  return apiGet<unknown>("/me/profile");
 }
 
 // GET /analytics/summary?year=YYYY — org-wide KPIs: total members, active count,
 // dues totals, membership mix breakdown.
-export async function getAnalyticsSummary(year: number): Promise<any> {
-  return apiGet<any>(`/analytics/summary?year=${year}`);
+export async function getAnalyticsSummary(year: number): Promise<unknown> {
+  return apiGet<unknown>(`/analytics/summary?year=${year}`);
 }
 
 // GET /analytics/ledger-summary?year=YYYY — the exact same endpoint the admin
 // dashboard calls, so member and admin dashboards always show identical figures.
-export async function getLedgerSummary(year: number): Promise<any> {
-  return apiGet<any>(`/analytics/ledger-summary?year=${year}`);
+export async function getLedgerSummary(year: number): Promise<unknown> {
+  return apiGet<unknown>(`/analytics/ledger-summary?year=${year}`);
 }
 
 // GET /analytics/monthly?year=YYYY&month=MM — single-month breakdown.
-export async function getMonthlyReport(year: number, month: number): Promise<any> {
-  return apiGet<any>(`/analytics/monthly?year=${year}&month=${month}`);
+export async function getMonthlyReport(year: number, month: number): Promise<unknown> {
+  return apiGet<unknown>(`/analytics/monthly?year=${year}&month=${month}`);
 }
 
 // GET /admin/database/hostingSchedule — all hosting schedule rows.
-export async function getHostingSchedule(): Promise<any[]> {
-  return apiGet<any[]>("/admin/database/hostingSchedule");
+export async function getHostingSchedule(): Promise<unknown[]> {
+  return apiGet<unknown[]>("/admin/database/hostingSchedule");
 }

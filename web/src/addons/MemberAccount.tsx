@@ -89,7 +89,7 @@ export default function MemberAccount() {
       try {
         setLoading(true);
         setError(null);
-        const profile = await getMemberProfile();
+        const profile = (await getMemberProfile()) as MemberProfileResponse;
         setMemberProfile(profile);
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : "Failed to load account data";
