@@ -125,7 +125,10 @@ type LedgerData = {
   accountBalances?: { title?: string; amount?: number }[];
 };
 
+const YEAR_OPTIONS = [2024, 2025, 2026, 2027];
+
 type HostingScheduleApiRow = {
+  year?: number;
   month?: number;
   hostMember?: string;
 };
@@ -141,11 +144,13 @@ type MemberProfileData = {
 
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
   const [ledgerData, setLedgerData] = useState<LedgerData | null>(null);
-  const [hostingRows, setHostingRows] = useState<HostingScheduleRow[]>([]);
+  const [hostingScheduleRows, setHostingScheduleRows] = useState<HostingScheduleApiRow[]>([]);
   const [memberProfile, setMemberProfile] = useState<MemberProfileData | null>(null);
   const [liveMemberCount, setLiveMemberCount] = useState<number | null>(null);
   const [liveActiveCount, setLiveActiveCount] = useState<number | null>(null);
   const [totalRevenue, setTotalRevenue] = useState<number | null>(null);
+  const [pendingPayment, setPendingPayment] = useState<number | null>(null);
+  const [scheduleYear, setScheduleYear] = useState(new Date().getFullYear());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -171,16 +176,7 @@ type MemberProfileData = {
         setLedgerData(ledger);
         setMemberProfile(profile);
 
-        const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-        setHostingRows(
-          (schedule as HostingScheduleApiRow[])
-            .slice()
-            .sort((a, b) => (a.month ?? 0) - (b.month ?? 0))
-            .map((row) => ({
-              month: MONTH_NAMES[(row.month ?? 1) - 1] ?? String(row.month),
-              hostingGroup: row.hostMember ?? "",
-            }))
-        );
+        setHostingScheduleRows(schedule as HostingScheduleApiRow[]);
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : "Failed to load dashboard data";
         setError(errMsg);
@@ -212,9 +208,12 @@ type MemberProfileData = {
     return () => window.cancelAnimationFrame(frame);
   }, [location.pathname, location.state, navigate]);
 
-  // Fetch live member counts + total revenue directly — same source as admin dashboard.
+  // Fetch live member counts + total revenue + pending payment — identical
+  // sources and logic to the admin dashboard, so numbers always match.
   useEffect(() => {
     let active = true;
+    const currentYearLocal = new Date().getFullYear();
+    const currentMonthLocal = new Date().getMonth() + 1;
 
     // 1. Total + Active members
     apiGet<{ id: string; status?: string | null }[]>("/admin/members")
@@ -228,7 +227,7 @@ type MemberProfileData = {
     // 2. Total Revenue = sum of all transactions + all monthly dues paid (same as admin)
     Promise.all([
       apiGet<{ id: string; amount: string | number }[]>("/admin/database/transactions"),
-      apiGet<{ id: string; duesPaid: string | number }[]>("/admin/database/dues"),
+      apiGet<{ id: string; memberRecordId?: string; year?: number; month?: number; duesPaid: string | number }[]>("/admin/database/dues"),
     ])
       .then(([transactions, dues]) => {
         if (!active) return;
@@ -238,55 +237,32 @@ type MemberProfileData = {
       })
       .catch(() => {});
 
+    // 3. Pending Payment = active members who haven't paid dues this month × $20 (same as admin)
+    Promise.all([
+      apiGet<{ id: string; status?: string | null }[]>("/admin/members"),
+      apiGet<{ id: string; memberRecordId?: string; year?: number; month?: number; duesPaid: string | number }[]>("/admin/database/dues"),
+    ])
+      .then(([members, dues]) => {
+        if (!active) return;
+        const activeCount = members.filter((m) => String(m.status ?? "").toLowerCase() === "active").length;
+        const paidThisMonth = new Set(
+          dues
+            .filter((d) => d.year === currentYearLocal && d.month === currentMonthLocal && Number(d.duesPaid) > 0)
+            .map((d) => d.memberRecordId)
+        ).size;
+        const unpaidCount = Math.max(0, activeCount - paidThisMonth);
+        setPendingPayment(unpaidCount * 20);
+      })
+      .catch(() => {});
+
     return () => { active = false; };
   }, []);
   const summaryCards = useMemo<SummaryCardData[]>(() => {
-    if (!analyticsData || !ledgerData) {
-      return [
-        {
-          title: "Total Members",
-          subtitle: "All registered members",
-          value: liveMemberCount !== null ? String(liveMemberCount) : "...",
-          delta: "",
-          trend: "up",
-          icon: FiUsers,
-        },
-        {
-          title: "Active Members",
-          subtitle: "Currently active",
-          value: liveActiveCount !== null ? String(liveActiveCount) : "...",
-          delta: "",
-          trend: "up",
-          icon: FiUserCheck,
-        },
-        {
-          title: "Total Revenue",
-          subtitle: "Transactions + dues paid",
-          value: totalRevenue !== null ? `$${totalRevenue.toLocaleString()}` : "...",
-          delta: "",
-          trend: "up",
-          icon: FiDollarSign,
-        },
-        {
-          title: "Member Dues Paid",
-          subtitle: "This year",
-          value: "...",
-          delta: "",
-          trend: "up",
-          icon: FiClock,
-        },
-      ];
-    }
-
-    const activeCount = liveActiveCount ?? analyticsData.membershipMix?.find((m) => m.status === "Active")?.count ?? 0;
-    const totalMembers = liveMemberCount ?? analyticsData.kpis?.totalMembers ?? 0;
-    const totalDues = analyticsData.kpis?.totalDues ?? 0;
-
     return [
       {
         title: "Total Members",
         subtitle: "All registered members",
-        value: String(totalMembers),
+        value: liveMemberCount === null ? "—" : liveMemberCount.toLocaleString(),
         delta: "",
         trend: "up",
         icon: FiUsers,
@@ -294,7 +270,7 @@ type MemberProfileData = {
       {
         title: "Active Members",
         subtitle: "Currently active",
-        value: String(activeCount),
+        value: liveActiveCount === null ? "—" : liveActiveCount.toLocaleString(),
         delta: "",
         trend: "up",
         icon: FiUserCheck,
@@ -302,21 +278,21 @@ type MemberProfileData = {
       {
         title: "Total Revenue",
         subtitle: "Transactions + dues paid",
-        value: totalRevenue !== null ? `$${totalRevenue.toLocaleString()}` : "...",
+        value: totalRevenue === null ? "—" : `$${totalRevenue.toLocaleString()}`,
         delta: "",
         trend: "up",
         icon: FiDollarSign,
       },
       {
-        title: "Member Dues Paid",
-        subtitle: "This year",
-        value: formatCurrency(totalDues),
+        title: "Pending Payment",
+        subtitle: `Expected dues — ${new Date().toLocaleString("default", { month: "long" })} ${new Date().getFullYear()}`,
+        value: pendingPayment === null ? "—" : `$${pendingPayment.toLocaleString()}`,
         delta: "",
         trend: "up",
         icon: FiClock,
       },
     ];
-  }, [analyticsData, ledgerData, liveMemberCount, liveActiveCount, totalRevenue]);
+  }, [liveMemberCount, liveActiveCount, totalRevenue, pendingPayment]);
 
   // Build financial snapshot from live data
   const financialSnapshot = useMemo<FinancialSnapshot>(() => {
@@ -377,13 +353,41 @@ type MemberProfileData = {
     }));
   }, [analyticsData]);
 
+  const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+  const scheduleRowsForYear = useMemo<HostingScheduleRow[]>(() => {
+    const MONTH_NAMES = [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+    ];
+
+    return hostingScheduleRows
+      .filter((row) => row.year === scheduleYear)
+      .slice()
+      .sort((a, b) => (a.month ?? 0) - (b.month ?? 0))
+      .map((row) => ({
+        month: MONTH_NAMES[(row.month ?? 1) - 1] ?? String(row.month),
+        hostingGroup: row.hostMember ?? "",
+      }));
+  }, [hostingScheduleRows, scheduleYear, MONTH_NAMES]);
+
   const scheduleRows = useMemo(() => {
     const query = `${membershipSearch} ${scheduleSearch}`.trim().toLowerCase();
-    return hostingRows.filter((row) => {
+    return scheduleRowsForYear.filter((row) => {
       if (!query) return true;
       return `${row.month} ${row.hostingGroup}`.toLowerCase().includes(query);
     });
-  }, [membershipSearch, scheduleSearch, hostingRows]);
+  }, [membershipSearch, scheduleSearch, scheduleRowsForYear]);
 
   const pieLegend = useMemo(() => {
     const total = ytdVisualData.reduce((sum, item) => sum + item.value, 0);
@@ -706,15 +710,23 @@ type MemberProfileData = {
           <div className="admin-dashboard__schedule-head">
             <div className="admin-dashboard__section-copy member-dashboard__section-copy">
               <h2>Hosting Schedule</h2>
-              <p>View and manage the monthly hosting groups</p>
+              <p>View the monthly hosting groups</p>
             </div>
           </div>
 
           <div className="admin-dashboard__schedule-tools member-dashboard__schedule-tools">
             <label className="admin-dashboard__schedule-year member-dashboard__schedule-year">
               <FiCalendar size={20} />
-              <select defaultValue="2026" aria-label="Hosting schedule year">
-                <option value="2026">2026</option>
+              <select
+                value={scheduleYear}
+                onChange={(event) => setScheduleYear(Number(event.target.value))}
+                aria-label="Hosting schedule year"
+              >
+                {YEAR_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
               </select>
             </label>
 
