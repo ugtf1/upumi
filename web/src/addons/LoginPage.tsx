@@ -42,10 +42,10 @@ export default function LoginPage() {
       }
 
       setOtpSent(true);
-      setNotice(res.message || "OTP sent");
+      setNotice(res.message || "One Time Password sent to your phone");
     } catch (e: unknown) {
       const message = String((e as Error)?.message ?? "Login failed");
-      setErr(message.includes("record not found") ? "record not found" : message);
+      setErr(message.includes("Phone Number not found on the system") ? "Phone Number not found on the system" : message);
     } finally {
       setLoading(false);
     }
