@@ -220,9 +220,14 @@
   padding: 0 12px;
 }
 
-.admin-dashboard__phone-prefix {
+.admin-dashboard__phone-country-select {
+  border: none;
+  outline: none;
+  background: transparent;
+  font: inherit;
   font-weight: 600;
   color: var(--admin-subtle);
+  cursor: pointer;
 }
 
 .admin-dashboard__phone-field input {

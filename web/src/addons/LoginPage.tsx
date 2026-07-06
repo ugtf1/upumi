@@ -2,7 +2,13 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiPost, setToken, getAuthClaims } from "./api";
 
-const US_PHONE_PREFIX = "+1";
+type CountryOption = { code: string; flag: string; label: string };
+
+const COUNTRY_OPTIONS: CountryOption[] = [
+  { code: "+1", flag: "🇺🇸", label: "US" },
+  { code: "+234", flag: "🇳🇬", label: "Nigeria" },
+];
+
 const RESEND_COOLDOWN_SECONDS = 30;
 
 type RequestOtpResponse = {
@@ -20,6 +26,7 @@ type VerifyOtpResponse = {
 export default function LoginPage() {
   const nav = useNavigate();
   const [phone, setPhone] = useState("");
+  const [countryCode, setCountryCode] = useState(COUNTRY_OPTIONS[0].code);
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -54,8 +61,8 @@ export default function LoginPage() {
     nav("/member");
   }
 
-  function toE164UsPhone(localDigits: string): string {
-    return `${US_PHONE_PREFIX}${localDigits}`;
+  function toE164Phone(localDigits: string): string {
+    return `${countryCode}${localDigits}`;
   }
 
   async function requestOtp(e: React.FormEvent) {
@@ -65,7 +72,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await apiPost<RequestOtpResponse>("/auth/request-otp", { phone: toE164UsPhone(phone) });
+      const res = await apiPost<RequestOtpResponse>("/auth/request-otp", { phone: toE164Phone(phone) });
       if (res.token) {
         completeLogin(res.token, res.redirectPath);
         return;
@@ -74,8 +81,8 @@ export default function LoginPage() {
       setOtpSent(true);
       setNotice("One Time Password sent to your Phone.");
       setResendCooldown(RESEND_COOLDOWN_SECONDS);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err ?? "Login failed");
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e ?? "Login failed");
       setErr(message.includes("record not found") ? "record not found" : message);
     } finally {
       setLoading(false);
@@ -89,15 +96,15 @@ export default function LoginPage() {
     setResendLoading(true);
 
     try {
-      const res = await apiPost<RequestOtpResponse>("/auth/request-otp", { phone: toE164UsPhone(phone) });
+      const res = await apiPost<RequestOtpResponse>("/auth/request-otp", { phone: toE164Phone(phone) });
       if (res.token) {
         completeLogin(res.token, res.redirectPath);
         return;
       }
       setNotice("One Time Password sent to your Phone.");
       setResendCooldown(RESEND_COOLDOWN_SECONDS);
-    } catch (err: unknown) {
-      setErr(err instanceof Error ? err.message : String(err ?? "Failed to resend OTP"));
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : String(e ?? "Failed to resend OTP"));
     } finally {
       setResendLoading(false);
     }
@@ -109,10 +116,10 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await apiPost<VerifyOtpResponse>("/auth/verify-otp", { phone: toE164UsPhone(phone), otp });
+      const res = await apiPost<VerifyOtpResponse>("/auth/verify-otp", { phone: toE164Phone(phone), otp });
       completeLogin(res.token, res.redirectPath);
-    } catch (err: unknown) {
-      setErr(err instanceof Error ? err.message : String(err ?? "OTP verification failed"));
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : String(e ?? "OTP verification failed"));
     } finally {
       setLoading(false);
     }
@@ -126,11 +133,13 @@ export default function LoginPage() {
         <label style={{ display: "block", marginBottom: 8 }}>
           Phone number
           <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-            <span
+            <select
+              value={countryCode}
+              onChange={(e) => setCountryCode(e.target.value)}
+              disabled={otpSent}
+              aria-label="Country code"
               style={{
-                display: "flex",
-                alignItems: "center",
-                padding: "0 10px",
+                padding: "0 8px",
                 border: "1px solid #ccc",
                 borderRadius: 4,
                 background: "#f5f5f5",
@@ -138,8 +147,12 @@ export default function LoginPage() {
                 color: "#333",
               }}
             >
-              {US_PHONE_PREFIX}
-            </span>
+              {COUNTRY_OPTIONS.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.flag} {option.code}
+                </option>
+              ))}
+            </select>
             <input
               style={{ flex: 1, padding: 10 }}
               value={phone}

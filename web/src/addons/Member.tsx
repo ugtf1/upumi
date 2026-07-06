@@ -59,10 +59,15 @@ const MONTHS = [
 
 const CURRENT_YEAR = new Date().getFullYear();
 
-const US_PHONE_PREFIX = "+1";
+type CountryOption = { code: string; flag: string; label: string };
 
-function toE164UsPhone(localDigits: string): string {
-  return `${US_PHONE_PREFIX}${localDigits}`;
+const COUNTRY_OPTIONS: CountryOption[] = [
+  { code: "+1", flag: "🇺🇸", label: "US" },
+  { code: "+234", flag: "🇳🇬", label: "Nigeria" },
+];
+
+function toE164Phone(countryCode: string, localDigits: string): string {
+  return `${countryCode}${localDigits}`;
 }
 
 type ApiMember = {
@@ -100,6 +105,7 @@ function mapApiMember(m: ApiMember): MemberListItem {
 
 type AddMemberForm = {
   phone: string;
+  phoneCountryCode: string;
   email: string;
   fName: string;
   lName: string;
@@ -108,6 +114,7 @@ type AddMemberForm = {
 
 const INITIAL_ADD_MEMBER_FORM: AddMemberForm = {
   phone: "",
+  phoneCountryCode: COUNTRY_OPTIONS[0].code,
   email: "",
   fName: "",
   lName: "",
@@ -235,7 +242,7 @@ export default function MemberPage() {
     setAddMemberLoading(true);
 
     try {
-      const { phone, email, fName, lName, role } = addMemberForm;
+      const { phone, phoneCountryCode, email, fName, lName, role } = addMemberForm;
 
       // Validation
       if (!phone.trim() || phone.trim().length !== 10) {
@@ -253,7 +260,7 @@ export default function MemberPage() {
 
       // Call API to create user
       await apiPost("/admin/users", {
-        phone: toE164UsPhone(phone.trim()),
+        phone: toE164Phone(phoneCountryCode, phone.trim()),
         email: email.trim(),
         fName: fName.trim(),
         lName: lName.trim(),
@@ -581,7 +588,20 @@ export default function MemberPage() {
                 Phone *
               </label>
               <div className="admin-dashboard__modal-input-field admin-dashboard__phone-field">
-                <span className="admin-dashboard__phone-prefix">{US_PHONE_PREFIX}</span>
+                <select
+                  value={addMemberForm.phoneCountryCode}
+                  onChange={(event) =>
+                    setAddMemberForm({ ...addMemberForm, phoneCountryCode: event.target.value })
+                  }
+                  className="admin-dashboard__phone-country-select"
+                  aria-label="Country code"
+                >
+                  {COUNTRY_OPTIONS.map((option) => (
+                    <option key={option.code} value={option.code}>
+                      {option.flag} {option.code}
+                    </option>
+                  ))}
+                </select>
                 <input
                   id="add-member-phone"
                   type="tel"
@@ -594,7 +614,7 @@ export default function MemberPage() {
                     })
                   }
                   placeholder="2025550123"
-                  aria-label="Member phone number (US)"
+                  aria-label="Member phone number"
                   maxLength={10}
                 />
               </div>
