@@ -62,6 +62,27 @@
   }
 }
 
+
+.admin-dashboard__phone-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+}
+
+.admin-dashboard__phone-prefix {
+  font-weight: 600;
+  color: var(--admin-subtle);
+}
+
+.admin-dashboard__phone-field input {
+  border: none;
+  outline: none;
+  flex: 1;
+  background: transparent;
+  font: inherit;
+}
+
 .member-page__attendance-popup-icon {
   flex: 0 0 auto;
 

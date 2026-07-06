@@ -59,6 +59,12 @@ const MONTHS = [
 
 const CURRENT_YEAR = new Date().getFullYear();
 
+const US_PHONE_PREFIX = "+1";
+
+function toE164UsPhone(localDigits: string): string {
+  return `${US_PHONE_PREFIX}${localDigits}`;
+}
+
 type ApiMember = {
   id: string;
   displayMemberId?: string | null;
@@ -232,8 +238,8 @@ export default function MemberPage() {
       const { phone, email, fName, lName, role } = addMemberForm;
 
       // Validation
-      if (!phone.trim()) {
-        throw new Error("Phone is required");
+      if (!phone.trim() || phone.trim().length !== 10) {
+        throw new Error("Enter a valid 10-digit US phone number");
       }
       if (!email.trim()) {
         throw new Error("Email is required");
@@ -247,7 +253,7 @@ export default function MemberPage() {
 
       // Call API to create user
       await apiPost("/admin/users", {
-        phone: phone.trim(),
+        phone: toE164UsPhone(phone.trim()),
         email: email.trim(),
         fName: fName.trim(),
         lName: lName.trim(),
@@ -269,7 +275,7 @@ export default function MemberPage() {
   }
 
   const isAddMemberFormValid =
-    addMemberForm.phone.trim() &&
+    addMemberForm.phone.trim().length === 10 &&
     addMemberForm.email.trim() &&
     addMemberForm.fName.trim() &&
     addMemberForm.lName.trim();
@@ -574,15 +580,24 @@ export default function MemberPage() {
               <label htmlFor="add-member-phone" className="admin-dashboard__modal-label">
                 Phone *
               </label>
-              <input
-                id="add-member-phone"
-                type="tel"
-                value={addMemberForm.phone}
-                onChange={(event) => setAddMemberForm({ ...addMemberForm, phone: event.target.value })}
-                placeholder="Enter phone number"
-                aria-label="Member phone number"
-                className="admin-dashboard__modal-input-field"
-              />
+              <div className="admin-dashboard__modal-input-field admin-dashboard__phone-field">
+                <span className="admin-dashboard__phone-prefix">{US_PHONE_PREFIX}</span>
+                <input
+                  id="add-member-phone"
+                  type="tel"
+                  inputMode="numeric"
+                  value={addMemberForm.phone}
+                  onChange={(event) =>
+                    setAddMemberForm({
+                      ...addMemberForm,
+                      phone: event.target.value.replace(/\D/g, "").slice(0, 10),
+                    })
+                  }
+                  placeholder="2025550123"
+                  aria-label="Member phone number (US)"
+                  maxLength={10}
+                />
+              </div>
             </div>
 
             <div className="admin-dashboard__modal-section">
