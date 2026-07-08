@@ -34,6 +34,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [resendLoading, setResendLoading] = useState(false);
+  const [smsConsent, setSmsConsent] = useState(false);
 
   useEffect(() => {
     if (resendCooldown <= 0) return undefined;
@@ -180,6 +181,20 @@ export default function LoginPage() {
           </label>
         )}
 
+        {!otpSent && (
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 12, marginBottom: 12, fontSize: 12, lineHeight: 1.4, color: "#555" }}>
+            <input
+              type="checkbox"
+              checked={smsConsent}
+              onChange={(e) => setSmsConsent(e.target.checked)}
+              style={{ marginTop: 2 }}
+            />
+            <span>
+              By checking this box, you agree to receive SMS text messages from UPUMI related to your account, security codes, and important updates. Message frequency varies. Message and data rates may apply. Reply STOP at any time to opt-out, or HELP for support. You can read our <a href="/privacy-policy" target="_blank" rel="noreferrer">Privacy Policy</a> and <a href="/terms-of-service" target="_blank" rel="noreferrer">Terms of Service</a>.
+            </span>
+          </label>
+        )}
+
         {notice && (
           <div style={{ margin: "12px 0", padding: 10, border: "1px solid #cfe8d8", color: "#166445" }}>
             {notice}
@@ -192,7 +207,7 @@ export default function LoginPage() {
           </div>
         )}
 
-        <button type="submit" disabled={loading || phone.length !== 10 || (otpSent && otp.length !== 6)} style={{ width: "100%", padding: 12, marginTop: 8 }}>
+        <button type="submit" disabled={loading || phone.length !== 10 || (otpSent ? otp.length !== 6 : !smsConsent)} style={{ width: "100%", padding: 12, marginTop: 8 }}>
           {loading ? "Please wait..." : otpSent ? "Verify OTP" : "Send OTP"}
         </button>
 
