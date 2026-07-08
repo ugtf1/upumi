@@ -1,6 +1,6 @@
 import { Routes, Route } from "react-router-dom";
 
-import { About, Alumni, Events, Home } from "../pages";
+import { About, Alumni, Events, Home, PrivacyPolicy, TermsOfService } from "../pages";
 import AnalyticsPage from "../addons/AnalyticsPage";
 import AdminPage from "../addons/AdminPage";
 import MemberDashboard from "../addons/MemberDashboard";
@@ -25,6 +25,8 @@ const BaseRoute = () => {
       <Route path="/about" element={<About />} />
       <Route path="/events" element={<Events />} />
       <Route path="/alumni" element={<Alumni />} />
+      <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+      <Route path="/terms-of-service" element={<TermsOfService />} />
 
       {/* Auth routes */}
       <Route path="/login" element={<LoginPage />} />
