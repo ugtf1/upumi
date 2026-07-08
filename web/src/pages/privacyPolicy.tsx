@@ -1,5 +1,3 @@
-import React from 'react';
-
 const PrivacyPolicy = () => {
   return (
     <div style={{ maxWidth: 800, margin: "40px auto", padding: 16 }}>
