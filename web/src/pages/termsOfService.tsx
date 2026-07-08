@@ -1,6 +1,6 @@
 const TermsOfService = () => {
   return (
-    <div style={{ maxWidth: 800, margin: "40px auto", padding: 16 }}>
+    <div style={{ maxWidth: 800, margin: "40px auto", padding: 16, color: "black" }}>
       <h1 style={{ fontSize: 32, marginBottom: 16 }}>Terms of Service</h1>
       <p>Last updated: {new Date().toLocaleDateString()}</p>
       
