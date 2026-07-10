@@ -128,10 +128,10 @@ export default function LoginPage() {
 
   return (
     <div style={{ maxWidth: 420, margin: "40px auto", padding: 16 }}>
-      <h2 style={{ fontSize: 24, marginBottom: 12 }}>UPUMI Login</h2>
+      <h2 style={{ fontSize: 24, marginBottom: 12, color: "black" }}>UPUMI Login</h2>
 
       <form onSubmit={otpSent ? verifyOtp : requestOtp}>
-        <label style={{ display: "block", marginBottom: 8 }}>
+        <label style={{ display: "block", marginBottom: 8, color: "black" }}>
           Phone number
           <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
             <select
