@@ -241,6 +241,11 @@ export default function LoginPage() {
             Use another phone number
           </button>
         )}
+
+        <div style={{ marginTop: 24, fontSize: 12, color: "#666", textAlign: "center", borderTop: "1px solid #eaeaea", paddingTop: 16 }}>
+          <p style={{ margin: "0 0 4px 0" }}>UPUMI Support: For assistance, please contact our team at <a href="mailto:support@upumi.com" style={{ color: "#0066cc", textDecoration: "none" }}>support@upumi.com</a>.</p>
+          <p style={{ margin: 0 }}>UPUMI Support: For help, visit <a href="https://upumi.com" target="_blank" rel="noopener noreferrer" style={{ color: "#0066cc", textDecoration: "none" }}>upumi.com</a>.</p>
+        </div>
       </form>
     </div>
   );
