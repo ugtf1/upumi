@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { BiSolidHeart } from "react-icons/bi";
 import { CiMenuBurger } from "react-icons/ci";
 import { IoMdClose } from "react-icons/io";
@@ -10,7 +10,6 @@ import { navbarData } from "./data";
 const Navbar = () => {
   const [isNavShowing, setIsNavShowing] = useState(false);
   const location = useLocation();
-  const navigate = useNavigate();
   const [openModal, setOpenModal] = useState(false);
 
   return (

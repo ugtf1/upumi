@@ -25,13 +25,6 @@ export default function MemberSettingsPage() {
     phone: "+1 234 567 890",
     location: "Lagos, Nigeria",
   });
-  const [password, setPassword] = useState({
-    current: "",
-    next: "",
-    confirm: "",
-  });
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [smsNotifications, setSmsNotifications] = useState(false);
 
   const navigateTo = (path: string, label: string) => {
     setActiveNav(label);
@@ -75,10 +68,6 @@ export default function MemberSettingsPage() {
 
   const handleProfileChange = (field: keyof typeof profile, value: string) => {
     setProfile((current) => ({ ...current, [field]: value }));
-  };
-
-  const handlePasswordChange = (field: keyof typeof password, value: string) => {
-    setPassword((current) => ({ ...current, [field]: value }));
   };
 
   const handleSaveSettings = (event: FormEvent<HTMLFormElement>) => {

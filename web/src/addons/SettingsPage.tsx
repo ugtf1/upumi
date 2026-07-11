@@ -38,9 +38,6 @@ export default function SettingsPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<"Account Settings" | "Notification Preference">("Account Settings");
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [preferences, setPreferences] = useState({
     emailNotifications: false,
     activityAlerts: true,
@@ -51,20 +48,6 @@ export default function SettingsPage() {
   function handleLogout() {
     clearToken();
     navigate("/login");
-  }
-
-  function handleCancelPassword() {
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-  }
-
-  function handleSavePassword() {
-    if (!currentPassword || !newPassword || !confirmPassword) return;
-    if (newPassword !== confirmPassword) return;
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
   }
 
   function handleTogglePreference(key: keyof typeof preferences) {
