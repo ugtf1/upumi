@@ -132,9 +132,12 @@
       background: var(--white);
 
       .btn-right {
-        margin-left: 5rem;
+        margin-left: 1rem;
         .contact-btn{
           font-size: 20px;
+        }
+        .join-community {
+          color: var(--green);
         }
       }
       
@@ -145,7 +148,6 @@
       cursor: pointer;
       border: none;
       background: transparent;
-      margin-left: -18rem;
 
       .menu {
         color: black;

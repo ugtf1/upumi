@@ -31,7 +31,7 @@ const PrivacyPolicy = () => {
       </p>
       
       <h2 style={{ fontSize: 24, marginTop: 24, marginBottom: 12 }}>5. Contact Us</h2>
-      <p>If you have any questions about this Privacy Policy, please contact us.</p>
+      <p>If you have any questions about this Privacy Policy, please contact us at support@upumi.com or ono@ugtf.org</p>
     </div>
   );
 };

@@ -607,6 +607,7 @@ export default function MemberPage() {
                   type="tel"
                   inputMode="numeric"
                   value={addMemberForm.phone}
+                  style={{ color: "black" }}
                   onChange={(event) =>
                     setAddMemberForm({
                       ...addMemberForm,

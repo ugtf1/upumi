@@ -199,60 +199,6 @@ export default function SettingsPage() {
         <section className="settings-page__content">
           {activeTab === "Account Settings" ? (
             <div className="settings-page__section-grid">
-              <div className="settings-page__panel settings-page__panel--form">
-                <div className="settings-page__section-header">
-                  <h2>Update Password</h2>
-                  <p>Change your admin password to keep your account secure.</p>
-                </div>
-
-                <div className="settings-page__form-grid">
-                  <label className="settings-page__field">
-                    <span>Current Password</span>
-                    <input
-                      type="password"
-                      value={currentPassword}
-                      onChange={(event) => setCurrentPassword(event.target.value)}
-                      placeholder="Enter current password"
-                    />
-                  </label>
-                  <label className="settings-page__field">
-                    <span>New Password</span>
-                    <input
-                      type="password"
-                      value={newPassword}
-                      onChange={(event) => setNewPassword(event.target.value)}
-                      placeholder="Enter new password"
-                    />
-                  </label>
-                  <label className="settings-page__field">
-                    <span>Confirm Password</span>
-                    <input
-                      type="password"
-                      value={confirmPassword}
-                      onChange={(event) => setConfirmPassword(event.target.value)}
-                      placeholder="Confirm new password"
-                    />
-                  </label>
-                </div>
-
-                <div className="settings-page__actions">
-                  <button
-                    type="button"
-                    className="settings-page__button settings-page__button--secondary"
-                    onClick={handleCancelPassword}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="settings-page__button settings-page__button--primary"
-                    onClick={handleSavePassword}
-                  >
-                    Save Changes
-                  </button>
-                </div>
-              </div>
-
               <div className="settings-page__panel settings-page__panel--table">
                 <div className="settings-page__section-header settings-page__section-header--row">
                   <div>
