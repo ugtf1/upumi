@@ -100,6 +100,9 @@
   .nav_toggle-btn {
     display: none;
   }
+  .hide-on-desktop {
+    display: none !important;
+  }
 }
 /*MEDIA QUERIES (medium and small Screens)*/
 @media only screen and (max-width: 1024px) {
@@ -186,6 +189,14 @@
 
     .hide_nav {
       display: none;
+    }
+    
+    .hide-on-mobile {
+      display: none !important;
+    }
+    
+    .hide-on-desktop {
+      display: flex !important;
     }
   }
 }

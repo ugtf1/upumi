@@ -41,6 +41,11 @@ const Navbar = () => {
               </Link>
             </li>
           ))}
+          <li className="hide-on-desktop">
+            <a href="" className="links" onClick={() => setIsNavShowing(false)}>
+              Join Our Community
+            </a>
+          </li>
         </ul>
         <div className="btn-right">
             <Link
@@ -52,7 +57,7 @@ const Navbar = () => {
             </Link>
             {openModal && <Modal  closeModal={setOpenModal}/>}
           
-          <a href="" className="join-community">
+          <a href="" className="join-community hide-on-mobile">
             Join Our Community
           </a>
 

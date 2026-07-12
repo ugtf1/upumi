@@ -15,28 +15,25 @@ const PrivacyPolicy = () => {
 
       <h2 style={{ fontSize: 24, marginTop: 24, marginBottom: 12 }}>2. How We Use Your Information</h2>
       <p>
-        We use your information to create and manage your account, verify your identity, provide customer support, deliver account-related updates, and send security and service notifications. We may also use this information to comply with legal obligations, prevent fraud, investigate misuse, and improve the quality and functionality of our platform.
+        We use your information to create and manage your account, verify your identity, provide customer support, deliver account-related updates, and send security and service notifications.
       </p>
 
       <h2 style={{ fontSize: 24, marginTop: 24, marginBottom: 12 }}>3. SMS Communications and Consent</h2>
       <p style={{ marginBottom: 12 }}>
-        By providing your phone number and affirmatively opting in during registration, login, or account setup, you expressly consent to receive SMS text messages from UPUMI for account-related communications, security verification, one-time passcodes, service alerts, and important updates. Message frequency may vary based on your account activity. Standard message and data rates may apply.
+        By signing up, you agree to receive recurring text messages from UPUMI. Message frequency varies. Message and data rates may apply. Reply STOP to unsubscribe.
       </p>
       <p style={{ marginBottom: 12 }}>
-        We will only send SMS messages to the phone number you provide and only with your express consent. You may withdraw your consent at any time by replying <strong>STOP</strong> to any text message, contacting us at support@upumi.com, or using the opt-out instructions provided in our messages. Once you opt out, we will stop sending SMS communications to that number unless we are required by law or need to complete a transaction that you requested.
+        We will only send SMS messages to the phone number you provide and only with your express consent. You may withdraw your consent at any time by replying <strong>STOP</strong> to any text message, contacting us at support@upumi.com, or using the opt-out instructions provided in our messages. Once you opt out, we will stop sending SMS communications to that number.
       </p>
       <p style={{ marginBottom: 12 }}>
-        We do not share your mobile information or messaging consent with third parties or affiliates for marketing or promotional purposes. We do not sell, rent, or trade your phone number or SMS consent status for marketing purposes.
+        We do not share, sell, or otherwise provide your mobile phone number or messaging consent information to any third parties or affiliates for marketing or promotional purposes.
       </p>
 
-      <h2 style={{ fontSize: 24, marginTop: 24, marginBottom: 12 }}>4. Data Sharing and Disclosure</h2>
-      <p>
-        We may disclose personal information only when necessary to operate our services, protect our users, comply with applicable law, resolve disputes, or enforce our agreements. We may share limited information with service providers that assist us with hosting, analytics, customer support, or technical operations, and those providers are contractually obligated to protect your information.
-      </p>
+      
 
       <h2 style={{ fontSize: 24, marginTop: 24, marginBottom: 12 }}>5. Data Security and Retention</h2>
       <p>
-        We use reasonable administrative, technical, and physical safeguards to protect your personal information. However, no method of transmission or storage is completely secure, and we cannot guarantee absolute security. We retain personal information only as long as necessary to fulfill the purposes described in this policy, comply with legal obligations, resolve disputes, and enforce our agreements.
+        We use reasonable administrative, technical, and physical safeguards to protect your personal information. We retain personal information only as long as necessary to fulfill the purposes described in this policy, comply with legal obligations, resolve disputes, and enforce our agreements.
       </p>
 
       <h2 style={{ fontSize: 24, marginTop: 24, marginBottom: 12 }}>6. Your Choices and Rights</h2>
