@@ -1,37 +1,53 @@
 const PrivacyPolicy = () => {
   return (
-    <div style={{ maxWidth: 800, margin: "40px auto", padding: 16, color: "black" }}>
+    <div style={{ maxWidth: 900, margin: "40px auto", padding: "24px 20px 48px", color: "#111827", lineHeight: 1.7 }}>
       <h1 style={{ fontSize: 32, marginBottom: 16 }}>Privacy Policy</h1>
       <p>Last updated: {new Date().toLocaleDateString()}</p>
-      
-      <h2 style={{ fontSize: 24, marginTop: 24, marginBottom: 12 }}>1. Introduction</h2>
-      <p>Welcome to UPUMI. We respect your privacy and are committed to protecting your personal data.</p>
-      
-      <h2 style={{ fontSize: 24, marginTop: 24, marginBottom: 12 }}>2. Information We Collect</h2>
-      <p>We may collect personal identification information including, but not limited to, your name, email address, and phone number when you register for an account or interact with our services.</p>
 
-      <h2 style={{ fontSize: 24, marginTop: 24, marginBottom: 12 }}>3. How We Use Your Information</h2>
-      <p>We use the information we collect to operate, maintain, and provide the features and functionality of our services, as well as to communicate directly with you.</p>
-
-      <h2 style={{ fontSize: 24, marginTop: 24, marginBottom: 12 }}>4. SMS Communications</h2>
-      <p style={{ marginBottom: 12 }}>
-        By providing your phone number and opting in, you consent to receive SMS text messages from UPUMI regarding account updates, security codes (OTP), and important notifications. Message frequency may vary. Standard message and data rates may apply.
-      </p>
-      <h3 style={{ fontSize: 18, marginTop: 16, marginBottom: 8 }}>Consent and Opt-In</h3>
-      <p style={{ marginBottom: 12 }}>
-        Users must explicitly opt-in to receive SMS messages. This consent is obtained when you check the consent box on our registration page or login page before submitting your phone number. Your consent preferences are securely saved in our system.
-      </p>
-      <h3 style={{ fontSize: 18, marginTop: 16, marginBottom: 8 }}>Opt-Out Instructions</h3>
-      <p style={{ marginBottom: 12 }}>
-        You may opt out of receiving SMS messages at any time by replying <strong>STOP</strong> to any message. After opting out, you will no longer receive SMS communications from us.
-      </p>
-      <h3 style={{ fontSize: 18, marginTop: 16, marginBottom: 8 }}>Data Sharing and Privacy</h3>
       <p>
-        We do not share your phone number or SMS consent with third parties or affiliates for marketing purposes.
+        UPUMI (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;) respects your privacy and is committed to protecting the personal information you share with us. This Privacy Policy explains how we collect, use, store, disclose, and safeguard your information when you register for an account, use our services, or receive SMS communications from us.
       </p>
-      
-      <h2 style={{ fontSize: 24, marginTop: 24, marginBottom: 12 }}>5. Contact Us</h2>
-      <p>If you have any questions about this Privacy Policy, please contact us at support@upumi.com or ono@ugtf.org</p>
+
+      <h2 style={{ fontSize: 24, marginTop: 24, marginBottom: 12 }}>1. Information We Collect</h2>
+      <p>
+        We may collect personal information that identifies you, including your full name, email address, phone number, account credentials, and communication preferences. We may also collect technical and usage information such as IP address, device information, browser type, and interaction data to help us improve security, reliability, and service performance.
+      </p>
+
+      <h2 style={{ fontSize: 24, marginTop: 24, marginBottom: 12 }}>2. How We Use Your Information</h2>
+      <p>
+        We use your information to create and manage your account, verify your identity, provide customer support, deliver account-related updates, and send security and service notifications. We may also use this information to comply with legal obligations, prevent fraud, investigate misuse, and improve the quality and functionality of our platform.
+      </p>
+
+      <h2 style={{ fontSize: 24, marginTop: 24, marginBottom: 12 }}>3. SMS Communications and Consent</h2>
+      <p style={{ marginBottom: 12 }}>
+        By providing your phone number and affirmatively opting in during registration, login, or account setup, you expressly consent to receive SMS text messages from UPUMI for account-related communications, security verification, one-time passcodes, service alerts, and important updates. Message frequency may vary based on your account activity. Standard message and data rates may apply.
+      </p>
+      <p style={{ marginBottom: 12 }}>
+        We will only send SMS messages to the phone number you provide and only with your express consent. You may withdraw your consent at any time by replying <strong>STOP</strong> to any text message, contacting us at support@upumi.com, or using the opt-out instructions provided in our messages. Once you opt out, we will stop sending SMS communications to that number unless we are required by law or need to complete a transaction that you requested.
+      </p>
+      <p style={{ marginBottom: 12 }}>
+        We do not share your mobile information or messaging consent with third parties or affiliates for marketing or promotional purposes. We do not sell, rent, or trade your phone number or SMS consent status for marketing purposes.
+      </p>
+
+      <h2 style={{ fontSize: 24, marginTop: 24, marginBottom: 12 }}>4. Data Sharing and Disclosure</h2>
+      <p>
+        We may disclose personal information only when necessary to operate our services, protect our users, comply with applicable law, resolve disputes, or enforce our agreements. We may share limited information with service providers that assist us with hosting, analytics, customer support, or technical operations, and those providers are contractually obligated to protect your information.
+      </p>
+
+      <h2 style={{ fontSize: 24, marginTop: 24, marginBottom: 12 }}>5. Data Security and Retention</h2>
+      <p>
+        We use reasonable administrative, technical, and physical safeguards to protect your personal information. However, no method of transmission or storage is completely secure, and we cannot guarantee absolute security. We retain personal information only as long as necessary to fulfill the purposes described in this policy, comply with legal obligations, resolve disputes, and enforce our agreements.
+      </p>
+
+      <h2 style={{ fontSize: 24, marginTop: 24, marginBottom: 12 }}>6. Your Choices and Rights</h2>
+      <p>
+        You may review or update your account information, manage your communication preferences, or request correction or deletion of your personal information by contacting us using the details below. Depending on your location, you may have additional rights regarding access, portability, correction, or deletion of your personal data.
+      </p>
+
+      <h2 style={{ fontSize: 24, marginTop: 24, marginBottom: 12 }}>7. Contact Us</h2>
+      <p>
+        If you have any questions, concerns, or requests regarding this Privacy Policy or our privacy practices, please contact us at support@upumi.com or ono@ugtf.org.
+      </p>
     </div>
   );
 };
