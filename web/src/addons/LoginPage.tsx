@@ -190,7 +190,7 @@ export default function LoginPage() {
               style={{ marginTop: 2 }}
             />
             <span>
-              By signing up, you agree to receive recurring text messages from UPUMI. Message frequency varies. Message and data rates may apply. Reply STOP to unsubscribe. You can read our <a href="/privacy-policy" target="_blank" rel="noreferrer">Privacy Policy</a> and <a href="/terms-of-service" target="_blank" rel="noreferrer">Terms of Service</a>.
+              By checking this box, you agree to receive OTP text messages from Urhobo Tech Global Foundation to authenticate your account when you try to login. Message frequency varies. Message and data rates may apply. Reply STOP to unsubscribe. You can read our <a href="/privacy-policy" target="_blank" rel="noreferrer">Privacy Policy</a> and <a href="/terms-of-service" target="_blank" rel="noreferrer">Terms of Service</a>.
             </span>
           </label>
         )}

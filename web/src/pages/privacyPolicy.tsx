@@ -5,7 +5,7 @@ const PrivacyPolicy = () => {
       <p>Last updated: {new Date().toLocaleDateString()}</p>
 
       <p>
-        UPUMI (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;) respects your privacy and is committed to protecting the personal information you share with us. This Privacy Policy explains how we collect, use, store, disclose, and safeguard your information when you register for an account, use our services, or receive SMS communications from us.
+        We respects your privacy and is committed to protecting the personal information you share with us. This Privacy Policy explains how we collect, use, store, disclose, and safeguard your information when you register for an account, use our services, or receive SMS communications from us.
       </p>
 
       <h2 style={{ fontSize: 24, marginTop: 24, marginBottom: 12 }}>1. Information We Collect</h2>
@@ -20,10 +20,14 @@ const PrivacyPolicy = () => {
 
       <h2 style={{ fontSize: 24, marginTop: 24, marginBottom: 12 }}>3. SMS Communications and Consent</h2>
       <p style={{ marginBottom: 12 }}>
-        By signing up, you agree to receive recurring text messages from UPUMI. Message frequency varies. Message and data rates may apply. Reply STOP to unsubscribe.
+        On Login:  
+"By checking this box, you agree to receive one‑time passcode (OTP) text messages from Urhobo Tech Global Foundation to authenticate your account when you log in. Message frequency varies. Message and data rates may apply. Reply STOP to unsubscribe or HELP for support. You can read our Privacy Policy and Terms of Service."
+
+On Sign‑up:  
+"By signing up, you agree to receive recurring OTP text messages from Urhobo Tech Global Foundation to authenticate your account. Message frequency varies. Message and data rates may apply. Reply STOP to unsubscribe or HELP for support. You can read our Privacy Policy and Terms of Service."
       </p>
       <p style={{ marginBottom: 12 }}>
-        We will only send SMS messages to the phone number you provide and only with your express consent. You may withdraw your consent at any time by replying <strong>STOP</strong> to any text message, contacting us at support@upumi.com, or using the opt-out instructions provided in our messages. Once you opt out, we will stop sending SMS communications to that number.
+        We will only send SMS messages to the phone number you provide and only with your express consent. You may withdraw your consent at any time by replying <strong>STOP</strong> to any text message, contacting us at support@ugtf.org, or using the opt-out instructions provided in our messages. Once you opt out, we will stop sending SMS communications to that number.
       </p>
       <p style={{ marginBottom: 12 }}>
         We do not share, sell, or otherwise provide your mobile phone number or messaging consent information to any third parties or affiliates for marketing or promotional purposes.
@@ -43,7 +47,7 @@ const PrivacyPolicy = () => {
 
       <h2 style={{ fontSize: 24, marginTop: 24, marginBottom: 12 }}>7. Contact Us</h2>
       <p>
-        If you have any questions, concerns, or requests regarding this Privacy Policy or our privacy practices, please contact us at support@upumi.com or ono@ugtf.org.
+        If you have any questions, concerns, or requests regarding this Privacy Policy or our privacy practices, please contact us at support@ugtf.org or ono@ugtf.org.
       </p>
     </div>
   );
