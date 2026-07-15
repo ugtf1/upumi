@@ -107,6 +107,10 @@ export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   });
 }
 
+export async function apiDelete<T>(path: string): Promise<T> {
+  return fetchJson<T>(path, { method: "DELETE" });
+}
+
 // ── Member-facing API helpers ─────────────────────────────────────────────────
 
 // GET /me/profile — returns the logged-in member's profile, linked MemberRecord,

@@ -15,9 +15,11 @@ import {
   FiSearch,
   FiSettings,
   FiUsers,
+  FiMoreVertical,
+  FiTrash2,
 } from "react-icons/fi";
 
-import { apiGet, apiPatch, apiPost, clearToken } from "./api";
+import { apiGet, apiPatch, apiPost, apiDelete, clearToken } from "./api";
 import { MEMBER_STATUS_OPTIONS, type MemberDetailRecord, type MemberStatus, type PaymentHistoryRow } from "./member-data";
 import "./admin-page.scss";
 import "./member-page.scss";
@@ -139,6 +141,9 @@ function mapPaymentHistory(rows: ApiMonthlyDue[] = []): PaymentHistoryRow[] {
         amountPaid: formatCurrencyAmount(amount),
         status: amount > 0 ? "Paid" : "Unpaid",
         paymentDate: row.createdAt ? formatDateDisplay(row.createdAt) : "-",
+        rawAmount: amount,
+        year: row.year,
+        monthNum: row.month,
       };
     });
 }
@@ -183,6 +188,21 @@ export default function MemberViewPage() {
   });
   const [recordAttendanceLoading, setRecordAttendanceLoading] = useState(false);
   const [recordAttendanceError, setRecordAttendanceError] = useState<string | null>(null);
+
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [isDeletePaymentPromptOpen, setIsDeletePaymentPromptOpen] = useState(false);
+  const [paymentToDelete, setPaymentToDelete] = useState<PaymentHistoryRow | null>(null);
+
+  const menuRef = (node: HTMLDivElement | null) => {
+    if (!node) return;
+    const handler = (e: MouseEvent) => {
+      if (!node.contains(e.target as Node)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  };
 
   // Fetch member detail + payment history from the database on mount.
   useEffect(() => {
@@ -445,6 +465,38 @@ export default function MemberViewPage() {
   function handleCloseRecordPaymentModal() {
     setIsRecordPaymentModalOpen(false);
     setRecordPaymentError(null);
+  }
+
+  function handleEditPayment(payment: PaymentHistoryRow) {
+    setRecordPaymentForm({
+      year: payment.year ? String(payment.year) : String(CURRENT_YEAR),
+      month: payment.monthNum ? String(payment.monthNum) : "",
+      duesPaid: payment.rawAmount !== undefined ? String(payment.rawAmount) : "",
+    });
+    setRecordPaymentError(null);
+    setOpenMenuId(null);
+    setIsRecordPaymentModalOpen(true);
+  }
+
+  function handleDeletePaymentPrompt(payment: PaymentHistoryRow) {
+    setPaymentToDelete(payment);
+    setOpenMenuId(null);
+    setIsDeletePaymentPromptOpen(true);
+  }
+
+  async function handleConfirmDeletePayment() {
+    if (!paymentToDelete) return;
+    try {
+      await apiDelete(`/admin/members/${memberId}/monthly-dues/${paymentToDelete.id}`);
+      setPaymentHistory((current) => current.filter((p) => p.id !== paymentToDelete.id));
+      setIsDeletePaymentPromptOpen(false);
+      setPaymentToDelete(null);
+      setToast("Payment deleted successfully");
+      window.setTimeout(() => setToast(null), 3000);
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Failed to delete payment");
+      window.setTimeout(() => setToast(null), 3000);
+    }
   }
 
   function handleRecordPaymentChange(field: keyof RecordPaymentFormState, value: string) {
@@ -719,9 +771,44 @@ export default function MemberViewPage() {
                           </td>
                           <td data-label="Payment Date">{payment.paymentDate}</td>
                           <td data-label="Action">
-                            <button type="button" className="member-view-page__table-action">
-                              Edit
-                            </button>
+                            <div className="member-page__action-wrap" ref={openMenuId === payment.id ? menuRef : null}>
+                              <button
+                                type="button"
+                                className={[
+                                  "member-page__more-button",
+                                  openMenuId === payment.id ? "is-active" : "",
+                                ].filter(Boolean).join(" ")}
+                                aria-label="More actions"
+                                aria-expanded={openMenuId === payment.id}
+                                aria-haspopup="menu"
+                                onClick={() => setOpenMenuId(openMenuId === payment.id ? null : payment.id)}
+                              >
+                                <FiMoreVertical size={22} />
+                              </button>
+
+                              {openMenuId === payment.id && (
+                                <div className="member-page__action-menu" role="menu">
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    className="member-page__action-item"
+                                    onClick={() => handleEditPayment(payment)}
+                                  >
+                                    <FiEdit2 size={15} />
+                                    <span>Edit</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    className="member-page__action-item member-page__action-item--danger"
+                                    onClick={() => handleDeletePaymentPrompt(payment)}
+                                  >
+                                    <FiTrash2 size={15} />
+                                    <span>Delete</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))
@@ -827,6 +914,39 @@ export default function MemberViewPage() {
                 }
               >
                 {recordPaymentLoading ? "Saving..." : "Save Payment"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isDeletePaymentPromptOpen && paymentToDelete && (
+        <div className="admin-dashboard__modal" role="dialog" aria-modal="true" aria-labelledby="delete-payment-modal-title">
+          <div className="admin-dashboard__modal-backdrop" onClick={() => setIsDeletePaymentPromptOpen(false)} />
+
+          <div className="admin-dashboard__modal-panel">
+            <h2 id="delete-payment-modal-title" className="admin-dashboard__modal-title admin-dashboard__modal-title--danger">
+              Delete Payment Record
+            </h2>
+            <div className="admin-dashboard__modal-section-copy" style={{ marginBottom: "1.5rem" }}>
+              <p>Are you sure you want to delete the payment record for <strong>{paymentToDelete.month}</strong>?</p>
+              <p>This action cannot be undone.</p>
+            </div>
+
+            <div className="admin-dashboard__modal-actions">
+              <button
+                type="button"
+                className="admin-dashboard__modal-button admin-dashboard__modal-button--secondary"
+                onClick={() => setIsDeletePaymentPromptOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="admin-dashboard__modal-button admin-dashboard__modal-button--danger"
+                onClick={handleConfirmDeletePayment}
+              >
+                Delete Payment
               </button>
             </div>
           </div>

@@ -13,9 +13,12 @@ import {
   FiSettings,
   FiUsers,
   FiX,
+  FiMoreVertical,
+  FiTrash2,
+  FiEdit2,
 } from "react-icons/fi";
 
-import { apiGet, apiPost, clearToken } from "./api";
+import { apiGet, apiPost, apiPatch, apiDelete, clearToken } from "./api";
 import "./admin-page.scss";
 import "./transaction-page.scss";
 
@@ -39,6 +42,9 @@ type TransactionRow = {
   title: string;
   amount: string;
   status: string;
+  rawDate: string;
+  rawAmount: number;
+  userId?: string;
 };
 
 // Shape returned by GET /admin/database/transactions (raw Prisma row).
@@ -81,6 +87,8 @@ type ExpenseRow = {
   reason: string;
   title: string;
   amount: string;
+  rawDate: string;
+  rawAmount: number;
 };
 
 type ExpenseFormState = {
@@ -139,6 +147,25 @@ export default function TransactionPage() {
   const [expenseSaveError, setExpenseSaveError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const addMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const [openMenuTxId, setOpenMenuTxId] = useState<string | null>(null);
+  const [openMenuExpId, setOpenMenuExpId] = useState<string | null>(null);
+  const [isDeletePromptOpen, setIsDeletePromptOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<{ type: "transaction" | "expense"; id: string; name: string } | null>(null);
+  const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+
+  const menuRef = (node: HTMLDivElement | null) => {
+    if (!node) return;
+    const handler = (e: MouseEvent) => {
+      if (!node.contains(e.target as Node)) {
+        setOpenMenuTxId(null);
+        setOpenMenuExpId(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  };
 
   useEffect(() => {
     if (!isAddTransactionModalOpen) return undefined;
@@ -220,6 +247,9 @@ export default function TransactionPage() {
             title: row.title,
             amount: `$${Number(row.amount).toLocaleString()}`,
             status: "Completed",
+            rawDate: row.date,
+            rawAmount: Number(row.amount),
+            userId: row.userId ?? undefined,
           }))
         );
       })
@@ -260,6 +290,8 @@ export default function TransactionPage() {
             reason: row.reason,
             title: row.title,
             amount: `$${Number(row.amount).toLocaleString()}`,
+            rawDate: row.date,
+            rawAmount: Number(row.amount),
           }))
         );
       })
@@ -311,6 +343,7 @@ export default function TransactionPage() {
     setUserSearch("");
     setIsUserDropdownOpen(false);
     setSaveError(null);
+    setEditingTransactionId(null);
   }
 
   function handleOpenTransactionModal() {
@@ -323,7 +356,68 @@ export default function TransactionPage() {
     setIsAddMenuOpen(false);
     setExpenseForm({ reason: "", title: "", amount: "", date: "" });
     setExpenseSaveError(null);
+    setEditingExpenseId(null);
     setIsAddExpenseModalOpen(true);
+  }
+
+  function handleEditTransaction(row: TransactionRow) {
+    setTransactionForm({
+      userId: row.userId ?? "",
+      fullName: row.fullName,
+      title: row.title,
+      amount: String(row.rawAmount),
+      paymentDate: row.rawDate ? row.rawDate.split("T")[0] : "",
+    });
+    setUserSearch(row.fullName);
+    setEditingTransactionId(row.id);
+    setOpenMenuTxId(null);
+    setIsAddTransactionModalOpen(true);
+  }
+
+  function handleDeleteTransactionPrompt(row: TransactionRow) {
+    setItemToDelete({ type: "transaction", id: row.id, name: row.title });
+    setOpenMenuTxId(null);
+    setIsDeletePromptOpen(true);
+  }
+
+  function handleEditExpense(row: ExpenseRow) {
+    setExpenseForm({
+      reason: row.reason,
+      title: row.title,
+      amount: String(row.rawAmount),
+      date: row.rawDate ? row.rawDate.split("T")[0] : "",
+    });
+    setEditingExpenseId(row.id);
+    setOpenMenuExpId(null);
+    setIsAddExpenseModalOpen(true);
+  }
+
+  function handleDeleteExpensePrompt(row: ExpenseRow) {
+    setItemToDelete({ type: "expense", id: row.id, name: row.title });
+    setOpenMenuExpId(null);
+    setIsDeletePromptOpen(true);
+  }
+
+  async function handleConfirmDelete() {
+    if (!itemToDelete) return;
+    try {
+      const endpoint = itemToDelete.type === "transaction" ? "/admin/database/transactions" : "/admin/database/expenses";
+      await apiDelete(`${endpoint}/${itemToDelete.id}`);
+      
+      if (itemToDelete.type === "transaction") {
+        setTransactionRows((prev) => prev.filter((r) => r.id !== itemToDelete.id));
+      } else {
+        setExpenseRows((prev) => prev.filter((r) => r.id !== itemToDelete.id));
+      }
+      
+      setIsDeletePromptOpen(false);
+      setItemToDelete(null);
+      setToast("Record deleted successfully");
+      window.setTimeout(() => setToast(null), 3000);
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Failed to delete record");
+      window.setTimeout(() => setToast(null), 3000);
+    }
   }
 
   function handleCloseExpenseModal() {
@@ -352,27 +446,46 @@ export default function TransactionPage() {
     setExpenseSaveLoading(true);
 
     try {
-      const saved = await apiPost<ExpenseApiRow>("/admin/database/expenses", {
-        reason: expenseForm.reason.trim(),
-        title: expenseForm.title.trim(),
-        amount: numericAmount,
-        date: parsedDate.toISOString(),
-      });
-
-      setExpenseRows((current) => [
-        {
-          id: saved.id ?? `exp-${Date.now()}`,
+      if (editingExpenseId) {
+        await apiPatch<ExpenseApiRow>(`/admin/database/expenses/${editingExpenseId}`, {
+          reason: expenseForm.reason.trim(),
+          title: expenseForm.title.trim(),
+          amount: numericAmount,
+          date: parsedDate.toISOString(),
+        });
+        setExpenseRows((current) => current.map((row) => row.id === editingExpenseId ? {
+          id: editingExpenseId,
           date: parsedDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
           reason: expenseForm.reason.trim(),
           title: expenseForm.title.trim(),
           amount: `$${numericAmount.toLocaleString()}`,
-        },
-        ...current,
-      ]);
+          rawDate: parsedDate.toISOString(),
+          rawAmount: numericAmount,
+        } : row));
+      } else {
+        const saved = await apiPost<ExpenseApiRow>("/admin/database/expenses", {
+          reason: expenseForm.reason.trim(),
+          title: expenseForm.title.trim(),
+          amount: numericAmount,
+          date: parsedDate.toISOString(),
+        });
+        setExpenseRows((current) => [
+          {
+            id: saved.id ?? `exp-${Date.now()}`,
+            date: parsedDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+            reason: expenseForm.reason.trim(),
+            title: expenseForm.title.trim(),
+            amount: `$${numericAmount.toLocaleString()}`,
+            rawDate: parsedDate.toISOString(),
+            rawAmount: numericAmount,
+          },
+          ...current,
+        ]);
+      }
 
       setActiveTab("Expense");
       setIsAddExpenseModalOpen(false);
-      setToast("Expense added successfully");
+      setToast(`Expense ${editingExpenseId ? 'updated' : 'added'} successfully`);
       window.setTimeout(() => setToast(null), 3000);
     } catch (error) {
       setExpenseSaveError(error instanceof Error ? error.message : "Failed to save expense");
@@ -427,37 +540,58 @@ export default function TransactionPage() {
     setSaveLoading(true);
 
     try {
-      // POST to /admin/database/transactions — the generic table plugin
-      // (adminDatabaseRoutes) mounted at /api/admin/database handles this.
-      // The TransactionTitleSchema on the backend validates title, and
-      // fullNameForUser fills hostMember automatically when userId is provided.
-      const saved = await apiPost<{ id: string; date: string; fullName: string; title: string; amount: string }>(
-        "/admin/database/transactions",
-        {
-          ...(userId ? { userId } : {}),
-          fullName: fullName.trim(),
-          title: title.trim(),
-          amount: numericAmount,
-          date: parsedDate.toISOString(),
-        }
-      );
-
-      // Reflect the new row immediately in the table without a full refetch.
-      setTransactionRows((currentRows) => [
-        {
-          id: saved.id ?? `tx-${Date.now()}`,
+      if (editingTransactionId) {
+        await apiPatch<{ id: string; date: string; fullName: string; title: string; amount: string }>(
+          `/admin/database/transactions/${editingTransactionId}`,
+          {
+            ...(userId ? { userId } : {}),
+            fullName: fullName.trim(),
+            title: title.trim(),
+            amount: numericAmount,
+            date: parsedDate.toISOString(),
+          }
+        );
+        setTransactionRows((currentRows) => currentRows.map((row) => row.id === editingTransactionId ? {
+          id: editingTransactionId,
           date: parsedDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
           fullName: fullName.trim(),
           title: title.trim(),
-          amount: `$${numericAmount}`,
+          amount: `$${numericAmount.toLocaleString()}`,
           status: "Completed",
-        },
-        ...currentRows,
-      ]);
+          rawDate: parsedDate.toISOString(),
+          rawAmount: numericAmount,
+          userId: userId || undefined,
+        } : row));
+      } else {
+        const saved = await apiPost<{ id: string; date: string; fullName: string; title: string; amount: string }>(
+          "/admin/database/transactions",
+          {
+            ...(userId ? { userId } : {}),
+            fullName: fullName.trim(),
+            title: title.trim(),
+            amount: numericAmount,
+            date: parsedDate.toISOString(),
+          }
+        );
+        setTransactionRows((currentRows) => [
+          {
+            id: saved.id ?? `tx-${Date.now()}`,
+            date: parsedDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+            fullName: fullName.trim(),
+            title: title.trim(),
+            amount: `$${numericAmount.toLocaleString()}`,
+            status: "Completed",
+            rawDate: parsedDate.toISOString(),
+            rawAmount: numericAmount,
+            userId: userId || undefined,
+          },
+          ...currentRows,
+        ]);
+      }
 
       setSearch(fullName.trim());
       setIsAddTransactionModalOpen(false);
-      setToast("Transaction added successfully");
+      setToast(`Transaction ${editingTransactionId ? 'updated' : 'added'} successfully`);
       window.setTimeout(() => setToast(null), 3000);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "Failed to save transaction");
@@ -750,13 +884,14 @@ export default function TransactionPage() {
                           <th>Title</th>
                           <th>Amount</th>
                           <th>Status</th>
+                          <th>Action</th>
                         </tr>
                       </thead>
                       <tbody>
                         {txLoading ? (
-                          <tr><td colSpan={5} className="transaction-page__table-state">Loading transactions...</td></tr>
+                          <tr><td colSpan={6} className="transaction-page__table-state">Loading transactions...</td></tr>
                         ) : !visibleRows.length ? (
-                          <tr><td colSpan={5} className="transaction-page__table-state">
+                          <tr><td colSpan={6} className="transaction-page__table-state">
                             {search.trim() ? "No transactions match your search." : "No transactions recorded yet."}
                           </td></tr>
                         ) : (
@@ -767,6 +902,46 @@ export default function TransactionPage() {
                               <td>{row.title}</td>
                               <td>{row.amount}</td>
                               <td><span className="transaction-page__status">{row.status}</span></td>
+                              <td>
+                                <div className="member-page__action-wrap" ref={openMenuTxId === row.id ? menuRef : null}>
+                                  <button
+                                    type="button"
+                                    className={[
+                                      "member-page__more-button",
+                                      openMenuTxId === row.id ? "is-active" : "",
+                                    ].filter(Boolean).join(" ")}
+                                    aria-label="More actions"
+                                    aria-expanded={openMenuTxId === row.id}
+                                    aria-haspopup="menu"
+                                    onClick={() => setOpenMenuTxId(openMenuTxId === row.id ? null : row.id)}
+                                  >
+                                    <FiMoreVertical size={22} />
+                                  </button>
+
+                                  {openMenuTxId === row.id && (
+                                    <div className="member-page__action-menu" role="menu" style={{ right: 0, left: "auto" }}>
+                                      <button
+                                        type="button"
+                                        role="menuitem"
+                                        className="member-page__action-item"
+                                        onClick={() => handleEditTransaction(row)}
+                                      >
+                                        <FiEdit2 size={15} />
+                                        <span>Edit</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        role="menuitem"
+                                        className="member-page__action-item member-page__action-item--danger"
+                                        onClick={() => handleDeleteTransactionPrompt(row)}
+                                      >
+                                        <FiTrash2 size={15} />
+                                        <span>Delete</span>
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
                             </tr>
                           ))
                         )}
@@ -795,13 +970,14 @@ export default function TransactionPage() {
                           <th>Reason</th>
                           <th>Title</th>
                           <th>Amount</th>
+                          <th>Action</th>
                         </tr>
                       </thead>
                       <tbody>
                         {expLoading ? (
-                          <tr><td colSpan={4} className="transaction-page__table-state">Loading expenses...</td></tr>
+                          <tr><td colSpan={5} className="transaction-page__table-state">Loading expenses...</td></tr>
                         ) : !visibleExpenseRows.length ? (
-                          <tr><td colSpan={4} className="transaction-page__table-state">
+                          <tr><td colSpan={5} className="transaction-page__table-state">
                             {search.trim() ? "No expenses match your search." : "No expenses recorded yet."}
                           </td></tr>
                         ) : (
@@ -811,6 +987,46 @@ export default function TransactionPage() {
                               <td>{row.reason}</td>
                               <td>{row.title}</td>
                               <td>{row.amount}</td>
+                              <td>
+                                <div className="member-page__action-wrap" ref={openMenuExpId === row.id ? menuRef : null}>
+                                  <button
+                                    type="button"
+                                    className={[
+                                      "member-page__more-button",
+                                      openMenuExpId === row.id ? "is-active" : "",
+                                    ].filter(Boolean).join(" ")}
+                                    aria-label="More actions"
+                                    aria-expanded={openMenuExpId === row.id}
+                                    aria-haspopup="menu"
+                                    onClick={() => setOpenMenuExpId(openMenuExpId === row.id ? null : row.id)}
+                                  >
+                                    <FiMoreVertical size={22} />
+                                  </button>
+
+                                  {openMenuExpId === row.id && (
+                                    <div className="member-page__action-menu" role="menu" style={{ right: 0, left: "auto" }}>
+                                      <button
+                                        type="button"
+                                        role="menuitem"
+                                        className="member-page__action-item"
+                                        onClick={() => handleEditExpense(row)}
+                                      >
+                                        <FiEdit2 size={15} />
+                                        <span>Edit</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        role="menuitem"
+                                        className="member-page__action-item member-page__action-item--danger"
+                                        onClick={() => handleDeleteExpensePrompt(row)}
+                                      >
+                                        <FiTrash2 size={15} />
+                                        <span>Delete</span>
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
                             </tr>
                           ))
                         )}
@@ -824,13 +1040,46 @@ export default function TransactionPage() {
         </section>
       </main>
 
+      {isDeletePromptOpen && itemToDelete && (
+        <div className="admin-dashboard__modal" role="dialog" aria-modal="true" aria-labelledby="delete-prompt-modal-title">
+          <div className="admin-dashboard__modal-backdrop" onClick={() => setIsDeletePromptOpen(false)} />
+
+          <div className="admin-dashboard__modal-panel">
+            <h2 id="delete-prompt-modal-title" className="admin-dashboard__modal-title admin-dashboard__modal-title--danger">
+              Delete Record
+            </h2>
+            <div className="admin-dashboard__modal-section-copy" style={{ marginBottom: "1.5rem" }}>
+              <p>Are you sure you want to delete the record for <strong>{itemToDelete.name}</strong>?</p>
+              <p>This action cannot be undone.</p>
+            </div>
+
+            <div className="admin-dashboard__modal-actions">
+              <button
+                type="button"
+                className="admin-dashboard__modal-button admin-dashboard__modal-button--secondary"
+                onClick={() => setIsDeletePromptOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="admin-dashboard__modal-button admin-dashboard__modal-button--danger"
+                onClick={handleConfirmDelete}
+              >
+                Delete Record
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isAddTransactionModalOpen && (
         <div className="admin-dashboard__modal" role="dialog" aria-modal="true" aria-labelledby="transaction-modal-title">
           <div className="admin-dashboard__modal-backdrop" onClick={handleCloseTransactionModal} />
 
           <div className="admin-dashboard__modal-panel transaction-page__modal-panel">
             <h2 id="transaction-modal-title" className="admin-dashboard__modal-title">
-              Add Transaction
+              {editingTransactionId ? "Edit Transaction" : "Add Transaction"}
             </h2>
 
             {(saveError || usersError) && (
@@ -972,12 +1221,12 @@ export default function TransactionPage() {
                 disabled={
                   !transactionForm.fullName.trim() ||
                   !transactionForm.title.trim() ||
-                  !transactionForm.amount.trim() ||
+                  !transactionForm.amount.toString().trim() ||
                   !transactionForm.paymentDate.trim() ||
                   saveLoading
                 }
               >
-                {saveLoading ? "Saving..." : "Save Transaction"}
+                {saveLoading ? "Saving..." : (editingTransactionId ? "Save Changes" : "Save Record")}
               </button>
             </div>
           </div>
@@ -990,7 +1239,7 @@ export default function TransactionPage() {
 
           <div className="admin-dashboard__modal-panel transaction-page__modal-panel">
             <h2 id="expense-modal-title" className="admin-dashboard__modal-title">
-              Add Expense
+              {editingExpenseId ? "Edit Expense" : "Add Expense"}
             </h2>
 
             {expenseSaveError && (
@@ -1077,12 +1326,12 @@ export default function TransactionPage() {
                 disabled={
                   !expenseForm.reason.trim() ||
                   !expenseForm.title.trim() ||
-                  !expenseForm.amount.trim() ||
+                  !expenseForm.amount.toString().trim() ||
                   !expenseForm.date.trim() ||
                   expenseSaveLoading
                 }
               >
-                {expenseSaveLoading ? "Saving..." : "Save Expense"}
+                {expenseSaveLoading ? "Saving..." : (editingExpenseId ? "Save Changes" : "Save Expense")}
               </button>
             </div>
           </div>

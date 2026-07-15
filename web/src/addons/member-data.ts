@@ -17,6 +17,9 @@ export type PaymentHistoryRow = {
   amountPaid: string;
   status: "Paid" | "Unpaid";
   paymentDate: string;
+  rawAmount?: number;
+  year?: number;
+  monthNum?: number;
 };
 
 export type MemberDetailRecord = {

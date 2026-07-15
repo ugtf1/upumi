@@ -794,6 +794,25 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
+  // Delete a monthly due payment for a member.
+  app.delete('/members/:id/monthly-dues/:dueId', { preHandler: requireRole('ADMIN') }, async (req: any, reply) => {
+    const dueId = String(req.params?.dueId ?? '');
+    
+    const existing = await (prisma as any).monthlyDue.findUnique({
+      where: { id: dueId },
+    });
+    
+    if (!existing) {
+      return reply.code(404).send({ message: 'Payment record not found' });
+    }
+
+    await (prisma as any).monthlyDue.delete({
+      where: { id: dueId },
+    });
+    
+    return { ok: true };
+  });
+
   // Record or update attendance for a member for a given year/month.
   // Attendance is stored as a single row per month (@@unique([year, month]))
   // with all present member IDs comma-separated in `usersIn`.
