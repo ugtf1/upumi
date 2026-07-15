@@ -98,14 +98,12 @@ const TRANSACTION_TITLE_OPTIONS = [
   "Levy",
 ];
 
-const YEAR_OPTIONS = [2024, 2025, 2026, 2027];
-const COUNT_OPTIONS = ["0", "1", "2", "3"];
-const STATUS_OPTIONS = ["All Members", "Active", "Pending", "Inactive"];
+// YEAR_OPTIONS removed (previously [2024, 2025, 2026, 2027]) — unused variable eliminated to satisfy lint rules
 
 export default function TransactionPage() {
   const navigate = useNavigate();
 
-  const [year, setYear] = useState(2026);
+  // year state removed — filter UI disabled in this build
   const [search, setSearch] = useState("");
   const [transactionRows, setTransactionRows] = useState<TransactionRow[]>([]);
   const [txLoading, setTxLoading] = useState(true);
@@ -113,11 +111,7 @@ export default function TransactionPage() {
   const [expenseRows, setExpenseRows] = useState<ExpenseRow[]>([]);
   const [expLoading, setExpLoading] = useState(true);
   const [expError, setExpError] = useState<string | null>(null);
-  const [sheetUrl, setSheetUrl] = useState("");
-  const [memberCount, setMemberCount] = useState("0");
-  const [memberStatus, setMemberStatus] = useState("All Members");
   const [activeTab, setActiveTab] = useState<"Income" | "Expense">("Income");
-  const [selectedFileName, setSelectedFileName] = useState("No file chosen");
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const [isAddTransactionModalOpen, setIsAddTransactionModalOpen] = useState(false);
   const [isAddExpenseModalOpen, setIsAddExpenseModalOpen] = useState(false);
@@ -615,7 +609,7 @@ export default function TransactionPage() {
           </div>
         </section>
 
-        <section className="admin-dashboard__filter-bar transaction-page__filter-panel">
+        {/* <section className="admin-dashboard__filter-bar transaction-page__filter-panel">
           <div className="transaction-page__filter-row">
             <label className="transaction-page__field transaction-page__field--year">
               <span>Year</span>
@@ -677,7 +671,7 @@ export default function TransactionPage() {
               Import CSV
             </button>
           </div>
-        </section>
+        </section> */}
 
         <section className="transaction-page__tools">
           {/* <div className="transaction-page__csv-dropzone">
