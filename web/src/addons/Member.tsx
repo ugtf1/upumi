@@ -138,6 +138,9 @@ export default function MemberPage() {
   const [toast, setToast] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
   useEffect(() => {
     let active = true;
     apiGet<ApiMember[]>("/admin/members")
@@ -308,6 +311,17 @@ export default function MemberPage() {
     );
   }, [search, members]);
 
+  // Reset page when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
+
+  const totalPages = Math.ceil(filteredMembers.length / itemsPerPage);
+  const paginatedMembers = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredMembers.slice(start, start + itemsPerPage);
+  }, [filteredMembers, currentPage, itemsPerPage]);
+
   function handleLogout() {
     clearToken();
     navigate("/login");
@@ -429,13 +443,14 @@ export default function MemberPage() {
           <div className="member-page__list" aria-label="Members">
             {membersLoading ? (
               <div className="member-page__empty-state">Loading members...</div>
-            ) : !filteredMembers.length ? (
+            ) : !paginatedMembers.length ? (
               <div className="member-page__empty-state">
                 {search.trim() ? "No members match the current search." : "No members found."}
               </div>
             ) : (
-              filteredMembers.map((member) => (
-                <article className="member-page__row" key={member.id}>
+              <>
+                {paginatedMembers.map((member) => (
+                  <article className="member-page__row" key={member.id}>
                   <div className="member-page__identity">
                     <strong>{member.name}</strong>
                     <span>Member ID - {member.memberId}</span>
@@ -552,9 +567,33 @@ export default function MemberPage() {
                         </button>
                       </div>
                     )}
+                    </div>
+                  </article>
+                ))}
+                {totalPages > 1 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem", borderTop: "1px solid #eee", marginTop: "1rem" }}>
+                    <button
+                      type="button"
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      style={{ padding: "0.5rem 1rem", borderRadius: "4px", border: "1px solid #ccc", background: currentPage === 1 ? "#f5f5f5" : "#fff", cursor: currentPage === 1 ? "not-allowed" : "pointer" }}
+                    >
+                      Previous
+                    </button>
+                    <span>
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      style={{ padding: "0.5rem 1rem", borderRadius: "4px", border: "1px solid #ccc", background: currentPage === totalPages ? "#f5f5f5" : "#fff", cursor: currentPage === totalPages ? "not-allowed" : "pointer" }}
+                    >
+                      Next
+                    </button>
                   </div>
-                </article>
-              ))
+                )}
+              </>
             )}
           </div>
         </section>

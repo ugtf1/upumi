@@ -524,7 +524,6 @@ export default function TransactionPage() {
     const { userId, fullName, title, amount, paymentDate } = transactionForm;
     setSaveError(null);
 
-    if (!fullName.trim()) { setSaveError("Select a member"); return; }
     if (!title.trim()) { setSaveError("Select a title"); return; }
     if (!amount.trim()) { setSaveError("Enter an amount"); return; }
     if (!paymentDate.trim()) { setSaveError("Enter a payment date"); return; }
@@ -1090,7 +1089,7 @@ export default function TransactionPage() {
               {/* ── Full Name — member picker ─────────────────────── */}
               <div className="admin-dashboard__modal-section">
                 <label htmlFor="transaction-full-name" className="admin-dashboard__modal-label">
-                  Full Name *
+                  Full Name (Optional)
                 </label>
                 <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain transaction-page__name-wrap">
                   <input
@@ -1098,7 +1097,7 @@ export default function TransactionPage() {
                     value={userSearch}
                     onChange={(event) => handleFullNameInputChange(event.target.value)}
                     onFocus={() => setIsUserDropdownOpen(true)}
-                    placeholder="Search member..."
+                    placeholder="Search member... (Optional)"
                     autoComplete="off"
                     aria-label="Full name"
                     aria-expanded={isUserDropdownOpen}
