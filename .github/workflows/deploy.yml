@@ -195,10 +195,12 @@ jobs:
           service_account: github-runner-ugtf@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
 
       - name: Start Cloud SQL Auth Proxy
-        uses: google-github-actions/cloud-sql-proxy@v1
-        with:
-          instance_connection_name: ${{ env.CLOUD_SQL_CONNECTION_NAME }}
-          port: 5432
+        run: |
+          curl -fsSL -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.23.0/cloud-sql-proxy.linux.amd64
+          chmod +x cloud-sql-proxy
+          ./cloud-sql-proxy --port 5432 "$CLOUD_SQL_CONNECTION_NAME" &
+          echo $! > cloud-sql-proxy.pid
+          sleep 5
 
       - name: Export DATABASE_URL
         run: echo "DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@127.0.0.1:5432/${DB_NAME}?schema=public" >> $GITHUB_ENV
