@@ -203,7 +203,19 @@ jobs:
           sleep 5
 
       - name: Export DATABASE_URL
-        run: echo "DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@127.0.0.1:5432/${DB_NAME}?schema=public" >> $GITHUB_ENV
+        run: |
+          export RAW_URL=$(gcloud secrets versions access latest --secret=UPUMI_DATABASE_URL)
+          python -c "
+          import os, urllib.parse
+          url = os.environ.get('RAW_URL', '')
+          if not url:
+              print('Failed to get secret from Secret Manager')
+              exit(1)
+          parsed = urllib.parse.urlparse(url)
+          new_url = parsed._replace(netloc=f'{parsed.username}:{parsed.password}@127.0.0.1:5432').geturl()
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+              f.write(f'DATABASE_URL={new_url}\n')
+          "
 
       - name: Run Prisma migrations
         run: npx prisma migrate deploy
