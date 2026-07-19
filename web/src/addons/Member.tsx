@@ -576,18 +576,18 @@ export default function MemberPage() {
                       type="button"
                       disabled={currentPage === 1}
                       onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                      style={{ padding: "0.5rem 1rem", borderRadius: "4px", border: "1px solid #0a743a", background: currentPage === 1 ? "#f5f5f5" : "#fff", cursor: currentPage === 1 ? "not-allowed" : "pointer" }}
+                      style={{ color: "#0a743a", padding: "0.5rem 1rem", borderRadius: "4px", border: "1px solid #0a743a", background: currentPage === 1 ? "#f5f5f5" : "#fff", cursor: currentPage === 1 ? "not-allowed" : "pointer", fontWeight: 500 }}
                     >
                       Previous
                     </button>
-                    <span>
+                    <span style={{ color: "#333", fontWeight: 500 }}>
                       Page {currentPage} of {totalPages}
                     </span>
                     <button
                       type="button"
                       disabled={currentPage === totalPages}
                       onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                      style={{ padding: "0.5rem 1rem", borderRadius: "4px", border: "1px solid #0a743a", background: currentPage === totalPages ? "#f5f5f5" : "#fff", cursor: currentPage === totalPages ? "not-allowed" : "pointer" }}
+                      style={{ color: "#0a743a", padding: "0.5rem 1rem", borderRadius: "4px", border: "1px solid #0a743a", background: currentPage === totalPages ? "#f5f5f5" : "#fff", cursor: currentPage === totalPages ? "not-allowed" : "pointer", fontWeight: 500 }}
                     >
                       Next
                     </button>
