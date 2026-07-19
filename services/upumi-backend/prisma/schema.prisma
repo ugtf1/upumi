@@ -109,6 +109,7 @@ model Transaction {
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   fullName  String
   title     String
+  description String?
   amount    Decimal  @default(0)
   date      DateTime
   createdAt DateTime @default(now())

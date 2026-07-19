@@ -40,6 +40,7 @@ type TransactionRow = {
   date: string;
   fullName: string;
   title: string;
+  description?: string;
   amount: string;
   status: string;
   rawDate: string;
@@ -53,6 +54,7 @@ type TransactionApiRow = {
   userId?: string | null;
   fullName: string;
   title: string;
+  description?: string | null;
   amount: string | number;
   date: string;
   createdAt?: string;
@@ -67,6 +69,7 @@ type TransactionFormState = {
   userId: string;
   fullName: string;
   title: string;
+  description: string;
   amount: string;
   paymentDate: string;
 };
@@ -104,6 +107,7 @@ const TRANSACTION_TITLE_OPTIONS = [
   "Wrapper",
   "UPUA 25 Raffle",
   "Levy",
+  "Others",
 ];
 
 // YEAR_OPTIONS removed (previously [2024, 2025, 2026, 2027]) — unused variable eliminated to satisfy lint rules
@@ -127,6 +131,7 @@ export default function TransactionPage() {
     userId: "",
     fullName: "",
     title: "",
+    description: "",
     amount: "",
     paymentDate: "",
   });
@@ -245,6 +250,7 @@ export default function TransactionPage() {
             }),
             fullName: row.fullName,
             title: row.title,
+            description: row.description ?? "",
             amount: `$${Number(row.amount).toLocaleString()}`,
             status: "Completed",
             rawDate: row.date,
@@ -339,7 +345,7 @@ export default function TransactionPage() {
   }
 
   function resetTransactionForm() {
-    setTransactionForm({ userId: "", fullName: "", title: "", amount: "", paymentDate: "" });
+    setTransactionForm({ userId: "", fullName: "", title: "", description: "", amount: "", paymentDate: "" });
     setUserSearch("");
     setIsUserDropdownOpen(false);
     setSaveError(null);
@@ -365,6 +371,7 @@ export default function TransactionPage() {
       userId: row.userId ?? "",
       fullName: row.fullName,
       title: row.title,
+      description: row.description ?? "",
       amount: String(row.rawAmount),
       paymentDate: row.rawDate ? row.rawDate.split("T")[0] : "",
     });
@@ -521,7 +528,7 @@ export default function TransactionPage() {
   }
 
   async function handleSaveTransaction() {
-    const { userId, fullName, title, amount, paymentDate } = transactionForm;
+    const { userId, fullName, title, description, amount, paymentDate } = transactionForm;
     setSaveError(null);
 
     if (!title.trim()) { setSaveError("Select a title"); return; }
@@ -546,6 +553,7 @@ export default function TransactionPage() {
             ...(userId ? { userId } : {}),
             fullName: fullName.trim(),
             title: title.trim(),
+            description: description.trim() || null,
             amount: numericAmount,
             date: parsedDate.toISOString(),
           }
@@ -555,6 +563,7 @@ export default function TransactionPage() {
           date: parsedDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
           fullName: fullName.trim(),
           title: title.trim(),
+          description: description.trim() || undefined,
           amount: `$${numericAmount.toLocaleString()}`,
           status: "Completed",
           rawDate: parsedDate.toISOString(),
@@ -568,6 +577,7 @@ export default function TransactionPage() {
             ...(userId ? { userId } : {}),
             fullName: fullName.trim(),
             title: title.trim(),
+            description: description.trim() || null,
             amount: numericAmount,
             date: parsedDate.toISOString(),
           }
@@ -578,6 +588,7 @@ export default function TransactionPage() {
             date: parsedDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
             fullName: fullName.trim(),
             title: title.trim(),
+            description: description.trim() || undefined,
             amount: `$${numericAmount.toLocaleString()}`,
             status: "Completed",
             rawDate: parsedDate.toISOString(),
@@ -1169,7 +1180,22 @@ export default function TransactionPage() {
                 </div>
               </div>
 
-              {/* ── Amount ────────────────────────────────────────── */}
+              {/* ── Description ───────────────────────────────────── */}
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="transaction-description" className="admin-dashboard__modal-label">
+                  Description (Optional)
+                </label>
+                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain">
+                  <input
+                    id="transaction-description"
+                    value={transactionForm.description}
+                    onChange={(event) => handleTransactionFormChange("description", event.target.value)}
+                    placeholder="Add a note"
+                    aria-label="Transaction description"
+                  />
+                </div>
+              </div>
+
               <div className="admin-dashboard__modal-section">
                 <label htmlFor="transaction-amount" className="admin-dashboard__modal-label">
                   Amount *
@@ -1218,7 +1244,6 @@ export default function TransactionPage() {
                 className="admin-dashboard__modal-button admin-dashboard__modal-button--primary"
                 onClick={handleSaveTransaction}
                 disabled={
-                  !transactionForm.fullName.trim() ||
                   !transactionForm.title.trim() ||
                   !transactionForm.amount.toString().trim() ||
                   !transactionForm.paymentDate.trim() ||

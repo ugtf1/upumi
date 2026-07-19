@@ -27,7 +27,7 @@ const IdParamSchema = TableParamSchema.extend({ id: z.string().min(1) });
 const RoleSchema = z.enum(['ADMIN', 'MEMBER', 'Admin', 'Member']).transform((v) => v.toUpperCase());
 const VoteRoleSchema = z.enum(['Yes', 'No']).default('No');
 const StatusSchema = z.enum(['Active', 'Inactive']).default('Active');
-const TransactionTitleSchema = z.enum(['Raffle', 'Insurance', 'Wrapper', 'UPUA 25 Raffle', 'Levy']);
+const TransactionTitleSchema = z.enum(['Raffle', 'Insurance', 'Wrapper', 'UPUA 25 Raffle', 'Levy', 'Others']);
 
 function money(v: unknown) {
   const n = Number(v ?? 0);
@@ -119,6 +119,7 @@ async function sanitizeData(table: TableName, body: any, partial = false) {
         ...pick('userId', String),
         ...pick('fullName', String),
         ...pick('title', (v) => TransactionTitleSchema.parse(v)),
+        ...pick('description', (v) => (v == null ? null : String(v))),
         ...pick('amount', money),
         ...pick('date', date),
       };
