@@ -28,6 +28,16 @@ const RoleSchema = z.enum(['ADMIN', 'MEMBER', 'Admin', 'Member']).transform((v) 
 const VoteRoleSchema = z.enum(['Yes', 'No']).default('No');
 const StatusSchema = z.enum(['Active', 'Inactive']).default('Active');
 const TransactionTitleSchema = z.enum(['Raffle', 'Insurance', 'Wrapper', 'UPUA 25 Raffle', 'Levy', 'Others']);
+const transactionSelectWithoutDescription = {
+  id: true,
+  userId: true,
+  fullName: true,
+  title: true,
+  amount: true,
+  date: true,
+  createdAt: true,
+  updatedAt: true,
+};
 
 function money(v: unknown) {
   const n = Number(v ?? 0);
@@ -161,11 +171,69 @@ function selectFor(table: TableName) {
   };
 }
 
+function isMissingTransactionDescriptionColumn(error: unknown) {
+  const candidate = error as { code?: string; message?: string; meta?: { column?: string } };
+  return (
+    candidate?.code === 'P2022' &&
+    (candidate.meta?.column === 'transactions.description' ||
+      String(candidate.message ?? '').includes('transactions.description'))
+  );
+}
+
 async function listRows(table: TableName) {
-  return prismaAny[TABLES[table]].findMany({
+  const delegate = prismaAny[TABLES[table]];
+  const args = {
     orderBy: { createdAt: 'desc' },
     ...(selectFor(table) ? { select: selectFor(table) } : {}),
-  });
+  };
+
+  try {
+    return await delegate.findMany(args);
+  } catch (error) {
+    if (table === 'transactions' && isMissingTransactionDescriptionColumn(error)) {
+      return delegate.findMany({
+        orderBy: { createdAt: 'desc' },
+        select: transactionSelectWithoutDescription,
+      });
+    }
+    throw error;
+  }
+}
+
+async function createRow(table: TableName, data: Record<string, any>) {
+  const delegate = prismaAny[TABLES[table]];
+
+  try {
+    return await delegate.create({ data, ...(selectFor(table) ? { select: selectFor(table) } : {}) });
+  } catch (error) {
+    if (table === 'transactions' && isMissingTransactionDescriptionColumn(error)) {
+      const { description: _description, ...dataWithoutDescription } = data;
+      return delegate.create({ data: dataWithoutDescription, select: transactionSelectWithoutDescription });
+    }
+    throw error;
+  }
+}
+
+async function updateRow(table: TableName, id: string, data: Record<string, any>) {
+  const delegate = prismaAny[TABLES[table]];
+
+  try {
+    return await delegate.update({
+      where: { id },
+      data,
+      ...(selectFor(table) ? { select: selectFor(table) } : {}),
+    });
+  } catch (error) {
+    if (table === 'transactions' && isMissingTransactionDescriptionColumn(error)) {
+      const { description: _description, ...dataWithoutDescription } = data;
+      return delegate.update({
+        where: { id },
+        data: dataWithoutDescription,
+        select: transactionSelectWithoutDescription,
+      });
+    }
+    throw error;
+  }
 }
 
 export const adminDatabaseRoutes: FastifyPluginAsync = async (app) => {
@@ -177,17 +245,13 @@ export const adminDatabaseRoutes: FastifyPluginAsync = async (app) => {
   app.post('/:table', { preHandler: requireRole('ADMIN') }, async (req: any) => {
     const { table } = TableParamSchema.parse(req.params);
     const data = await sanitizeData(table, req.body ?? {});
-    return prismaAny[TABLES[table]].create({ data, ...(selectFor(table) ? { select: selectFor(table) } : {}) });
+    return createRow(table, data);
   });
 
   app.patch('/:table/:id', { preHandler: requireRole('ADMIN') }, async (req: any) => {
     const { table, id } = IdParamSchema.parse(req.params);
     const data = await sanitizeData(table, req.body ?? {}, true);
-    return prismaAny[TABLES[table]].update({
-      where: { id },
-      data,
-      ...(selectFor(table) ? { select: selectFor(table) } : {}),
-    });
+    return updateRow(table, id, data);
   });
 
   app.delete('/:table/:id', { preHandler: requireRole('ADMIN') }, async (req: any) => {

@@ -1,13 +1,10 @@
-name: Prisma  Cloud SQL (Destructive)
+name: Prisma Cloud SQL Migrations
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - master
 
 jobs:
-  destructive-push:
+  migrate:
     runs-on: ubuntu-latest
     env:
       DB_NAME: ${{ secrets.DB_NAME }}
@@ -46,6 +43,6 @@ jobs:
       - name: Verify Prisma schema file exists
         run: test -f services/upumi-backend/prisma/schema.prisma
 
-      - name: Run destructive Prisma DB push (FORCE)
-        run: npx prisma db push --force
+      - name: Run Prisma migrations
+        run: npx prisma migrate deploy
         working-directory: services/upumi-backend

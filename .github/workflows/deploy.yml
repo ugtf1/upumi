@@ -161,10 +161,56 @@ jobs:
           docker push "$IMAGE_TAG"
           echo "image=$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-  # 1c) Deploy API service (only if api changed)
-  deploy-api:
+  # 1b) Run safe Prisma migrations before deploying API (only if api changed)
+  migrate-database:
     needs: [detect-changes, build-api-image]
     if: needs.detect-changes.outputs.api == 'true' && needs.build-api-image.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: "read"
+      id-token: "write"
+    env:
+      DB_NAME: ${{ secrets.DB_NAME }}
+      DB_USER: ${{ secrets.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      CLOUD_SQL_CONNECTION_NAME: ${{ secrets.CLOUD_SQL_CONNECTION_NAME || 'top-cedar-471512-k3:us-east1:upumi-postgres' }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install API dependencies
+        run: npm ci
+        working-directory: services/upumi-backend
+
+      - name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          workload_identity_provider: projects/${{ env.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/ugtf-github-pool/providers/github-actions
+          service_account: github-runner-ugtf@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
+
+      - name: Start Cloud SQL Auth Proxy
+        uses: google-github-actions/cloud-sql-proxy@v1
+        with:
+          instance_connection_name: ${{ env.CLOUD_SQL_CONNECTION_NAME }}
+          port: 5432
+
+      - name: Export DATABASE_URL
+        run: echo "DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@127.0.0.1:5432/${DB_NAME}?schema=public" >> $GITHUB_ENV
+
+      - name: Run Prisma migrations
+        run: npx prisma migrate deploy
+        working-directory: services/upumi-backend
+
+  # 1c) Deploy API service (only if api changed)
+  deploy-api:
+    needs: [detect-changes, build-api-image, migrate-database]
+    if: needs.detect-changes.outputs.api == 'true' && needs.build-api-image.result == 'success' && needs.migrate-database.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: "read"
@@ -399,7 +445,7 @@ jobs:
 
   # 5) Notify via Email (runs when either service changed)
   notify:
-    needs: [detect-changes, deploy-web, build-api-image, deploy-api, health-check-web, health-check-api, lighthouse-audit, seo-audit]
+    needs: [detect-changes, deploy-web, build-api-image, migrate-database, deploy-api, health-check-web, health-check-api, lighthouse-audit, seo-audit]
     if: always() && (needs.detect-changes.outputs.web == 'true' || needs.detect-changes.outputs.api == 'true')
     runs-on: ubuntu-latest
     steps:
@@ -427,6 +473,7 @@ jobs:
 
             API:
               - image: ${{ needs.build-api-image.result }}
+              - migration: ${{ needs.migrate-database.result }}
               - deploy: ${{ needs.deploy-api.result }}
               - health: ${{ needs.health-check-api.result }}
               - url: ${{ needs.deploy-api.outputs.api_url || 'skipped' }}
