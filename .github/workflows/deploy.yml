@@ -212,7 +212,11 @@ jobs:
               print('Failed to get secret from Secret Manager')
               exit(1)
           parsed = urllib.parse.urlparse(url)
-          new_url = parsed._replace(netloc=f'{parsed.username}:{parsed.password}@127.0.0.1:5432').geturl()
+          # Remove any 'host' query parameter to prevent unix socket overriding TCP
+          qs = urllib.parse.parse_qs(parsed.query)
+          qs.pop('host', None)
+          new_query = urllib.parse.urlencode(qs, doseq=True)
+          new_url = parsed._replace(netloc=f'{parsed.username}:{parsed.password}@127.0.0.1:5432', query=new_query).geturl()
           with open(os.environ['GITHUB_ENV'], 'a') as f:
               f.write(f'DATABASE_URL={new_url}\n')
           "
