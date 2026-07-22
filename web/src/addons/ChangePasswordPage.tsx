@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { apiPost, setToken, getAuthClaims, getToken } from "./api";
 
