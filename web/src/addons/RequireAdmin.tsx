@@ -6,6 +6,10 @@ export default function RequireAdmin({ children }: { children: JSX.Element }) {
   if (!token) return <Navigate to="/login" replace />;
 
   const claims = getAuthClaims();
+  if (claims?.needsPasswordChange) {
+    return <Navigate to="/change-password" replace />;
+  }
+
   if (claims?.role !== "ADMIN") return <Navigate to="/member" replace />;
 
   return children;

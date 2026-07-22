@@ -26,6 +26,8 @@ model User {
   otpExpiresAt     DateTime?
   otpLastSentAt    DateTime?
   masterOtpBypass  Boolean   @default(false)
+  passwordHash     String?
+  needsPasswordChange Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

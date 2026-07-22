@@ -14,6 +14,7 @@ type AuthClaims = {
   phone?: string;
   email?: string;
   role?: Role;
+  needsPasswordChange?: boolean;
 };
 
 export function getToken(): string | null {

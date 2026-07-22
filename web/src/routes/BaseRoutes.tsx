@@ -12,6 +12,7 @@ import MemberPage from "../addons/Member";
 import MemberViewPage from "../addons/MemberView";
 import PivotMembersPage from "../addons/PivotMembersPage";
 import RegisterPage from "../addons/RegisterPage";
+import ChangePasswordPage from "../addons/ChangePasswordPage";
 import RequireAuth from "../addons/RequireAuth";
 import RequireAdmin from "../addons/RequireAdmin";
 import SettingsPage from "../addons/SettingsPage";
@@ -31,6 +32,7 @@ const BaseRoute = () => {
       {/* Auth routes */}
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/change-password" element={<ChangePasswordPage />} />
 
       {/* Member-only routes */}
       <Route
