@@ -63,16 +63,25 @@ async function readErrorBody(res: Response): Promise<string> {
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getToken();
+  const hasBody = init?.body != null;
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
       ...(init?.headers || {}),
-      "content-type": "application/json",
+      // Only send Content-Type when there's an actual body.
+      // Sending it on bodyless requests (DELETE, GET) causes Fastify to
+      // respond with 400 FAST_ERR_CTP_EMPTY_BODY.
+      ...(hasBody ? { "content-type": "application/json" } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
   });
 
   const ct = res.headers.get("content-type") || "";
+
+  // Success responses with no body (e.g. 204 No Content) are fine
+  if (res.status === 204 || res.headers.get("content-length") === "0") {
+    return { ok: true } as unknown as T;
+  }
 
   // If backend accidentally returns index.html, this will catch it clearly
   if (!ct.includes("application/json")) {
