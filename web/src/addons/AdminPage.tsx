@@ -240,8 +240,10 @@ export default function AdminPage() {
       setMeetings((prev) => prev.filter((m) => m.id !== id));
       setToast("Meeting summary deleted successfully");
       window.setTimeout(() => setToast(null), 3000);
-    } catch {
-      alert("Failed to delete meeting");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to delete meeting";
+      console.error("[deleteMeeting] error:", err);
+      alert(`Failed to delete meeting: ${msg}`);
     }
   };
 

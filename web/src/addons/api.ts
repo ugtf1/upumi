@@ -206,5 +206,5 @@ export async function saveMeeting(payload: {
 
 // DELETE /admin/meetings/:id — deletes meeting (admin only)
 export async function deleteMeeting(id: string): Promise<{ ok: boolean }> {
-  return apiDelete<{ ok: boolean }>(`/admin/meetings/${id}`);
+  return apiDelete<{ ok: boolean }>(`/admin/meetings/${encodeURIComponent(id)}`);
 }

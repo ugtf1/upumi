@@ -130,28 +130,43 @@ export const meetingRoutes: FastifyPluginAsync = async (app) => {
   // DELETE /api/admin/meetings/:id
   app.delete('/meetings/:id', { preHandler: requireRole('ADMIN') }, async (req: any, reply) => {
     await ensureMeetingsTableExists();
-    const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
-    
+    const rawId = req.params?.id;
+    const { id } = z.object({ id: z.string().min(1) }).parse({ id: rawId });
+
+    let deleted = false;
+
+    // 1. Try Prisma ORM delete directly
     try {
-      const existing = await (prisma as any).meeting.findUnique({ where: { id } }).catch(() => null);
-      if (existing) {
-        await (prisma as any).meeting.delete({ where: { id } });
-        return { ok: true };
-      }
-    } catch {
-      // Ignore Prisma error and attempt raw delete
+      await (prisma as any).meeting.delete({ where: { id } });
+      deleted = true;
+    } catch (prismaErr: any) {
+      app.log.warn(
+        `Prisma delete meeting failed for ID '${id}', falling back to raw query: ${
+          prismaErr?.message || prismaErr
+        }`
+      );
     }
 
-    try {
-      const res: any = await prisma.$executeRawUnsafe(`DELETE FROM "meetings" WHERE id = $1`, id);
-      if (res === 0) {
-        return reply.code(404).send({ message: 'Meeting not found' });
+    // 2. If Prisma ORM couldn't delete, fallback to raw SQL
+    if (!deleted) {
+      try {
+        const res: any = await prisma.$executeRawUnsafe(
+          `DELETE FROM "meetings" WHERE "id" = $1 OR id = $1`,
+          id
+        );
+        if (Number(res) > 0) {
+          deleted = true;
+        }
+      } catch (rawErr) {
+        app.log.error(`Raw SQL delete meeting failed for ID '${id}': ${rawErr}`);
       }
-      return { ok: true };
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return reply.code(500).send({ message: `Failed to delete meeting: ${msg}` });
     }
+
+    if (!deleted) {
+      return reply.code(404).send({ message: `Meeting with ID '${id}' not found or already deleted.` });
+    }
+
+    return { ok: true };
   });
 };
 
