@@ -784,6 +784,23 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       },
     });
 
+    try {
+      const record = await prisma.memberRecord.findUnique({
+        where: { id: memberRecordId },
+        select: { userId: true, monthlyDues: { select: { duesPaid: true } } },
+      });
+      if (record?.userId) {
+        const totalPaid = record.monthlyDues.reduce((sum, d) => sum + Number(d.duesPaid ?? 0), 0);
+        const outstanding = Math.max(0, (record.monthlyDues.length * 20) - totalPaid);
+        await prisma.user.update({
+          where: { id: record.userId },
+          data: { totalPaid, outstanding },
+        }).catch(() => null);
+      }
+    } catch {
+      // Non-fatal sync error
+    }
+
     return {
       id: due.id,
       year: due.year,
@@ -806,9 +823,30 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(404).send({ message: 'Payment record not found' });
     }
 
+    const memberRecordId = existing.memberRecordId;
+
     await (prisma as any).monthlyDue.delete({
       where: { id: dueId },
     });
+
+    if (memberRecordId) {
+      try {
+        const record = await prisma.memberRecord.findUnique({
+          where: { id: memberRecordId },
+          select: { userId: true, monthlyDues: { select: { duesPaid: true } } },
+        });
+        if (record?.userId) {
+          const totalPaid = record.monthlyDues.reduce((sum, d) => sum + Number(d.duesPaid ?? 0), 0);
+          const outstanding = Math.max(0, (record.monthlyDues.length * 20) - totalPaid);
+          await prisma.user.update({
+            where: { id: record.userId },
+            data: { totalPaid, outstanding },
+          }).catch(() => null);
+        }
+      } catch {
+        // Non-fatal sync error
+      }
+    }
     
     return { ok: true };
   });

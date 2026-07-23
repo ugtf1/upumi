@@ -87,6 +87,23 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
 
     const rawJson = parseRawJson(mr.rawJson);
 
+    // Fetch attendance records for current year to verify monthly attendance
+    const attendanceRows = await (prisma as any).attendance.findMany({
+      where: { year: currentYear },
+      select: { month: true, usersIn: true },
+    }).catch(() => []);
+
+    const attendanceMap = new Map<number, boolean>();
+    for (const att of attendanceRows) {
+      const usersInList = String(att.usersIn ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+      const isPresent =
+        usersInList.includes(user.id) ||
+        usersInList.includes(mr.id) ||
+        usersInList.includes(mr.memberKey) ||
+        usersInList.includes(`user.${user.id}`);
+      attendanceMap.set(att.month, isPresent);
+    }
+
     return {
       linked: true,
       user: { id: user.id },
@@ -104,12 +121,16 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
         email: (rawJson.Email as string) ?? null,
         phone: (rawJson.Phone as string) ?? null,
       },
-      monthlyDues: mr.monthlyDues.map((d) => ({
-        year: d.year,
-        month: d.month,
-        present: d.present ?? null,
-        duesPaid: decimalToNumber(d.duesPaid),
-      })),
+      monthlyDues: mr.monthlyDues.map((d) => {
+        const attendedInTable = attendanceMap.get(d.month) ?? false;
+        const isPresent = d.present === true || attendedInTable;
+        return {
+          year: d.year,
+          month: d.month,
+          present: isPresent,
+          duesPaid: decimalToNumber(d.duesPaid),
+        };
+      }),
     };
   });
 

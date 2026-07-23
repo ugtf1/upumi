@@ -493,6 +493,31 @@ export default function MemberViewPage() {
       setPaymentToDelete(null);
       setToast("Payment deleted successfully");
       window.setTimeout(() => setToast(null), 3000);
+
+      // Re-fetch profile to update Total Paid / Outstanding header stats
+      if (memberId) {
+        apiGet<ApiMemberDetail>(`/admin/members/${memberId}`)
+          .then((row) => {
+            const firstName = row.firstName?.trim() ?? "";
+            const lastName = row.lastName?.trim() ?? "";
+            setMemberProfile({
+              memberId: row.displayMemberId || row.memberKey || row.id,
+              name: [firstName, lastName].filter(Boolean).join(" ") || row.email || "Unnamed member",
+              email: row.email || "-",
+              phoneNumber: row.phone || "-",
+              address: row.address || "",
+              dateJoined: formatDateDisplay(row.joined),
+              attendance: row.attendancePct || "",
+              voteRole: String(row.voter ?? "").trim().toUpperCase() === "YES" ? "YES" : "NO",
+              monthlyDues: formatCurrencyAmount(row.monthlyDuesAmount),
+              totalPaid: formatCurrencyAmount(row.totalPaid),
+              outstanding: formatCurrencyAmount(row.outstanding),
+              status: String(row.status ?? "").trim().toLowerCase() === "active" ? "Active" : "Inactive",
+              paymentHistory: mapPaymentHistory(row.monthlyDues),
+            });
+          })
+          .catch(() => null);
+      }
     } catch (error) {
       setToast(error instanceof Error ? error.message : "Failed to delete payment");
       window.setTimeout(() => setToast(null), 3000);
@@ -517,14 +542,11 @@ export default function MemberViewPage() {
     setRecordPaymentLoading(true);
 
     try {
-      // POST to the new /admin/members/:id/monthly-dues route.
-      // The memberId from the URL IS the MemberRecord.id the backend expects.
       const saved = await apiPost<ApiMonthlyDue>(
         `/admin/members/${memberId}/monthly-dues`,
         { year, month, duesPaid }
       );
 
-      // Build the display row from the saved record and upsert into local state.
       const monthName = MONTH_OPTIONS.find((m) => m.value === month)?.label ?? String(month);
       const newRow: PaymentHistoryRow = {
         id: saved.id,
@@ -543,6 +565,31 @@ export default function MemberViewPage() {
       setIsRecordPaymentModalOpen(false);
       setToast("Payment recorded successfully");
       window.setTimeout(() => setToast(null), 3000);
+
+      // Re-fetch profile to update Total Paid / Outstanding header stats
+      if (memberId) {
+        apiGet<ApiMemberDetail>(`/admin/members/${memberId}`)
+          .then((row) => {
+            const firstName = row.firstName?.trim() ?? "";
+            const lastName = row.lastName?.trim() ?? "";
+            setMemberProfile({
+              memberId: row.displayMemberId || row.memberKey || row.id,
+              name: [firstName, lastName].filter(Boolean).join(" ") || row.email || "Unnamed member",
+              email: row.email || "-",
+              phoneNumber: row.phone || "-",
+              address: row.address || "",
+              dateJoined: formatDateDisplay(row.joined),
+              attendance: row.attendancePct || "",
+              voteRole: String(row.voter ?? "").trim().toUpperCase() === "YES" ? "YES" : "NO",
+              monthlyDues: formatCurrencyAmount(row.monthlyDuesAmount),
+              totalPaid: formatCurrencyAmount(row.totalPaid),
+              outstanding: formatCurrencyAmount(row.outstanding),
+              status: String(row.status ?? "").trim().toLowerCase() === "active" ? "Active" : "Inactive",
+              paymentHistory: mapPaymentHistory(row.monthlyDues),
+            });
+          })
+          .catch(() => null);
+      }
     } catch (error) {
       setRecordPaymentError(error instanceof Error ? error.message : "Failed to record payment");
     } finally {

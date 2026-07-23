@@ -131,10 +131,27 @@ export const meetingRoutes: FastifyPluginAsync = async (app) => {
   app.delete('/meetings/:id', { preHandler: requireRole('ADMIN') }, async (req: any, reply) => {
     await ensureMeetingsTableExists();
     const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
-    const existing = await (prisma as any).meeting.findUnique({ where: { id } });
-    if (!existing) return reply.code(404).send({ message: 'Meeting not found' });
-    await (prisma as any).meeting.delete({ where: { id } });
-    return { ok: true };
+    
+    try {
+      const existing = await (prisma as any).meeting.findUnique({ where: { id } }).catch(() => null);
+      if (existing) {
+        await (prisma as any).meeting.delete({ where: { id } });
+        return { ok: true };
+      }
+    } catch {
+      // Ignore Prisma error and attempt raw delete
+    }
+
+    try {
+      const res: any = await prisma.$executeRawUnsafe(`DELETE FROM "meetings" WHERE id = $1`, id);
+      if (res === 0) {
+        return reply.code(404).send({ message: 'Meeting not found' });
+      }
+      return { ok: true };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return reply.code(500).send({ message: `Failed to delete meeting: ${msg}` });
+    }
   });
 };
 

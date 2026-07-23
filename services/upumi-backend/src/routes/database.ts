@@ -273,10 +273,22 @@ export const adminDatabaseRoutes: FastifyPluginAsync = async (app) => {
     return updateRow(table, id, data);
   });
 
-  app.delete('/:table/:id', { preHandler: requireRole('ADMIN') }, async (req: any) => {
+  app.delete('/:table/:id', { preHandler: requireRole('ADMIN') }, async (req: any, reply) => {
     const { table, id } = IdParamSchema.parse(req.params);
-    await prismaAny[TABLES[table]].delete({ where: { id } });
-    return { ok: true };
+    const delegate = prismaAny[TABLES[table]];
+    if (!delegate) return reply.code(400).send({ message: `Unknown table: ${table}` });
+
+    try {
+      const existing = await delegate.findUnique({ where: { id } }).catch(() => null);
+      if (!existing) {
+        return reply.code(404).send({ message: `Record not found in ${table}` });
+      }
+      await delegate.delete({ where: { id } });
+      return { ok: true };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return reply.code(500).send({ message: `Failed to delete from ${table}: ${msg}` });
+    }
   });
 };
 

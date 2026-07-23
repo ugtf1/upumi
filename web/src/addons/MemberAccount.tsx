@@ -183,21 +183,40 @@ export default function MemberAccount() {
   }, [memberProfile]);
 
   // Build account rows from member data
-  const accountRows: { hosting: string; fullName: string; balance: string; duesPaid: string; financialDS: string }[] = useMemo(() => {
-    if (!memberProfile?.linked || !memberProfile?.member) {
+  type AccountRow = {
+    monthLabel: string;
+    attendance: string;
+    dueAmount: string;
+    amountPaid: string;
+    status: string;
+    isPaid: boolean;
+  };
+
+  const accountRows: AccountRow[] = useMemo(() => {
+    if (!memberProfile?.linked || !memberProfile?.monthlyDues) {
       return [];
     }
 
-    const member = memberProfile.member;
     const dues = memberProfile.monthlyDues || [];
+    const monthNames = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
     
-    return dues.slice(0, 14).map((d: MonthlyDueRecord) => ({
-      hosting: d.present ? "Yes" : "No",
-      fullName: `${member.firstName || ""} ${member.lastName || ""}`.trim() || "Member",
-      balance: formatCurrency(d.duesPaid),
-      duesPaid: d.duesPaid ? "$" + d.duesPaid.toFixed(2) : "$0.00",
-      financialDS: member.financialGoodStanding === "Yes" ? "YES" : "NO",
-    }));
+    return dues.map((d: MonthlyDueRecord) => {
+      const monthStr = monthNames[d.month - 1] ?? `Month ${d.month}`;
+      const duesPaidNum = d.duesPaid ?? 0;
+      const isPaid = duesPaidNum > 0;
+
+      return {
+        monthLabel: `${monthStr} ${d.year}`,
+        attendance: d.present ? "Yes" : "No",
+        dueAmount: "$20.00",
+        amountPaid: "$" + duesPaidNum.toFixed(2),
+        status: isPaid ? "Paid" : "Unpaid",
+        isPaid,
+      };
+    });
   }, [memberProfile]);
 
   const memberName = memberProfile?.member
@@ -309,33 +328,6 @@ export default function MemberAccount() {
       </aside>
 
       <div className="member-account__workspace">
-        {/* <header className="member-account__topbar">
-          <nav className="member-account__topnav" aria-label="Main site navigation">
-            {topNavigation.map((item) => (
-              <button
-                key={item.label}
-                type="button"
-                className={["member-account__topnav-link", item.label === "About" ? "is-active" : ""]
-                  .filter(Boolean)
-                  .join(" ")}
-                onClick={item.action}
-              >
-                {item.label}
-              </button>
-            ))}
-          </nav>
-
-          <div className="member-account__topbar-actions">
-            <button type="button" className="member-account__donate-button">
-              <span>DONATE</span>
-              <BsHeartFill size={18} />
-            </button>
-            <button type="button" className="member-account__community-button" onClick={() => navigate("/register")}>
-              Join Community
-            </button>
-          </div>
-        </header> */}
-
         <main className="member-account__content">
           {error && (
             <div style={{ padding: "1rem", backgroundColor: "#fee", color: "#c33", borderRadius: "4px", marginBottom: "1rem" }}>
@@ -447,8 +439,8 @@ export default function MemberAccount() {
               <table>
                 <thead>
                   <tr>
+                    <th>Month / Date</th>
                     <th>Attendance</th>
-                    <th>Full Name</th>
                     <th>Due Amount</th>
                     <th>Amount Paid</th>
                     <th>Status</th>
@@ -469,15 +461,30 @@ export default function MemberAccount() {
                     </tr>
                   ) : (
                     accountRows.map((row, index) => (
-                      <tr key={`${row.fullName}-${index}`}>
-                        <td data-label="Attendance">{row.hosting}</td>
-                        <td data-label="Full Name" className="member-account__table-name">
-                          {row.fullName}
+                      <tr key={`${row.monthLabel}-${index}`}>
+                        <td data-label="Month / Date" className="member-account__table-name">
+                          {row.monthLabel}
                         </td>
-                        <td data-label="Due Amount">$20</td>
-                        <td data-label="Amount Paid">{row.duesPaid}</td>
+                        <td data-label="Attendance">{row.attendance}</td>
+                        <td data-label="Due Amount">{row.dueAmount}</td>
+                        <td data-label="Amount Paid">{row.amountPaid}</td>
                         <td data-label="Status">
-                          <span className="member-account__status-pill">{row.financialDS}</span>
+                          <span
+                            className={[
+                              "member-account__status-pill",
+                              row.isPaid ? "is-paid" : "is-unpaid",
+                            ].filter(Boolean).join(" ")}
+                            style={{
+                              padding: "0.25rem 0.75rem",
+                              borderRadius: "20px",
+                              fontSize: "0.75rem",
+                              fontWeight: 600,
+                              backgroundColor: row.isPaid ? "#e6f4ea" : "#fce8e6",
+                              color: row.isPaid ? "#137333" : "#c5221f",
+                            }}
+                          >
+                            {row.status}
+                          </span>
                         </td>
                       </tr>
                     ))
