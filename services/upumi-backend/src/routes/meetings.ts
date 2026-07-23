@@ -53,6 +53,25 @@ Provide a well-structured summary now:`;
   );
 }
 
+// Helper to ensure meetings table exists in PostgreSQL database if migration hasn't run
+async function ensureMeetingsTableExists() {
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "meetings" (
+        "id" TEXT PRIMARY KEY,
+        "title" TEXT NOT NULL,
+        "date" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "transcription" TEXT NOT NULL,
+        "summary" TEXT NOT NULL,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+  } catch (err) {
+    // Non-fatal warning
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Admin-only meeting routes
 // ---------------------------------------------------------------------------
@@ -60,6 +79,8 @@ export const meetingRoutes: FastifyPluginAsync = async (app) => {
   // POST /api/admin/meetings
   // Body: { title, transcript, date? }
   app.post('/meetings', { preHandler: requireRole('ADMIN') }, async (req: any, reply) => {
+    await ensureMeetingsTableExists();
+
     const Body = z
       .object({
         title: z.string().min(1, 'Title is required'),
@@ -100,6 +121,7 @@ export const meetingRoutes: FastifyPluginAsync = async (app) => {
 
   // GET /api/admin/meetings
   app.get('/meetings', { preHandler: requireRole('ADMIN') }, async () => {
+    await ensureMeetingsTableExists();
     return (prisma as any).meeting.findMany({
       orderBy: { date: 'desc' },
     });
@@ -107,6 +129,7 @@ export const meetingRoutes: FastifyPluginAsync = async (app) => {
 
   // DELETE /api/admin/meetings/:id
   app.delete('/meetings/:id', { preHandler: requireRole('ADMIN') }, async (req: any, reply) => {
+    await ensureMeetingsTableExists();
     const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
     const existing = await (prisma as any).meeting.findUnique({ where: { id } });
     if (!existing) return reply.code(404).send({ message: 'Meeting not found' });
@@ -122,6 +145,7 @@ export const memberMeetingRoutes: FastifyPluginAsync = async (app) => {
   // GET /api/members/meetings
   // Returns only the summary (not the full raw transcription) for privacy.
   app.get('/meetings', { preHandler: requireAuth }, async () => {
+    await ensureMeetingsTableExists();
     return (prisma as any).meeting.findMany({
       orderBy: { date: 'desc' },
       select: {
@@ -134,3 +158,4 @@ export const memberMeetingRoutes: FastifyPluginAsync = async (app) => {
     });
   });
 };
+
