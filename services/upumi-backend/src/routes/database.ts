@@ -11,7 +11,7 @@ const TABLES = {
   generalFinance: 'generalFinance',
   attendance: 'attendance',
   hostingSchedule: 'hostingSchedule',
-  dues: 'due',
+  dues: 'monthlyDue',
   collections: 'collection',
   transactions: 'transaction',
   expenses: 'expense',
@@ -118,8 +118,14 @@ async function sanitizeData(table: TableName, body: any, partial = false) {
       if (!partial) z.object({ year: z.any(), month: z.any(), hostMember: z.string() }).parse(body);
       return { ...pick('year', year), ...pick('month', month), ...pick('hostMember', String) };
     case 'dues':
-      if (!partial) z.object({ userId: z.string().min(1), year: z.any(), month: z.any(), amount: z.any() }).parse(body);
-      return { ...pick('userId', String), ...pick('year', year), ...pick('month', month), ...pick('amount', money) };
+      if (!partial) z.object({ memberRecordId: z.string().min(1), year: z.any(), month: z.any(), duesPaid: z.any() }).parse(body);
+      return {
+        ...pick('memberRecordId', String),
+        ...pick('year', year),
+        ...pick('month', month),
+        ...pick('duesPaid', money),
+        ...pick('present', (v) => v === true || v === 'true'),
+      };
     case 'collections':
       if (!partial) z.object({ event: z.string().min(1), amountPaid: z.any() }).parse(body);
       return { ...pick('event', String), ...pick('amountPaid', money) };
@@ -182,10 +188,23 @@ function isMissingTransactionDescriptionColumn(error: unknown) {
 
 async function listRows(table: TableName) {
   const delegate = prismaAny[TABLES[table]];
-  const args = {
+  const args: any = {
     orderBy: { createdAt: 'desc' },
     ...(selectFor(table) ? { select: selectFor(table) } : {}),
   };
+
+  if (table === 'dues') {
+    args.include = {
+      member: {
+        select: {
+          firstName: true,
+          lastName: true,
+          email: true,
+          phone: true,
+        },
+      },
+    };
+  }
 
   try {
     return await delegate.findMany(args);

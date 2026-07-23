@@ -46,6 +46,8 @@ type TransactionRow = {
   rawDate: string;
   rawAmount: number;
   userId?: string;
+  isDue?: boolean;
+  memberRecordId?: string;
 };
 
 // Shape returned by GET /admin/database/transactions (raw Prisma row).
@@ -110,6 +112,21 @@ const TRANSACTION_TITLE_OPTIONS = [
   "Others",
 ];
 
+const MONTH_OPTIONS = [
+  { value: 1, label: "January" },
+  { value: 2, label: "February" },
+  { value: 3, label: "March" },
+  { value: 4, label: "April" },
+  { value: 5, label: "May" },
+  { value: 6, label: "June" },
+  { value: 7, label: "July" },
+  { value: 8, label: "August" },
+  { value: 9, label: "September" },
+  { value: 10, label: "October" },
+  { value: 11, label: "November" },
+  { value: 12, label: "December" },
+];
+
 // YEAR_OPTIONS removed (previously [2024, 2025, 2026, 2027]) — unused variable eliminated to satisfy lint rules
 
 export default function TransactionPage() {
@@ -156,7 +173,7 @@ export default function TransactionPage() {
   const [openMenuTxId, setOpenMenuTxId] = useState<string | null>(null);
   const [openMenuExpId, setOpenMenuExpId] = useState<string | null>(null);
   const [isDeletePromptOpen, setIsDeletePromptOpen] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState<{ type: "transaction" | "expense"; id: string; name: string } | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<{ type: "transaction" | "expense" | "due"; id: string; name: string } | null>(null);
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
 
@@ -237,27 +254,61 @@ export default function TransactionPage() {
     setTxLoading(true);
     setTxError(null);
 
-    apiGet<TransactionApiRow[]>("/admin/database/transactions")
-      .then((rows) => {
+    Promise.all([
+      apiGet<TransactionApiRow[]>("/admin/database/transactions"),
+      apiGet<any[]>("/admin/database/dues"),
+    ])
+      .then(([txRows, dueRows]) => {
         if (!active) return;
-        setTransactionRows(
-          rows.map((row) => ({
+
+        const txNormalized: TransactionRow[] = txRows.map((row) => ({
+          id: row.id,
+          date: new Date(row.date).toLocaleDateString("en-GB", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          }),
+          fullName: row.fullName,
+          title: row.title,
+          description: row.description ?? "",
+          amount: `$${Number(row.amount).toLocaleString()}`,
+          status: "Completed",
+          rawDate: row.date,
+          rawAmount: Number(row.amount),
+          userId: row.userId ?? undefined,
+          isDue: false,
+        }));
+
+        const dueNormalized: TransactionRow[] = dueRows.map((row) => {
+          const monthName = MONTH_OPTIONS.find((m) => m.value === row.month)?.label ?? String(row.month);
+          const fullName = row.member
+            ? [row.member.firstName, row.member.lastName].filter(Boolean).join(" ") || row.member.email || row.member.phone || "Unnamed member"
+            : "Unnamed member";
+
+          return {
             id: row.id,
-            date: new Date(row.date).toLocaleDateString("en-GB", {
+            date: new Date(row.createdAt).toLocaleDateString("en-GB", {
               day: "2-digit",
               month: "short",
               year: "numeric",
             }),
-            fullName: row.fullName,
-            title: row.title,
-            description: row.description ?? "",
-            amount: `$${Number(row.amount).toLocaleString()}`,
+            fullName,
+            title: `Monthly Dues - ${monthName} ${row.year}`,
+            description: `Dues payment for ${monthName} ${row.year}`,
+            amount: `$${Number(row.duesPaid).toLocaleString()}`,
             status: "Completed",
-            rawDate: row.date,
-            rawAmount: Number(row.amount),
-            userId: row.userId ?? undefined,
-          }))
+            rawDate: row.createdAt,
+            rawAmount: Number(row.duesPaid),
+            isDue: true,
+            memberRecordId: row.memberRecordId,
+          };
+        });
+
+        const combined = [...txNormalized, ...dueNormalized].sort(
+          (a, b) => new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime()
         );
+
+        setTransactionRows(combined);
       })
       .catch((error: Error) => {
         if (!active) return;
@@ -330,7 +381,7 @@ export default function TransactionPage() {
   }, [search, expenseRows]);
 
   const incomeTotal = useMemo(() => {
-    const total = transactionRows.reduce((sum, row) => sum + Number(row.amount.replace(/[$,]/g, "")), 0);
+    const total = transactionRows.reduce((sum, row) => sum + row.rawAmount, 0);
     return `$${total.toLocaleString()}`;
   }, [transactionRows]);
 
@@ -382,7 +433,7 @@ export default function TransactionPage() {
   }
 
   function handleDeleteTransactionPrompt(row: TransactionRow) {
-    setItemToDelete({ type: "transaction", id: row.id, name: row.title });
+    setItemToDelete({ type: row.isDue ? "due" : "transaction", id: row.id, name: row.title });
     setOpenMenuTxId(null);
     setIsDeletePromptOpen(true);
   }
@@ -408,10 +459,17 @@ export default function TransactionPage() {
   async function handleConfirmDelete() {
     if (!itemToDelete) return;
     try {
-      const endpoint = itemToDelete.type === "transaction" ? "/admin/database/transactions" : "/admin/database/expenses";
+      let endpoint = "";
+      if (itemToDelete.type === "transaction") {
+        endpoint = "/admin/database/transactions";
+      } else if (itemToDelete.type === "due") {
+        endpoint = "/admin/database/dues";
+      } else {
+        endpoint = "/admin/database/expenses";
+      }
       await apiDelete(`${endpoint}/${itemToDelete.id}`);
       
-      if (itemToDelete.type === "transaction") {
+      if (itemToDelete.type === "transaction" || itemToDelete.type === "due") {
         setTransactionRows((prev) => prev.filter((r) => r.id !== itemToDelete.id));
       } else {
         setExpenseRows((prev) => prev.filter((r) => r.id !== itemToDelete.id));
@@ -569,6 +627,7 @@ export default function TransactionPage() {
           rawDate: parsedDate.toISOString(),
           rawAmount: numericAmount,
           userId: userId || undefined,
+          isDue: false,
         } : row));
       } else {
         const saved = await apiPost<{ id: string; date: string; fullName: string; title: string; amount: string }>(
@@ -594,6 +653,7 @@ export default function TransactionPage() {
             rawDate: parsedDate.toISOString(),
             rawAmount: numericAmount,
             userId: userId || undefined,
+            isDue: false,
           },
           ...currentRows,
         ]);
@@ -909,7 +969,26 @@ export default function TransactionPage() {
                             <tr key={row.id}>
                               <td>{row.date}</td>
                               <td>{row.fullName}</td>
-                              <td>{row.title}</td>
+                              <td>
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                  <span>{row.title}</span>
+                                  {row.isDue && (
+                                    <span style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      padding: "2px 8px",
+                                      fontSize: "0.75rem",
+                                      fontWeight: 600,
+                                      borderRadius: "999px",
+                                      backgroundColor: "rgba(28, 139, 97, 0.1)",
+                                      color: "var(--admin-brand-dark, #1c8b61)",
+                                      whiteSpace: "nowrap"
+                                    }}>
+                                      Dues
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
                               <td>{row.amount}</td>
                               <td><span className="transaction-page__status">{row.status}</span></td>
                               <td>
@@ -930,15 +1009,17 @@ export default function TransactionPage() {
 
                                   {openMenuTxId === row.id && (
                                     <div className="member-page__action-menu" role="menu" style={{ right: 0, left: "auto" }}>
-                                      <button
-                                        type="button"
-                                        role="menuitem"
-                                        className="member-page__action-item"
-                                        onClick={() => handleEditTransaction(row)}
-                                      >
-                                        <FiEdit2 size={15} />
-                                        <span>Edit</span>
-                                      </button>
+                                      {!row.isDue && (
+                                        <button
+                                          type="button"
+                                          role="menuitem"
+                                          className="member-page__action-item"
+                                          onClick={() => handleEditTransaction(row)}
+                                        >
+                                          <FiEdit2 size={15} />
+                                          <span>Edit</span>
+                                        </button>
+                                      )}
                                       <button
                                         type="button"
                                         role="menuitem"
