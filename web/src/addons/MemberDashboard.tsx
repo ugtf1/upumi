@@ -17,6 +17,7 @@ import {
   FiTrendingUp,
   FiUserCheck,
   FiUsers,
+  FiMic,
 } from "react-icons/fi";
 import {
   CartesianGrid,
@@ -32,10 +33,12 @@ import {
   YAxis,
 } from "recharts";
 
-import { clearToken, getLedgerSummary, getAnalyticsSummary, getMonthlyReport, getHostingSchedule, getMemberProfile, getMemberSafeMemberList, getAllTransactionsReadOnly, getAllDuesReadOnly } from "./api";
+import { clearToken, getLedgerSummary, getAnalyticsSummary, getMonthlyReport, getHostingSchedule, getMemberProfile, getMemberSafeMemberList, getAllTransactionsReadOnly, getAllDuesReadOnly, getMemberMeetings, MemberMeeting } from "./api";
 import memberImage from "./upu-logo.svg";
 import "./admin-page.scss";
 import "./member-dashboard.scss";
+import "./meeting-recorder.scss";
+
 
 type SummaryCardData = {
   title: string;
@@ -157,6 +160,8 @@ type MemberProfileData = {
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
 
+  const [meetings, setMeetings] = useState<MemberMeeting[]>([]);
+
   // Fetch data on mount
   useEffect(() => {
     const fetchData = async () => {
@@ -164,19 +169,20 @@ type MemberProfileData = {
         setLoading(true);
         setError(null);
         
-        const [analytics, ledger, , schedule, profile] = await Promise.all([
+        const [analytics, ledger, , schedule, profile, memberMeetings] = await Promise.all([
           getAnalyticsSummary(currentYear) as Promise<AnalyticsData>,
           getLedgerSummary(currentYear) as Promise<LedgerData>,
           getMonthlyReport(currentYear, currentMonth),
           getHostingSchedule().catch(() => [] as HostingScheduleApiRow[]),
           getMemberProfile().catch(() => null) as Promise<MemberProfileData | null>,
+          getMemberMeetings().catch(() => [] as MemberMeeting[]),
         ]);
         
         setAnalyticsData(analytics);
         setLedgerData(ledger);
         setMemberProfile(profile);
-
         setHostingScheduleRows(schedule as HostingScheduleApiRow[]);
+        setMeetings(memberMeetings);
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : "Failed to load dashboard data";
         setError(errMsg);
@@ -188,6 +194,7 @@ type MemberProfileData = {
 
     fetchData();
   }, [currentYear, currentMonth]);
+
 
   useEffect(() => {
     const routeConfig = MEMBER_ROUTE_CONFIG[location.pathname] ?? MEMBER_ROUTE_CONFIG["/member"];
@@ -773,7 +780,55 @@ type MemberProfileData = {
             </div>
           </div>
         </section>
+
+        <section className="admin-dashboard__panel member-dashboard__panel" style={{ marginTop: "2rem" }}>
+          <div className="admin-dashboard__schedule-head">
+            <div className="admin-dashboard__section-copy member-dashboard__section-copy">
+              <h2>Meeting Summaries</h2>
+              <p>View executive summaries and key decision notes from recent organization meetings</p>
+            </div>
+          </div>
+
+          <div className="meeting-feed">
+            {meetings.length === 0 ? (
+              <div className="meeting-feed__empty">
+                <FiMic size={32} color="#1ba389" />
+                <p>No meeting summaries available yet.</p>
+              </div>
+            ) : (
+              meetings.map((m) => {
+                const formattedDate = new Date(m.date).toLocaleDateString("en-US", {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                });
+
+                return (
+                  <article key={m.id} className="meeting-feed__card">
+                    <div className="meeting-feed__card-header">
+                      <div>
+                        <h4>{m.title}</h4>
+                        <div className="meeting-feed__meta">
+                          <FiClock size={14} />
+                          <span>{formattedDate}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="meeting-feed__card-summary">
+                      <div style={{ whiteSpace: "pre-wrap" }}>{m.summary}</div>
+                    </div>
+                  </article>
+                );
+              })
+            )}
+          </div>
+        </section>
       </main>
+
     </div>
   );
 }

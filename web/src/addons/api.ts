@@ -165,3 +165,46 @@ export async function getAllExpensesReadOnly(): Promise<unknown[]> {
 export async function getAllDuesReadOnly(): Promise<unknown[]> {
   return apiGet<unknown[]>("/members/database/dues");
 }
+
+// ── Meeting API helpers ───────────────────────────────────────────────────────
+
+export type Meeting = {
+  id: string;
+  title: string;
+  date: string;
+  transcription: string;
+  summary: string;
+  createdAt: string;
+};
+
+export type MemberMeeting = {
+  id: string;
+  title: string;
+  date: string;
+  summary: string;
+  createdAt: string;
+};
+
+// GET /admin/meetings — returns all meetings (admin only)
+export async function getMeetings(): Promise<Meeting[]> {
+  return apiGet<Meeting[]>("/admin/meetings");
+}
+
+// GET /members/meetings — member-safe read-only list
+export async function getMemberMeetings(): Promise<MemberMeeting[]> {
+  return apiGet<MemberMeeting[]>("/members/meetings");
+}
+
+// POST /admin/meetings — saves meeting, triggers Gemini summarisation
+export async function saveMeeting(payload: {
+  title: string;
+  transcript: string;
+  date?: string;
+}): Promise<Meeting> {
+  return apiPost<Meeting>("/admin/meetings", payload);
+}
+
+// DELETE /admin/meetings/:id — deletes meeting (admin only)
+export async function deleteMeeting(id: string): Promise<{ ok: boolean }> {
+  return apiDelete<{ ok: boolean }>(`/admin/meetings/${id}`);
+}

@@ -15,6 +15,10 @@ import {
   FiSettings,
   FiUsers,
   FiX,
+  FiChevronDown,
+  FiChevronUp,
+  FiTrash2,
+  FiMic,
 } from "react-icons/fi";
 import {
   CartesianGrid,
@@ -30,8 +34,11 @@ import {
   YAxis,
 } from "recharts";
 
-import { apiGet, apiPatch, apiPost, clearToken } from "./api";
+import { apiGet, apiPatch, apiPost, clearToken, getMeetings, deleteMeeting, Meeting } from "./api";
+import MeetingRecorder from "./MeetingRecorder";
 import "./admin-page.scss";
+import "./meeting-recorder.scss";
+
 
 type LedgerSummaryResponse = {
   year: number;
@@ -205,6 +212,39 @@ export default function AdminPage() {
   const [activeNav, setActiveNav] = useState("Dashboard");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [meetingsLoading, setMeetingsLoading] = useState(false);
+  const [expandedTranscriptId, setExpandedTranscriptId] = useState<string | null>(null);
+
+  const fetchMeetingsList = async () => {
+    try {
+      setMeetingsLoading(true);
+      const data = await getMeetings();
+      setMeetings(data);
+    } catch {
+      // Ignore or log error
+    } finally {
+      setMeetingsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMeetingsList();
+  }, []);
+
+  const handleDeleteMeeting = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this meeting summary?")) return;
+    try {
+      await deleteMeeting(id);
+      setMeetings((prev) => prev.filter((m) => m.id !== id));
+      setToast("Meeting summary deleted successfully");
+      window.setTimeout(() => setToast(null), 3000);
+    } catch {
+      alert("Failed to delete meeting");
+    }
+  };
+
 
   // Fetch stat card data in parallel on mount.
   useEffect(() => {
@@ -830,7 +870,83 @@ export default function AdminPage() {
             </div>
           </div>
         </section>
+
+        <section className="admin-dashboard__panel" style={{ marginTop: "2rem" }}>
+          <div className="admin-dashboard__schedule-head">
+            <div className="admin-dashboard__section-copy">
+              <h2>Meeting Summaries</h2>
+              <p>AI-generated structured summaries from live recorded meetings</p>
+            </div>
+          </div>
+
+          <div className="meeting-feed">
+            {meetingsLoading && <p style={{ color: "#6b7c75" }}>Loading meeting summaries...</p>}
+            {!meetingsLoading && meetings.length === 0 ? (
+              <div className="meeting-feed__empty">
+                <FiMic size={32} color="#1ba389" />
+                <p>No meeting recordings yet. Tap the bottom-right microphone button to start recording.</p>
+              </div>
+            ) : (
+              meetings.map((m) => {
+                const isExpanded = expandedTranscriptId === m.id;
+                const formattedDate = new Date(m.date).toLocaleDateString("en-US", {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                });
+
+                return (
+                  <article key={m.id} className="meeting-feed__card">
+                    <div className="meeting-feed__card-header">
+                      <div>
+                        <h4>{m.title}</h4>
+                        <div className="meeting-feed__meta">
+                          <FiClock size={14} />
+                          <span>{formattedDate}</span>
+                        </div>
+                      </div>
+                      <div className="meeting-feed__card-actions">
+                        <button
+                          type="button"
+                          className="btn-delete"
+                          onClick={() => handleDeleteMeeting(m.id)}
+                          title="Delete meeting summary"
+                        >
+                          <FiTrash2 size={14} />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="meeting-feed__card-summary">
+                      <div style={{ whiteSpace: "pre-wrap" }}>{m.summary}</div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="meeting-feed__card-transcript-toggle"
+                      onClick={() => setExpandedTranscriptId(isExpanded ? null : m.id)}
+                    >
+                      <span>{isExpanded ? "Hide Full Transcript" : "View Full Transcript"}</span>
+                      {isExpanded ? <FiChevronUp size={14} /> : <FiChevronDown size={14} />}
+                    </button>
+
+                    {isExpanded && (
+                      <div className="meeting-feed__card-transcript">
+                        {m.transcription}
+                      </div>
+                    )}
+                  </article>
+                );
+              })
+            )}
+          </div>
+        </section>
       </main>
+
 
       {isScheduleModalOpen && (
         <div className="admin-dashboard__modal" role="dialog" aria-modal="true" aria-labelledby="schedule-modal-title">
@@ -988,7 +1104,10 @@ export default function AdminPage() {
           <span>{toast}</span>
         </div>
       )}
+
+      <MeetingRecorder onMeetingSaved={fetchMeetingsList} />
     </div>
+
   );
 }
 

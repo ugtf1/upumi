@@ -13,6 +13,7 @@ import { meRoutes } from './routes/me.js';
 import { adminRoutes } from './routes/admin.js';
 import { memberRoutes } from './routes/members.js';
 import { adminDatabaseRoutes, memberDatabaseRoutes } from './routes/database.js';
+import { meetingRoutes, memberMeetingRoutes } from './routes/meetings.js';
 
 // ADD THESE (these files already exist in your backend)
 import { analyticsRoutes } from './routes/analytics.js';
@@ -63,6 +64,8 @@ async function main() {
   await app.register(adminRoutes, { prefix: '/api/admin' });
   await app.register(adminDatabaseRoutes, { prefix: '/api/admin/database' });
   await app.register(memberDatabaseRoutes, { prefix: '/api/members/database' });
+  await app.register(meetingRoutes, { prefix: '/api/admin' });
+  await app.register(memberMeetingRoutes, { prefix: '/api/members' });
 
   //    Analytics endpoints expected by AnalyticsPage.tsx:
   //   GET /api/analytics/me?year=2026

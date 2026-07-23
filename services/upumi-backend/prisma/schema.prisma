@@ -213,3 +213,15 @@ model MonthlyDue {
 
   @@unique([memberRecordId, year, month])
 }
+
+model Meeting {
+  id            String   @id @default(cuid())
+  title         String
+  date          DateTime @default(now())
+  transcription String
+  summary       String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("meetings")
+}
