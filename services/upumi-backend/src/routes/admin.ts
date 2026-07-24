@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireRole } from '../services/auth.js';
 import { prisma } from '../services/prisma.js';
 import { importWorkbookCsv, toSheetCsvExportUrl } from '../services/workbookImport.js';
+import { normalizePhone, phoneLookupCandidates } from '../services/phone.js';
 
 const ImportSchema = z.object({
   csvText: z.string().min(1),
@@ -580,6 +581,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       status: z.string().optional(),
     }).parse(req.body ?? {});
 
+    // Normalize phone so it matches the format used at login
+    const normalizedPhone = Body.phone !== undefined ? normalizePhone(Body.phone) : undefined;
+
     const existing = await prisma.memberRecord.findUnique({
       where: { id },
       select: { id: true, userId: true },
@@ -604,7 +608,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
             ...(Body.fName !== undefined ? { firstName: Body.fName } : {}),
             ...(Body.lName !== undefined ? { lastName: Body.lName } : {}),
             ...(Body.email !== undefined ? { email: Body.email.toLowerCase().trim() } : {}),
-            ...(Body.phone !== undefined ? { phone: Body.phone } : {}),
+            ...(normalizedPhone !== undefined ? { phone: normalizedPhone } : {}),
             ...(Body.status !== undefined ? { status: Body.status } : {}),
             ...(Body.dateJoined !== undefined ? { joined: Body.dateJoined ?? null } : {}),
             ...(Body.voteRole !== undefined ? { voter: Body.voteRole } : {}),
@@ -631,7 +635,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
           ...(Body.fName !== undefined ? { fName: Body.fName } : {}),
           ...(Body.lName !== undefined ? { lName: Body.lName } : {}),
           ...(Body.email !== undefined ? { email: Body.email.toLowerCase().trim() } : {}),
-          ...(Body.phone !== undefined ? { phone: Body.phone } : {}),
+          ...(normalizedPhone !== undefined ? { phone: normalizedPhone } : {}),
           ...(Body.address !== undefined ? { address: Body.address } : {}),
           ...(Body.dateJoined !== undefined ? { dateJoined: parseDate(Body.dateJoined) } : {}),
           ...(Body.voteRole !== undefined ? { voteRole: Body.voteRole } : {}),
@@ -967,11 +971,15 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       role: z.enum(['ADMIN', 'MEMBER']).default('MEMBER'),
     }).parse(req.body);
 
-    // Check if user already exists by phone or email
+    // Normalize the phone number so it is stored in a consistent format
+    // that always matches what phoneLookupCandidates() generates at login.
+    const normalizedPhone = normalizePhone(Body.phone);
+
+    // Check if user already exists by phone (using all candidate formats) or email
     const existingUser = await prisma.user.findFirst({
       where: {
         OR: [
-          { phone: Body.phone },
+          { phone: { in: phoneLookupCandidates(normalizedPhone) } },
           { email: Body.email },
         ],
       },
@@ -985,12 +993,16 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
     const user = await prisma.user.create({
       data: {
-        phone: Body.phone,
+        phone: normalizedPhone,
         email: Body.email,
         fName: Body.fName,
         lName: Body.lName,
         role: Body.role,
         status: 'Active',
+        // Explicitly mark as needing password change so first login
+        // uses the temporary password (last name in block letters).
+        needsPasswordChange: true,
+        passwordHash: null,
       },
       select: {
         id: true,
@@ -1000,6 +1012,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         lName: true,
         role: true,
         status: true,
+        needsPasswordChange: true,
         createdAt: true,
       },
     });
