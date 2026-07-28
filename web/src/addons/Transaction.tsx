@@ -104,6 +104,7 @@ type ExpenseFormState = {
 };
 
 const TRANSACTION_TITLE_OPTIONS = [
+  "Dues",
   "Raffle",
   "Insurance",
   "Wrapper",
@@ -169,6 +170,10 @@ export default function TransactionPage() {
   const [expenseSaveError, setExpenseSaveError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const addMenuRef = useRef<HTMLDivElement | null>(null);
+
+  // Pagination for the income (transactions) table
+  const TX_PAGE_SIZE = 10;
+  const [txPage, setTxPage] = useState(1);
 
   const [openMenuTxId, setOpenMenuTxId] = useState<string | null>(null);
   const [openMenuExpId, setOpenMenuExpId] = useState<string | null>(null);
@@ -365,6 +370,17 @@ export default function TransactionPage() {
       return haystack.includes(query);
     });
   }, [search, transactionRows]);
+
+  // Reset to first page whenever the search query changes
+  useEffect(() => {
+    setTxPage(1);
+  }, [search]);
+
+  const txTotalPages = Math.max(1, Math.ceil(visibleRows.length / TX_PAGE_SIZE));
+  const paginatedTxRows = useMemo(() => {
+    const start = (txPage - 1) * TX_PAGE_SIZE;
+    return visibleRows.slice(start, start + TX_PAGE_SIZE);
+  }, [visibleRows, txPage, TX_PAGE_SIZE]);
 
   const filteredUserOptions = useMemo(() => {
     const query = userSearch.trim().toLowerCase();
@@ -965,7 +981,7 @@ export default function TransactionPage() {
                             {search.trim() ? "No transactions match your search." : "No transactions recorded yet."}
                           </td></tr>
                         ) : (
-                          visibleRows.map((row) => (
+                          paginatedTxRows.map((row) => (
                             <tr key={row.id}>
                               <td>{row.date}</td>
                               <td>{row.fullName}</td>
@@ -1041,6 +1057,33 @@ export default function TransactionPage() {
                   </div>
                 )}
               </div>
+
+              {/* Pagination controls */}
+              {!txLoading && txTotalPages > 1 && (
+                <div className="transaction-page__pagination">
+                  <button
+                    type="button"
+                    className="transaction-page__page-btn"
+                    onClick={() => setTxPage((p) => Math.max(1, p - 1))}
+                    disabled={txPage === 1}
+                    aria-label="Previous page"
+                  >
+                    ← Prev
+                  </button>
+                  <span className="transaction-page__page-info">
+                    Page {txPage} of {txTotalPages}
+                  </span>
+                  <button
+                    type="button"
+                    className="transaction-page__page-btn"
+                    onClick={() => setTxPage((p) => Math.min(txTotalPages, p + 1))}
+                    disabled={txPage === txTotalPages}
+                    aria-label="Next page"
+                  >
+                    Next →
+                  </button>
+                </div>
+              )}
             </>
           ) : (
             <>
