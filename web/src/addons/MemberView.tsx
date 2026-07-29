@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { IconType } from "react-icons";
 import {
@@ -208,17 +208,28 @@ export default function MemberViewPage() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [isDeletePaymentPromptOpen, setIsDeletePaymentPromptOpen] = useState(false);
   const [paymentToDelete, setPaymentToDelete] = useState<PaymentHistoryRow | null>(null);
+  const [isEditPaymentModalOpen, setIsEditPaymentModalOpen] = useState(false);
+  const [paymentToEdit, setPaymentToEdit] = useState<PaymentHistoryRow | null>(null);
+  const [editPaymentForm, setEditPaymentForm] = useState({ amount: "", month: "", year: "", paymentDate: "" });
+  const [editPaymentLoading, setEditPaymentLoading] = useState(false);
+  const [editPaymentError, setEditPaymentError] = useState<string | null>(null);
 
-  const menuRef = (node: HTMLDivElement | null) => {
-    if (!node) return;
-    const handler = (e: MouseEvent) => {
-      if (!node.contains(e.target as Node)) {
+  // Use a stable ref + useEffect for the action menu outside-click handler
+  const actionMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!openMenuId) return undefined;
+    function handler(e: MouseEvent) {
+      if (actionMenuRef.current && !actionMenuRef.current.contains(e.target as Node)) {
         setOpenMenuId(null);
       }
-    };
+    }
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  };
+  }, [openMenuId]);
+
+  // Keep menuRef as a callback for backwards compat (no-op, handled above)
+  const menuRef = (_node: HTMLDivElement | null) => undefined;
 
   // Fetch member detail + payment history from the database on mount.
   useEffect(() => {
@@ -490,6 +501,60 @@ export default function MemberViewPage() {
     setPaymentToDelete(payment);
     setOpenMenuId(null);
     setIsDeletePaymentPromptOpen(true);
+  }
+
+  function handleEditPaymentPrompt(payment: PaymentHistoryRow) {
+    setPaymentToEdit(payment);
+    setEditPaymentForm({
+      amount: String(payment.rawAmount),
+      month: String(payment.monthNum),
+      year: String(payment.year),
+      paymentDate: "",
+    });
+    setEditPaymentError(null);
+    setOpenMenuId(null);
+    setIsEditPaymentModalOpen(true);
+  }
+
+  async function handleSaveEditPayment() {
+    if (!paymentToEdit) return;
+    setEditPaymentError(null);
+
+    const numericAmount = Number(editPaymentForm.amount);
+    if (Number.isNaN(numericAmount) || numericAmount < 0) {
+      setEditPaymentError("Amount must be a valid number");
+      return;
+    }
+
+    setEditPaymentLoading(true);
+    try {
+      await apiPatch(`/admin/members/${memberId}/monthly-dues/${paymentToEdit.id}`, {
+        duesPaid: numericAmount,
+      });
+
+      // Update local state immediately
+      setPaymentHistory((current) =>
+        current.map((p) =>
+          p.id === paymentToEdit.id
+            ? {
+                ...p,
+                rawAmount: numericAmount,
+                amountPaid: `$${numericAmount.toLocaleString()}`,
+                status: numericAmount > 0 ? "Paid" : "Unpaid",
+              }
+            : p
+        )
+      );
+
+      setIsEditPaymentModalOpen(false);
+      setPaymentToEdit(null);
+      setToast("Payment updated successfully");
+      window.setTimeout(() => setToast(null), 3000);
+    } catch (error) {
+      setEditPaymentError(error instanceof Error ? error.message : "Failed to update payment");
+    } finally {
+      setEditPaymentLoading(false);
+    }
   }
 
   async function handleConfirmDeletePayment() {
@@ -797,7 +862,10 @@ export default function MemberViewPage() {
                           </td>
                           <td data-label="Payment Date">{payment.paymentDate}</td>
                           <td data-label="Action">
-                            <div className="member-page__action-wrap" ref={openMenuId === payment.id ? menuRef : null}>
+                            <div
+                              className="member-page__action-wrap"
+                              ref={openMenuId === payment.id ? actionMenuRef : null}
+                            >
                               <button
                                 type="button"
                                 className={[
@@ -813,7 +881,16 @@ export default function MemberViewPage() {
                               </button>
 
                               {openMenuId === payment.id && (
-                                <div className="member-page__action-menu" role="menu">
+                                <div className="member-page__action-menu" role="menu" style={{ right: 0, left: "auto" }}>
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    className="member-page__action-item"
+                                    onClick={() => handleEditPaymentPrompt(payment)}
+                                  >
+                                    <FiEdit2 size={15} />
+                                    <span>Edit</span>
+                                  </button>
                                   <button
                                     type="button"
                                     role="menuitem"
@@ -947,6 +1024,99 @@ export default function MemberViewPage() {
                 }
               >
                 {addTransactionLoading ? "Saving..." : "Save Transaction"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isEditPaymentModalOpen && paymentToEdit && (
+        <div className="admin-dashboard__modal" role="dialog" aria-modal="true" aria-labelledby="edit-payment-modal-title">
+          <div className="admin-dashboard__modal-backdrop" onClick={() => setIsEditPaymentModalOpen(false)} />
+
+          <div className="admin-dashboard__modal-panel transaction-page__modal-panel">
+            <h2 id="edit-payment-modal-title" className="admin-dashboard__modal-title">
+              Edit Payment — {paymentToEdit.month}
+            </h2>
+
+            {editPaymentError && (
+              <div className="admin-dashboard__modal-error">{editPaymentError}</div>
+            )}
+
+            <div className="transaction-page__modal-grid">
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="edit-payment-month" className="admin-dashboard__modal-label">
+                  Month
+                </label>
+                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input member-view-page__modal-select-wrap">
+                  <select
+                    id="edit-payment-month"
+                    value={editPaymentForm.month}
+                    onChange={(e) => setEditPaymentForm((f) => ({ ...f, month: e.target.value }))}
+                    aria-label="Payment month"
+                    className={editPaymentForm.month ? "has-value" : ""}
+                  >
+                    <option value="">Select month</option>
+                    {MONTH_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="edit-payment-year" className="admin-dashboard__modal-label">
+                  Year
+                </label>
+                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input member-view-page__modal-select-wrap">
+                  <select
+                    id="edit-payment-year"
+                    value={editPaymentForm.year}
+                    onChange={(e) => setEditPaymentForm((f) => ({ ...f, year: e.target.value }))}
+                    aria-label="Payment year"
+                    className="has-value"
+                  >
+                    {YEAR_OPTIONS.map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="edit-payment-amount" className="admin-dashboard__modal-label">
+                  Amount Paid *
+                </label>
+                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                  <input
+                    id="edit-payment-amount"
+                    type="number"
+                    inputMode="decimal"
+                    value={editPaymentForm.amount}
+                    onChange={(e) => setEditPaymentForm((f) => ({ ...f, amount: e.target.value }))}
+                    placeholder="0"
+                    aria-label="Amount paid"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="admin-dashboard__modal-actions">
+              <button
+                type="button"
+                className="admin-dashboard__modal-button admin-dashboard__modal-button--secondary"
+                onClick={() => setIsEditPaymentModalOpen(false)}
+                disabled={editPaymentLoading}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="admin-dashboard__modal-button admin-dashboard__modal-button--primary"
+                onClick={handleSaveEditPayment}
+                disabled={!editPaymentForm.amount.trim() || editPaymentLoading}
+              >
+                {editPaymentLoading ? "Saving..." : "Save Changes"}
               </button>
             </div>
           </div>

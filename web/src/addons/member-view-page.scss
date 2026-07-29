@@ -248,7 +248,7 @@
 
 @media only screen and (max-width: 900px) {
   .member-view-page__summary-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -314,6 +314,15 @@
     color: var(--admin-subtle);
     font-size: 0.82rem;
     font-weight: 700;
+  }
+
+  /* Action column — hide label and right-align the button */
+  .member-view-page__table-wrap td[data-label="Action"] {
+    justify-content: flex-end;
+  }
+
+  .member-view-page__table-wrap td[data-label="Action"]::before {
+    display: none;
   }
 
   .member-view-page__modal-panel,

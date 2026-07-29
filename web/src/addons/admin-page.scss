@@ -747,6 +747,29 @@
   gap: 5px;
 }
 
+.admin-dashboard__modal-title {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #202823;
+  grid-column: 1 / -1;
+}
+
+.admin-dashboard__modal-title--danger {
+  color: #c53030;
+}
+
+.admin-dashboard__modal-section-copy {
+  grid-column: 1 / -1;
+  color: var(--admin-subtle);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.admin-dashboard__modal-section-copy p {
+  margin: 0 0 6px;
+}
+
 .admin-dashboard__modal-label {
   color: #202823;
   font-size: 0.96rem;
@@ -969,11 +992,19 @@
 @media only screen and (max-width: 1080px) {
   .admin-dashboard {
     grid-template-columns: 1fr;
+    gap: 16px;
   }
 
   .admin-dashboard__sidebar {
     position: static;
     min-height: unset;
+    border-radius: 20px;
+    padding: 16px;
+    gap: 16px;
+  }
+
+  .admin-dashboard__brand {
+    justify-content: center;
   }
 
   .admin-dashboard__nav {
@@ -983,10 +1014,40 @@
 
   .admin-dashboard__nav-item {
     justify-content: center;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 8px;
+    font-size: 0.75rem;
+    text-align: center;
+  }
+
+  .admin-dashboard__nav-item svg {
+    flex: 0 0 auto;
   }
 
   .admin-dashboard__profile {
     margin-top: 0;
+    flex-direction: row;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .admin-dashboard__profile-info {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .admin-dashboard__profile-actions {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    flex: 0 0 auto;
+  }
+
+  .admin-dashboard__profile-actions .admin-dashboard__nav-item {
+    min-width: 80px;
+    flex-direction: row;
+    gap: 6px;
   }
 }
 
@@ -1039,12 +1100,33 @@
 }
 
 @media only screen and (max-width: 640px) {
+  .admin-dashboard {
+    padding: 10px;
+  }
+
   .admin-dashboard__nav {
     grid-template-columns: 1fr 1fr;
   }
 
   .admin-dashboard__brand {
     font-size: 1rem;
+  }
+
+  .admin-dashboard__hero {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-dashboard__hero-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .admin-dashboard__search {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: 1 1 100%;
   }
 
   .admin-dashboard__panel-head h3,
@@ -1155,6 +1237,21 @@
   }
 
   .admin-dashboard__modal-button {
+    width: 100%;
+  }
+}
+
+@media only screen and (max-width: 480px) {
+  .admin-dashboard__nav {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-dashboard__profile-actions {
+    flex-direction: column;
+  }
+
+  .admin-dashboard__profile-actions .admin-dashboard__nav-item {
+    min-width: 0;
     width: 100%;
   }
 }

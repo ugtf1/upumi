@@ -532,6 +532,29 @@
 }
 
 @media only screen and (max-width: 640px) {
+  .transaction-page .admin-dashboard__hero {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+
+  .transaction-page .admin-dashboard__hero-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .transaction-page__search {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: 1 1 100%;
+  }
+
+  .transaction-page__add-wrap {
+    width: 100%;
+  }
+
   .transaction-page__add-button {
     width: 100%;
   }
@@ -560,6 +583,65 @@
   .transaction-page__modal-panel .admin-dashboard__modal-input {
     min-height: 56px;
     border-radius: 12px;
+  }
+
+  /* Mobile card-style for transaction/expense tables */
+  .transaction-page__table-shell .admin-dashboard__table-wrap table,
+  .transaction-page__table-shell .admin-dashboard__table-wrap thead,
+  .transaction-page__table-shell .admin-dashboard__table-wrap tbody,
+  .transaction-page__table-shell .admin-dashboard__table-wrap tr,
+  .transaction-page__table-shell .admin-dashboard__table-wrap th,
+  .transaction-page__table-shell .admin-dashboard__table-wrap td {
+    display: block;
+  }
+
+  .transaction-page__table-shell .admin-dashboard__table-wrap thead {
+    display: none;
+  }
+
+  .transaction-page__table-shell .admin-dashboard__table-wrap table {
+    min-width: 0;
+  }
+
+  .transaction-page__table-shell .admin-dashboard__table-wrap tbody {
+    display: grid;
+    gap: 14px;
+    padding: 8px;
+  }
+
+  .transaction-page__table-shell .admin-dashboard__table-wrap tr {
+    border: 1px solid #edf1ee;
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 4px 14px rgba(18, 38, 28, 0.06);
+    overflow: hidden;
+  }
+
+  .transaction-page__table-shell .admin-dashboard__table-wrap td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 16px;
+    white-space: normal;
+    border-bottom: 1px solid #f3f5f1;
+  }
+
+  .transaction-page__table-shell .admin-dashboard__table-wrap td:last-child {
+    border-bottom: none;
+  }
+
+  .transaction-page__table-shell .admin-dashboard__table-wrap td::before {
+    content: attr(data-label);
+    color: var(--admin-subtle);
+    font-size: 0.82rem;
+    font-weight: 700;
+    flex: 0 0 auto;
+    min-width: 90px;
+  }
+
+  .transaction-page__table-shell .admin-dashboard__table-wrap td:has(.member-page__action-wrap) {
+    justify-content: flex-end;
   }
 }
 

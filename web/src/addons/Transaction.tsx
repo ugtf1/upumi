@@ -182,17 +182,25 @@ export default function TransactionPage() {
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
 
-  const menuRef = (node: HTMLDivElement | null) => {
-    if (!node) return;
-    const handler = (e: MouseEvent) => {
-      if (!node.contains(e.target as Node)) {
+  const txMenuRef = useRef<HTMLDivElement | null>(null);
+  const expMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!openMenuTxId && !openMenuExpId) return undefined;
+    function handler(e: MouseEvent) {
+      if (openMenuTxId && txMenuRef.current && !txMenuRef.current.contains(e.target as Node)) {
         setOpenMenuTxId(null);
+      }
+      if (openMenuExpId && expMenuRef.current && !expMenuRef.current.contains(e.target as Node)) {
         setOpenMenuExpId(null);
       }
-    };
+    }
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  };
+  }, [openMenuTxId, openMenuExpId]);
+
+  // Kept as no-op for any legacy call sites (none active)
+  const menuRef = (_node: HTMLDivElement | null) => undefined;
 
   useEffect(() => {
     if (!isAddTransactionModalOpen) return undefined;
@@ -983,9 +991,9 @@ export default function TransactionPage() {
                         ) : (
                           paginatedTxRows.map((row) => (
                             <tr key={row.id}>
-                              <td>{row.date}</td>
-                              <td>{row.fullName}</td>
-                              <td>
+                              <td data-label="Date">{row.date}</td>
+                              <td data-label="Full Name">{row.fullName}</td>
+                              <td data-label="Title">
                                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                                   <span>{row.title}</span>
                                   {row.isDue && (
@@ -1005,10 +1013,10 @@ export default function TransactionPage() {
                                   )}
                                 </div>
                               </td>
-                              <td>{row.amount}</td>
-                              <td><span className="transaction-page__status">{row.status}</span></td>
-                              <td>
-                                <div className="member-page__action-wrap" ref={openMenuTxId === row.id ? menuRef : null}>
+                              <td data-label="Amount">{row.amount}</td>
+                              <td data-label="Status"><span className="transaction-page__status">{row.status}</span></td>
+                              <td data-label="Action">
+                                <div className="member-page__action-wrap" ref={openMenuTxId === row.id ? txMenuRef : null}>
                                   <button
                                     type="button"
                                     className={[
@@ -1117,12 +1125,12 @@ export default function TransactionPage() {
                         ) : (
                           visibleExpenseRows.map((row) => (
                             <tr key={row.id}>
-                              <td>{row.date}</td>
-                              <td>{row.reason}</td>
-                              <td>{row.title}</td>
-                              <td>{row.amount}</td>
-                              <td>
-                                <div className="member-page__action-wrap" ref={openMenuExpId === row.id ? menuRef : null}>
+                              <td data-label="Date">{row.date}</td>
+                              <td data-label="Reason">{row.reason}</td>
+                              <td data-label="Title">{row.title}</td>
+                              <td data-label="Amount">{row.amount}</td>
+                              <td data-label="Action">
+                                <div className="member-page__action-wrap" ref={openMenuExpId === row.id ? expMenuRef : null}>
                                   <button
                                     type="button"
                                     className={[
