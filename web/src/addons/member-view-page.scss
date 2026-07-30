@@ -297,7 +297,7 @@
     border-radius: 18px;
     background: #fff;
     box-shadow: 0 14px 24px rgba(18, 38, 28, 0.06);
-    overflow: hidden;
+    overflow: visible;
   }
 
   .member-view-page__table-wrap td {
@@ -340,3 +340,7 @@
     min-height: 56px;
   }
 }
+@media only screen and (max-width: 640px) {
+  .member-view-page__table-wrap { overflow: visible !important; }
+}
+

@@ -503,7 +503,7 @@
   .member-account__table-wrap tr {
     border: 1px solid #e7e2de;
     border-radius: 16px;
-    overflow: hidden;
+    overflow: visible;
     background: #fff;
   }
 
@@ -522,3 +522,8 @@
     font-weight: 600;
   }
 }
+
+@media only screen and (max-width: 640px) {
+  .member-account__table-wrap { overflow: visible !important; }
+}
+

@@ -1178,7 +1178,7 @@
     border: 1px solid #e5ebe6;
     border-radius: 18px;
     background: #fff;
-    overflow: hidden;
+    overflow: visible;
   }
 
   .admin-dashboard__schedule-table-wrap td {
@@ -1255,3 +1255,8 @@
     width: 100%;
   }
 }
+
+@media only screen and (max-width: 640px) {
+  .admin-dashboard__table-wrap, .admin-dashboard__schedule-table-wrap { overflow: visible !important; }
+}
+

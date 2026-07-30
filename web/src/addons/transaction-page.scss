@@ -614,7 +614,7 @@
     border-radius: 18px;
     background: #fff;
     box-shadow: 0 4px 14px rgba(18, 38, 28, 0.06);
-    overflow: hidden;
+    overflow: visible;
   }
 
   .transaction-page__table-shell .admin-dashboard__table-wrap td {
@@ -686,3 +686,8 @@
   font-weight: 600;
   color: var(--admin-subtle);
 }
+
+@media only screen and (max-width: 640px) {
+  .transaction-page__table-shell .admin-dashboard__table-wrap { overflow: visible !important; }
+}
+
