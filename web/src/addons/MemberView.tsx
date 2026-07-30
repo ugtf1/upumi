@@ -228,9 +228,6 @@ export default function MemberViewPage() {
     return () => document.removeEventListener("mousedown", handler);
   }, [openMenuId]);
 
-  // Keep menuRef as a callback for backwards compat (no-op, handled above)
-  const menuRef = (_node: HTMLDivElement | null) => undefined;
-
   // Fetch member detail + payment history from the database on mount.
   useEffect(() => {
     let active = true;

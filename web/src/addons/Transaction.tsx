@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { IconType } from "react-icons";
@@ -198,9 +199,6 @@ export default function TransactionPage() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [openMenuTxId, openMenuExpId]);
-
-  // Kept as no-op for any legacy call sites (none active)
-  const menuRef = (_node: HTMLDivElement | null) => undefined;
 
   useEffect(() => {
     if (!isAddTransactionModalOpen) return undefined;
