@@ -36,6 +36,7 @@ import {
 
 import { apiGet, apiPatch, apiPost, clearToken, getMeetings, deleteMeeting, Meeting } from "./api";
 import MeetingRecorder from "./MeetingRecorder";
+import ReportFilterModal from "./ReportFilterModal";
 import "./admin-page.scss";
 import "./meeting-recorder.scss";
 
@@ -193,6 +194,7 @@ export default function AdminPage() {
   const [activeMembers, setActiveMembers] = useState<number | null>(null);
   const [totalRevenue, setTotalRevenue] = useState<number | null>(null);
   const [pendingPayment, setPendingPayment] = useState<number | null>(null);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [year, setYear] = useState(2026);
   const [search, setSearch] = useState("");
   const [hostingScheduleRows, setHostingScheduleRows] = useState<HostingScheduleApiRow[]>([]);
@@ -664,7 +666,7 @@ export default function AdminPage() {
               />
             </label>
 
-            <button type="button" className="admin-dashboard__icon-button" aria-label="Filter dashboard">
+            <button type="button" className="admin-dashboard__icon-button" aria-label="Filter and generate reports" onClick={() => setIsReportModalOpen(true)} title="Generate Reports">
               <FiFilter size={18} />
             </button>
             <button type="button" className="admin-dashboard__icon-button" aria-label="Notifications">
@@ -1108,8 +1110,8 @@ export default function AdminPage() {
       )}
 
       <MeetingRecorder onMeetingSaved={fetchMeetingsList} />
+      <ReportFilterModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} />
     </div>
-
   );
 }
 

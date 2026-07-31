@@ -34,6 +34,7 @@ import {
 } from "recharts";
 
 import { clearToken, getLedgerSummary, getAnalyticsSummary, getMonthlyReport, getHostingSchedule, getMemberProfile, getMemberSafeMemberList, getAllTransactionsReadOnly, getAllDuesReadOnly, getMemberMeetings, MemberMeeting } from "./api";
+import ReportFilterModal from "./ReportFilterModal";
 import memberImage from "./upu-logo.svg";
 import "./admin-page.scss";
 import "./member-dashboard.scss";
@@ -161,6 +162,7 @@ type MemberProfileData = {
   const currentMonth = new Date().getMonth() + 1;
 
   const [meetings, setMeetings] = useState<MemberMeeting[]>([]);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   // Fetch data on mount
   useEffect(() => {
@@ -546,7 +548,7 @@ type MemberProfileData = {
               <FiSearch size={18} />
             </label>
 
-            <button type="button" className="admin-dashboard__icon-button" aria-label="Filter dashboard">
+            <button type="button" className="admin-dashboard__icon-button" aria-label="Filter and generate reports" onClick={() => setIsReportModalOpen(true)} title="Generate Reports">
               <FiFilter size={18} />
             </button>
             <button type="button" className="admin-dashboard__icon-button" aria-label="Notifications">
@@ -829,6 +831,7 @@ type MemberProfileData = {
         </section>
       </main>
 
+      <ReportFilterModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} />
     </div>
   );
 }
