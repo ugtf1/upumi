@@ -696,6 +696,16 @@
   color: var(--admin-danger);
 }
 
+.admin-dashboard__status-pill.is-info {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.admin-dashboard__status-pill.is-neutral {
+  background: #f1f5f9;
+  color: #475569;
+}
+
 .admin-dashboard__empty-state {
   text-align: center;
   color: var(--admin-subtle);

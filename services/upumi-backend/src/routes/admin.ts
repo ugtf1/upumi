@@ -855,6 +855,59 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     return { ok: true };
   });
 
+  // Edit (PATCH) a specific monthly due payment row.
+  app.patch('/members/:id/monthly-dues/:dueId', { preHandler: requireRole('ADMIN') }, async (req: any, reply) => {
+    const dueId = String(req.params?.dueId ?? '');
+
+    const Body = z.object({
+      duesPaid: z.number().min(0).optional(),
+      month: z.number().int().min(1).max(12).optional(),
+      year: z.number().int().min(2000).max(2100).optional(),
+    }).parse(req.body ?? {});
+
+    const existing = await (prisma as any).monthlyDue.findUnique({ where: { id: dueId } });
+    if (!existing) return reply.code(404).send({ message: 'Payment record not found' });
+
+    const updated = await (prisma as any).monthlyDue.update({
+      where: { id: dueId },
+      data: {
+        ...(Body.duesPaid !== undefined ? { duesPaid: Body.duesPaid as any } : {}),
+        ...(Body.month !== undefined ? { month: Body.month } : {}),
+        ...(Body.year !== undefined ? { year: Body.year } : {}),
+      },
+    });
+
+    // Sync totalPaid / outstanding on the linked User
+    const memberRecordId = existing.memberRecordId;
+    if (memberRecordId) {
+      try {
+        const record = await prisma.memberRecord.findUnique({
+          where: { id: memberRecordId },
+          select: { userId: true, monthlyDues: { select: { duesPaid: true } } },
+        });
+        if (record?.userId) {
+          const totalPaid = record.monthlyDues.reduce((sum, d) => sum + Number(d.duesPaid ?? 0), 0);
+          const outstanding = Math.max(0, (record.monthlyDues.length * 20) - totalPaid);
+          await prisma.user.update({
+            where: { id: record.userId },
+            data: { totalPaid, outstanding },
+          }).catch(() => null);
+        }
+      } catch {
+        // Non-fatal sync error
+      }
+    }
+
+    return {
+      id: updated.id,
+      year: updated.year,
+      month: updated.month,
+      duesPaid: decimalToNumber(updated.duesPaid) ?? 0,
+      present: updated.present ?? null,
+      createdAt: updated.createdAt,
+    };
+  });
+
   // Record or update attendance for a member for a given year/month.
   // Attendance is stored as a single row per month (@@unique([year, month]))
   // with all present member IDs comma-separated in `usersIn`.

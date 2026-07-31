@@ -20,7 +20,7 @@ import {
 } from "react-icons/fi";
 
 import { apiGet, apiPatch, apiPost, apiDelete, clearToken } from "./api";
-import { MEMBER_STATUS_OPTIONS, type MemberDetailRecord, type MemberStatus, type PaymentHistoryRow } from "./member-data";
+import { MEMBER_STATUS_OPTIONS, type MemberDetailRecord, type MemberStatus } from "./member-data";
 import "./admin-page.scss";
 import "./member-page.scss";
 import "./member-view-page.scss";
@@ -43,6 +43,37 @@ type AddTransactionFormState = {
   description: string;
   amount: string;
   paymentDate: string;
+};
+
+// A unified row merging MonthlyDue records and Transaction records
+type UnifiedPaymentRow = {
+  id: string;
+  // Display label — "January 2026" for dues, formatted date for transactions
+  period: string;
+  title: string;
+  amountPaid: string;
+  status: "Paid" | "Unpaid";
+  paymentDate: string;
+  rawAmount: number;
+  rawDate: string;
+  // Discriminator
+  source: "due" | "transaction";
+  // Due-specific
+  year?: number;
+  monthNum?: number;
+  // Transaction-specific
+  description?: string;
+};
+
+type ApiTransactionRow = {
+  id: string;
+  userId?: string | null;
+  fullName: string;
+  title: string;
+  description?: string | null;
+  amount: string | number;
+  date: string;
+  createdAt?: string;
 };
 
 type RecordAttendanceFormState = {
@@ -118,6 +149,7 @@ type ApiMonthlyDue = {
   duesPaid: number;
   present?: boolean | null;
   createdAt?: string;
+  updatedAt?: string;
 };
 
 type ApiMemberDetail = {
@@ -141,24 +173,60 @@ type ApiMemberDetail = {
   user?: { id: string } | null;
 };
 
-function mapPaymentHistory(rows: ApiMonthlyDue[] = []): PaymentHistoryRow[] {
+function mapDueRows(rows: ApiMonthlyDue[] = []): UnifiedPaymentRow[] {
+  return rows.map((row) => {
+    const monthName = MONTH_NAMES[Math.max(1, Math.min(12, row.month)) - 1] ?? String(row.month);
+    const amount = Number(row.duesPaid ?? 0);
+    const dateStr = row.createdAt ?? row.updatedAt ?? "";
+    return {
+      id: row.id,
+      period: `${monthName} ${row.year}`,
+      title: "Dues",
+      amountPaid: formatCurrencyAmount(amount),
+      status: amount > 0 ? "Paid" : "Unpaid",
+      paymentDate: dateStr ? formatDateDisplay(dateStr) : "-",
+      rawAmount: amount,
+      rawDate: dateStr,
+      source: "due" as const,
+      year: row.year,
+      monthNum: row.month,
+    };
+  });
+}
+
+function mapTransactionRows(rows: ApiTransactionRow[] = [], memberUserId: string | null): UnifiedPaymentRow[] {
   return rows
-    .slice()
-    .sort((a, b) => b.year !== a.year ? b.year - a.year : b.month - a.month)
+    .filter((row) => row.userId === memberUserId && row.title === "Dues")
     .map((row) => {
-      const monthName = MONTH_NAMES[Math.max(1, Math.min(12, row.month)) - 1] ?? String(row.month);
-      const amount = Number(row.duesPaid ?? 0);
+      const amount = Number(row.amount ?? 0);
+      const dateStr = row.date ?? row.createdAt ?? "";
       return {
         id: row.id,
-        month: `${monthName} ${row.year}`,
+        period: formatDateDisplay(dateStr),
+        title: row.title,
         amountPaid: formatCurrencyAmount(amount),
-        status: amount > 0 ? "Paid" : "Unpaid",
-        paymentDate: row.createdAt ? formatDateDisplay(row.createdAt) : "-",
+        status: amount > 0 ? "Paid" : ("Unpaid" as "Paid" | "Unpaid"),
+        paymentDate: formatDateDisplay(dateStr),
         rawAmount: amount,
-        year: row.year,
-        monthNum: row.month,
+        rawDate: dateStr,
+        source: "transaction" as const,
+        description: row.description ?? undefined,
       };
     });
+}
+
+function mergeAndSortPayments(
+  dueRows: ApiMonthlyDue[],
+  txRows: ApiTransactionRow[],
+  memberUserId: string | null,
+): UnifiedPaymentRow[] {
+  const dues = mapDueRows(dueRows);
+  const txs = mapTransactionRows(txRows, memberUserId);
+  return [...dues, ...txs].sort((a, b) => {
+    const da = new Date(a.rawDate || 0).getTime();
+    const db = new Date(b.rawDate || 0).getTime();
+    return db - da;
+  });
 }
 
 const EMPTY_PROFILE: MemberDetailRecord = {
@@ -168,13 +236,20 @@ const EMPTY_PROFILE: MemberDetailRecord = {
   status: "Inactive", paymentHistory: [],
 };
 
+// Separate state for all Transaction rows (fetched org-wide and filtered by userId in UI)
+type AllTransactionsState = ApiTransactionRow[];
+
 export default function MemberViewPage() {
   const navigate = useNavigate();
   const { memberId = "" } = useParams();
   const [search, setSearch] = useState("");
   const [memberProfile, setMemberProfile] = useState<MemberDetailRecord>(EMPTY_PROFILE);
-  const [paymentHistory, setPaymentHistory] = useState<PaymentHistoryRow[]>([]);
+  // Raw data from API
+  const [rawDues, setRawDues] = useState<ApiMonthlyDue[]>([]);
+  const [rawTransactions, setRawTransactions] = useState<AllTransactionsState>([]);
+  const [unifiedPayments, setUnifiedPayments] = useState<UnifiedPaymentRow[]>([]);
   const [memberLoading, setMemberLoading] = useState(true);
+  const [txLoading, setTxLoading] = useState(false);
   const [memberError, setMemberError] = useState<string | null>(null);
   const [isEditMemberModalOpen, setIsEditMemberModalOpen] = useState(false);
   const [isAddTransactionModalOpen, setIsAddTransactionModalOpen] = useState(false);
@@ -207,10 +282,17 @@ export default function MemberViewPage() {
 
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [isDeletePaymentPromptOpen, setIsDeletePaymentPromptOpen] = useState(false);
-  const [paymentToDelete, setPaymentToDelete] = useState<PaymentHistoryRow | null>(null);
+  const [paymentToDelete, setPaymentToDelete] = useState<UnifiedPaymentRow | null>(null);
   const [isEditPaymentModalOpen, setIsEditPaymentModalOpen] = useState(false);
-  const [paymentToEdit, setPaymentToEdit] = useState<PaymentHistoryRow | null>(null);
-  const [editPaymentForm, setEditPaymentForm] = useState({ amount: "", month: "", year: "", paymentDate: "" });
+  const [paymentToEdit, setPaymentToEdit] = useState<UnifiedPaymentRow | null>(null);
+  const [editPaymentForm, setEditPaymentForm] = useState({
+    amount: "",
+    month: "",
+    year: "",
+    paymentDate: "",
+    title: "",
+    description: "",
+  });
   const [editPaymentLoading, setEditPaymentLoading] = useState(false);
   const [editPaymentError, setEditPaymentError] = useState<string | null>(null);
 
@@ -228,7 +310,7 @@ export default function MemberViewPage() {
     return () => document.removeEventListener("mousedown", handler);
   }, [openMenuId]);
 
-  // Fetch member detail + payment history from the database on mount.
+  // Fetch member detail + both dues and transactions in parallel on mount.
   useEffect(() => {
     let active = true;
     if (!memberId) {
@@ -238,16 +320,21 @@ export default function MemberViewPage() {
     }
 
     setMemberLoading(true);
+    setTxLoading(true);
     setMemberError(null);
 
-    apiGet<ApiMemberDetail>(`/admin/members/${memberId}`)
+    let resolvedUserId: string | null = null;
+    let resolvedDues: ApiMonthlyDue[] = [];
+
+    const memberPromise = apiGet<ApiMemberDetail>(`/admin/members/${memberId}`)
       .then((row) => {
         if (!active) return;
         const firstName = row.firstName?.trim() ?? "";
         const lastName = row.lastName?.trim() ?? "";
-        // Capture the linked User ID so we can attach it to transactions
-        const linkedUserId = row.user?.id ?? row.userId ?? null;
-        setMemberUserId(linkedUserId);
+        resolvedUserId = row.user?.id ?? row.userId ?? null;
+        resolvedDues = row.monthlyDues ?? [];
+        setMemberUserId(resolvedUserId);
+        setRawDues(resolvedDues);
         const profile: MemberDetailRecord = {
           memberId: row.displayMemberId || row.memberKey || row.id,
           name: [firstName, lastName].filter(Boolean).join(" ") || row.email || "Unnamed member",
@@ -261,10 +348,9 @@ export default function MemberViewPage() {
           totalPaid: formatCurrencyAmount(row.totalPaid),
           outstanding: formatCurrencyAmount(row.outstanding),
           status: String(row.status ?? "").trim().toLowerCase() === "active" ? "Active" : "Inactive",
-          paymentHistory: mapPaymentHistory(row.monthlyDues),
+          paymentHistory: [],
         };
         setMemberProfile(profile);
-        setPaymentHistory(profile.paymentHistory);
       })
       .catch((error: Error) => {
         if (!active) return;
@@ -274,8 +360,31 @@ export default function MemberViewPage() {
         if (active) setMemberLoading(false);
       });
 
+    const txPromise = apiGet<ApiTransactionRow[]>("/admin/database/transactions")
+      .then((rows) => {
+        if (!active) return;
+        setRawTransactions(rows);
+      })
+      .catch(() => {
+        if (active) setRawTransactions([]);
+      })
+      .finally(() => {
+        if (active) setTxLoading(false);
+      });
+
+    // Once both resolve, build the merged list
+    Promise.all([memberPromise, txPromise]).then(() => {
+      if (!active) return;
+      setUnifiedPayments(mergeAndSortPayments(resolvedDues, [], resolvedUserId));
+    });
+
     return () => { active = false; };
   }, [memberId]);
+
+  // Re-merge whenever raw data or userId changes
+  useEffect(() => {
+    setUnifiedPayments(mergeAndSortPayments(rawDues, rawTransactions, memberUserId));
+  }, [rawDues, rawTransactions, memberUserId]);
 
   useEffect(() => {
     if (!isEditMemberModalOpen && !isAddTransactionModalOpen) return undefined;
@@ -494,19 +603,21 @@ export default function MemberViewPage() {
     setAddTransactionError(null);
   }
 
-  function handleDeletePaymentPrompt(payment: PaymentHistoryRow) {
+  function handleDeletePaymentPrompt(payment: UnifiedPaymentRow) {
     setPaymentToDelete(payment);
     setOpenMenuId(null);
     setIsDeletePaymentPromptOpen(true);
   }
 
-  function handleEditPaymentPrompt(payment: PaymentHistoryRow) {
+  function handleEditPaymentPrompt(payment: UnifiedPaymentRow) {
     setPaymentToEdit(payment);
     setEditPaymentForm({
       amount: String(payment.rawAmount),
-      month: String(payment.monthNum),
-      year: String(payment.year),
-      paymentDate: "",
+      month: String(payment.monthNum ?? ""),
+      year: String(payment.year ?? ""),
+      paymentDate: payment.source === "transaction" ? (payment.rawDate ? payment.rawDate.slice(0, 10) : "") : "",
+      title: payment.title,
+      description: payment.description ?? "",
     });
     setEditPaymentError(null);
     setOpenMenuId(null);
@@ -525,23 +636,47 @@ export default function MemberViewPage() {
 
     setEditPaymentLoading(true);
     try {
-      await apiPatch(`/admin/members/${memberId}/monthly-dues/${paymentToEdit.id}`, {
-        duesPaid: numericAmount,
-      });
-
-      // Update local state immediately
-      setPaymentHistory((current) =>
-        current.map((p) =>
-          p.id === paymentToEdit.id
-            ? {
-                ...p,
-                rawAmount: numericAmount,
-                amountPaid: `$${numericAmount.toLocaleString()}`,
-                status: numericAmount > 0 ? "Paid" : "Unpaid",
-              }
-            : p
-        )
-      );
+      if (paymentToEdit.source === "due") {
+        // Edit a MonthlyDue record
+        await apiPatch(`/admin/members/${memberId}/monthly-dues/${paymentToEdit.id}`, {
+          duesPaid: numericAmount,
+          ...(editPaymentForm.month ? { month: Number(editPaymentForm.month) } : {}),
+          ...(editPaymentForm.year ? { year: Number(editPaymentForm.year) } : {}),
+        });
+        setRawDues((current) =>
+          current.map((d) =>
+            d.id === paymentToEdit.id
+              ? {
+                  ...d,
+                  duesPaid: numericAmount,
+                  ...(editPaymentForm.month ? { month: Number(editPaymentForm.month) } : {}),
+                  ...(editPaymentForm.year ? { year: Number(editPaymentForm.year) } : {}),
+                }
+              : d
+          )
+        );
+      } else {
+        // Edit a Transaction record
+        await apiPatch(`/admin/database/transactions/${paymentToEdit.id}`, {
+          amount: numericAmount,
+          ...(editPaymentForm.paymentDate ? { date: new Date(editPaymentForm.paymentDate).toISOString() } : {}),
+          ...(editPaymentForm.title ? { title: editPaymentForm.title } : {}),
+          ...(editPaymentForm.description !== undefined ? { description: editPaymentForm.description || null } : {}),
+        });
+        setRawTransactions((current) =>
+          current.map((t) =>
+            t.id === paymentToEdit.id
+              ? {
+                  ...t,
+                  amount: numericAmount,
+                  ...(editPaymentForm.paymentDate ? { date: new Date(editPaymentForm.paymentDate).toISOString() } : {}),
+                  ...(editPaymentForm.title ? { title: editPaymentForm.title } : {}),
+                  description: editPaymentForm.description || null,
+                }
+              : t
+          )
+        );
+      }
 
       setIsEditPaymentModalOpen(false);
       setPaymentToEdit(null);
@@ -557,37 +692,17 @@ export default function MemberViewPage() {
   async function handleConfirmDeletePayment() {
     if (!paymentToDelete) return;
     try {
-      await apiDelete(`/admin/members/${memberId}/monthly-dues/${paymentToDelete.id}`);
-      setPaymentHistory((current) => current.filter((p) => p.id !== paymentToDelete.id));
+      if (paymentToDelete.source === "due") {
+        await apiDelete(`/admin/members/${memberId}/monthly-dues/${paymentToDelete.id}`);
+        setRawDues((current) => current.filter((d) => d.id !== paymentToDelete.id));
+      } else {
+        await apiDelete(`/admin/database/transactions/${paymentToDelete.id}`);
+        setRawTransactions((current) => current.filter((t) => t.id !== paymentToDelete.id));
+      }
       setIsDeletePaymentPromptOpen(false);
       setPaymentToDelete(null);
       setToast("Payment deleted successfully");
       window.setTimeout(() => setToast(null), 3000);
-
-      // Re-fetch profile to update Total Paid / Outstanding header stats
-      if (memberId) {
-        apiGet<ApiMemberDetail>(`/admin/members/${memberId}`)
-          .then((row) => {
-            const firstName = row.firstName?.trim() ?? "";
-            const lastName = row.lastName?.trim() ?? "";
-            setMemberProfile({
-              memberId: row.displayMemberId || row.memberKey || row.id,
-              name: [firstName, lastName].filter(Boolean).join(" ") || row.email || "Unnamed member",
-              email: row.email || "-",
-              phoneNumber: row.phone || "-",
-              address: row.address || "",
-              dateJoined: formatDateDisplay(row.joined),
-              attendance: row.attendancePct || "",
-              voteRole: String(row.voter ?? "").trim().toUpperCase() === "YES" ? "YES" : "NO",
-              monthlyDues: formatCurrencyAmount(row.monthlyDuesAmount),
-              totalPaid: formatCurrencyAmount(row.totalPaid),
-              outstanding: formatCurrencyAmount(row.outstanding),
-              status: String(row.status ?? "").trim().toLowerCase() === "active" ? "Active" : "Inactive",
-              paymentHistory: mapPaymentHistory(row.monthlyDues),
-            });
-          })
-          .catch(() => null);
-      }
     } catch (error) {
       setToast(error instanceof Error ? error.message : "Failed to delete payment");
       window.setTimeout(() => setToast(null), 3000);
@@ -616,7 +731,7 @@ export default function MemberViewPage() {
     setAddTransactionLoading(true);
 
     try {
-      await apiPost<{ id: string; date: string; fullName: string; title: string; amount: string }>(
+      const newTx = await apiPost<ApiTransactionRow>(
         "/admin/database/transactions",
         {
           ...(memberUserId ? { userId: memberUserId } : {}),
@@ -628,7 +743,11 @@ export default function MemberViewPage() {
         }
       );
 
+      // Immediately add the new transaction to local state so it appears in the table
+      setRawTransactions((current) => [newTx, ...current]);
+
       setIsAddTransactionModalOpen(false);
+      resetAddTransactionForm();
       setToast("Transaction added successfully");
       window.setTimeout(() => setToast(null), 3000);
     } catch (error) {
@@ -653,14 +772,14 @@ export default function MemberViewPage() {
     { label: "Logout", icon: FiLogOut, action: handleLogout, tone: "danger" },
   ];
 
-  const totalPaidFromHistory = paymentHistory.reduce((sum, row) => {
-    const numeric = Number(row.amountPaid.replace(/[$,]/g, ""));
-    return sum + (Number.isNaN(numeric) ? 0 : numeric);
+  // Sum ALL dues payments — both MonthlyDue rows and Transaction rows with title "Dues"
+  const totalPaidFromAllSources = unifiedPayments.reduce((sum, row) => {
+    return sum + (row.rawAmount ?? 0);
   }, 0);
 
   const summaryCards: SummaryCard[] = [
     { label: "Monthly Dues", value: memberProfile.monthlyDues },
-    { label: "Total Paid", value: `$${totalPaidFromHistory.toLocaleString()}`, tone: "success" },
+    { label: "Total Paid", value: `$${totalPaidFromAllSources.toLocaleString()}`, tone: "success" },
     { label: "Outstanding", value: memberProfile.outstanding, tone: "danger" },
   ];
 
@@ -808,9 +927,9 @@ export default function MemberViewPage() {
           <div className="admin-dashboard__section-copy member-page__section-copy">
             <h2>Payment History</h2>
             <p>
-              {memberLoading
+              {(memberLoading || txLoading)
                 ? "Loading..."
-                : `${paymentHistory.length} payment record${paymentHistory.length !== 1 ? "s" : ""}`}
+                : `${unifiedPayments.length} payment record${unifiedPayments.length !== 1 ? "s" : ""}`}
             </p>
           </div>
 
@@ -822,30 +941,33 @@ export default function MemberViewPage() {
                 <table>
                   <thead>
                     <tr>
-                      <th>Month</th>
+                      <th>Period / Date</th>
+                      <th>Title</th>
                       <th>Amount Paid</th>
                       <th>Status</th>
+                      <th>Source</th>
                       <th>Payment Date</th>
                       <th>Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {memberLoading ? (
+                    {(memberLoading || txLoading) ? (
                       <tr>
-                        <td colSpan={5} className="member-view-page__table-state">
+                        <td colSpan={7} className="member-view-page__table-state">
                           Loading payment history...
                         </td>
                       </tr>
-                    ) : !paymentHistory.length ? (
+                    ) : !unifiedPayments.length ? (
                       <tr>
-                        <td colSpan={5} className="member-view-page__table-state">
+                        <td colSpan={7} className="member-view-page__table-state">
                           No payments recorded yet.
                         </td>
                       </tr>
                     ) : (
-                      paymentHistory.map((payment) => (
-                        <tr key={payment.id}>
-                          <td data-label="Month">{payment.month}</td>
+                      unifiedPayments.map((payment) => (
+                        <tr key={`${payment.source}-${payment.id}`}>
+                          <td data-label="Period / Date">{payment.period}</td>
+                          <td data-label="Title">{payment.title}</td>
                           <td data-label="Amount Paid">{payment.amountPaid}</td>
                           <td data-label="Status">
                             <span
@@ -855,6 +977,17 @@ export default function MemberViewPage() {
                               ].join(" ")}
                             >
                               {payment.status}
+                            </span>
+                          </td>
+                          <td data-label="Source">
+                            <span
+                              className={[
+                                "admin-dashboard__status-pill",
+                                payment.source === "transaction" ? "is-info" : "is-neutral",
+                              ].join(" ")}
+                              title={payment.source === "transaction" ? "Recorded via transaction form" : "Recorded as monthly dues"}
+                            >
+                              {payment.source === "transaction" ? "Transaction" : "Dues Record"}
                             </span>
                           </td>
                           <td data-label="Payment Date">{payment.paymentDate}</td>
@@ -1033,7 +1166,7 @@ export default function MemberViewPage() {
 
           <div className="admin-dashboard__modal-panel transaction-page__modal-panel">
             <h2 id="edit-payment-modal-title" className="admin-dashboard__modal-title">
-              Edit Payment — {paymentToEdit.month}
+              Edit Payment — {paymentToEdit.period}
             </h2>
 
             {editPaymentError && (
@@ -1041,45 +1174,7 @@ export default function MemberViewPage() {
             )}
 
             <div className="transaction-page__modal-grid">
-              <div className="admin-dashboard__modal-section">
-                <label htmlFor="edit-payment-month" className="admin-dashboard__modal-label">
-                  Month
-                </label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input member-view-page__modal-select-wrap">
-                  <select
-                    id="edit-payment-month"
-                    value={editPaymentForm.month}
-                    onChange={(e) => setEditPaymentForm((f) => ({ ...f, month: e.target.value }))}
-                    aria-label="Payment month"
-                    className={editPaymentForm.month ? "has-value" : ""}
-                  >
-                    <option value="">Select month</option>
-                    {MONTH_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="admin-dashboard__modal-section">
-                <label htmlFor="edit-payment-year" className="admin-dashboard__modal-label">
-                  Year
-                </label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input member-view-page__modal-select-wrap">
-                  <select
-                    id="edit-payment-year"
-                    value={editPaymentForm.year}
-                    onChange={(e) => setEditPaymentForm((f) => ({ ...f, year: e.target.value }))}
-                    aria-label="Payment year"
-                    className="has-value"
-                  >
-                    {YEAR_OPTIONS.map((y) => (
-                      <option key={y} value={y}>{y}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
+              {/* Amount — shown for both sources */}
               <div className="admin-dashboard__modal-section">
                 <label htmlFor="edit-payment-amount" className="admin-dashboard__modal-label">
                   Amount Paid *
@@ -1096,6 +1191,101 @@ export default function MemberViewPage() {
                   />
                 </div>
               </div>
+
+              {/* Due-specific: Month + Year */}
+              {paymentToEdit.source === "due" && (
+                <>
+                  <div className="admin-dashboard__modal-section">
+                    <label htmlFor="edit-payment-month" className="admin-dashboard__modal-label">
+                      Month
+                    </label>
+                    <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input member-view-page__modal-select-wrap">
+                      <select
+                        id="edit-payment-month"
+                        value={editPaymentForm.month}
+                        onChange={(e) => setEditPaymentForm((f) => ({ ...f, month: e.target.value }))}
+                        aria-label="Payment month"
+                        className={editPaymentForm.month ? "has-value" : ""}
+                      >
+                        <option value="">Select month</option>
+                        {MONTH_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="admin-dashboard__modal-section">
+                    <label htmlFor="edit-payment-year" className="admin-dashboard__modal-label">
+                      Year
+                    </label>
+                    <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input member-view-page__modal-select-wrap">
+                      <select
+                        id="edit-payment-year"
+                        value={editPaymentForm.year}
+                        onChange={(e) => setEditPaymentForm((f) => ({ ...f, year: e.target.value }))}
+                        aria-label="Payment year"
+                        className="has-value"
+                      >
+                        {YEAR_OPTIONS.map((y) => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Transaction-specific: Date + Title + Description */}
+              {paymentToEdit.source === "transaction" && (
+                <>
+                  <div className="admin-dashboard__modal-section">
+                    <label htmlFor="edit-tx-date" className="admin-dashboard__modal-label">
+                      Payment Date
+                    </label>
+                    <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                      <input
+                        id="edit-tx-date"
+                        type="date"
+                        value={editPaymentForm.paymentDate}
+                        onChange={(e) => setEditPaymentForm((f) => ({ ...f, paymentDate: e.target.value }))}
+                        aria-label="Payment date"
+                      />
+                    </div>
+                  </div>
+                  <div className="admin-dashboard__modal-section">
+                    <label htmlFor="edit-tx-title" className="admin-dashboard__modal-label">
+                      Title
+                    </label>
+                    <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input member-view-page__modal-select-wrap">
+                      <select
+                        id="edit-tx-title"
+                        value={editPaymentForm.title}
+                        onChange={(e) => setEditPaymentForm((f) => ({ ...f, title: e.target.value }))}
+                        aria-label="Transaction title"
+                        className={editPaymentForm.title ? "has-value" : ""}
+                      >
+                        {TRANSACTION_TITLE_OPTIONS.map((opt) => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="admin-dashboard__modal-section">
+                    <label htmlFor="edit-tx-description" className="admin-dashboard__modal-label">
+                      Description (Optional)
+                    </label>
+                    <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                      <input
+                        id="edit-tx-description"
+                        value={editPaymentForm.description}
+                        onChange={(e) => setEditPaymentForm((f) => ({ ...f, description: e.target.value }))}
+                        placeholder="Add a note"
+                        aria-label="Description"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="admin-dashboard__modal-actions">
@@ -1129,7 +1319,7 @@ export default function MemberViewPage() {
               Delete Payment Record
             </h2>
             <div className="admin-dashboard__modal-section-copy" style={{ marginBottom: "1.5rem" }}>
-              <p>Are you sure you want to delete the payment record for <strong>{paymentToDelete.month}</strong>?</p>
+              <p>Are you sure you want to delete the payment record for <strong>{paymentToDelete.period}</strong>?</p>
               <p>This action cannot be undone.</p>
             </div>
 
