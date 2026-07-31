@@ -27,7 +27,7 @@ const IdParamSchema = TableParamSchema.extend({ id: z.string().min(1) });
 const RoleSchema = z.enum(['ADMIN', 'MEMBER', 'Admin', 'Member']).transform((v) => v.toUpperCase());
 const VoteRoleSchema = z.enum(['Yes', 'No']).default('No');
 const StatusSchema = z.enum(['Active', 'Inactive']).default('Active');
-const TransactionTitleSchema = z.enum(['Raffle', 'Insurance', 'Wrapper', 'UPUA 25 Raffle', 'Levy', 'Others']);
+const TransactionTitleSchema = z.enum(['Raffle', 'Insurance', 'Wrapper', 'UPUA 25 Raffle', 'Levy', 'Others', 'Dues']);
 const transactionSelectWithoutDescription = {
   id: true,
   userId: true,
