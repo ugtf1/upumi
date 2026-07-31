@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { FiX, FiFilter } from "react-icons/fi";
 import { getAllDuesReadOnly, getAllTransactionsReadOnly, getHostingSchedule } from "./api";
 const MONTH_NAMES = [
