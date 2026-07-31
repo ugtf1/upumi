@@ -83,13 +83,19 @@ type RecordAttendanceFormState = {
 };
 
 type EditMemberFormState = {
+  title: string;
   fName: string;
   lName: string;
   email: string;
   phone: string;
   address: string;
+  whatsapp: string;
+  facebook: string;
+  insurance: string;
   dateJoined: string;
   voteRole: string;
+  goodStanding: string;
+  financialGoodStanding: string;
   monthlyDues: string;
   totalPaid: string;
   outstanding: string;
@@ -156,11 +162,15 @@ type ApiMemberDetail = {
   id: string;
   displayMemberId?: string | null;
   memberKey?: string | null;
+  title?: string | null;
   firstName?: string | null;
   lastName?: string | null;
   email?: string | null;
   phone?: string | null;
   address?: string | null;
+  whatsapp?: string | null;
+  facebook?: string | null;
+  insurance?: string | null;
   joined?: string | null;
   voter?: string | null;
   attendancePct?: string | null;
@@ -168,6 +178,8 @@ type ApiMemberDetail = {
   totalPaid?: number | null;
   outstanding?: number | null;
   status?: string | null;
+  goodStanding?: string | null;
+  financialGoodStanding?: string | null;
   monthlyDues?: ApiMonthlyDue[];
   userId?: string | null;
   user?: { id: string } | null;
@@ -254,9 +266,10 @@ export default function MemberViewPage() {
   const [isEditMemberModalOpen, setIsEditMemberModalOpen] = useState(false);
   const [isAddTransactionModalOpen, setIsAddTransactionModalOpen] = useState(false);
   const [editMemberForm, setEditMemberForm] = useState<EditMemberFormState>({
-    fName: "", lName: "", email: "", phone: "", address: "",
-    dateJoined: "", voteRole: "", monthlyDues: "", totalPaid: "",
-    outstanding: "", status: "Active",
+    title: "", fName: "", lName: "", email: "", phone: "", address: "",
+    whatsapp: "", facebook: "", insurance: "",
+    dateJoined: "", voteRole: "", goodStanding: "", financialGoodStanding: "",
+    monthlyDues: "", totalPaid: "", outstanding: "", status: "Active",
   });
   const [editMemberLoading, setEditMemberLoading] = useState(false);
   const [editMemberError, setEditMemberError] = useState<string | null>(null);
@@ -280,6 +293,11 @@ export default function MemberViewPage() {
   const [recordAttendanceLoading, setRecordAttendanceLoading] = useState(false);
   const [recordAttendanceError, setRecordAttendanceError] = useState<string | null>(null);
 
+  // Extra raw member detail fields (not in MemberDetailRecord)
+  const [memberRaw, setMemberRaw] = useState<Partial<ApiMemberDetail>>({});
+  const [hostingSchedule, setHostingSchedule] = useState<{ id: string; year: number; month: number; hostMember: string }[]>([]);
+  // Tracker year for the attendance grid
+  const [attendanceYear, setAttendanceYear] = useState<number>(new Date().getFullYear());
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [isDeletePaymentPromptOpen, setIsDeletePaymentPromptOpen] = useState(false);
   const [paymentToDelete, setPaymentToDelete] = useState<UnifiedPaymentRow | null>(null);
@@ -335,9 +353,10 @@ export default function MemberViewPage() {
         resolvedDues = row.monthlyDues ?? [];
         setMemberUserId(resolvedUserId);
         setRawDues(resolvedDues);
+        setMemberRaw(row);
         const profile: MemberDetailRecord = {
           memberId: row.displayMemberId || row.memberKey || row.id,
-          name: [firstName, lastName].filter(Boolean).join(" ") || row.email || "Unnamed member",
+          name: [row.title, firstName, lastName].filter(Boolean).join(" ") || row.email || "Unnamed member",
           email: row.email || "-",
           phoneNumber: row.phone || "-",
           address: row.address || "",
@@ -372,8 +391,18 @@ export default function MemberViewPage() {
         if (active) setTxLoading(false);
       });
 
+    const hostingPromise = apiGet<{ id: string; year: number; month: number; hostMember: string }[]>("/admin/database/hosting-schedule")
+      .then((rows) => {
+        if (!active) return;
+        // Filter to rows where this member's name appears
+        setHostingSchedule(rows);
+      })
+      .catch(() => {
+        if (active) setHostingSchedule([]);
+      });
+
     // Once both resolve, build the merged list
-    Promise.all([memberPromise, txPromise]).then(() => {
+    Promise.all([memberPromise, txPromise, hostingPromise]).then(() => {
       if (!active) return;
       setUnifiedPayments(mergeAndSortPayments(resolvedDues, [], resolvedUserId));
     });
@@ -413,17 +442,24 @@ export default function MemberViewPage() {
   }
 
   function handleOpenEditMemberModal() {
-    const [fName = "", ...rest] = memberProfile.name.trim().split(" ");
+    const rawTitle = memberRaw.title ?? "";
+    const [fName = "", ...rest] = memberProfile.name.replace(rawTitle, "").trim().split(" ");
     const lName = rest.join(" ");
 
     setEditMemberForm({
+      title: rawTitle,
       fName,
       lName,
       email: memberProfile.email,
       phone: memberProfile.phoneNumber,
       address: memberProfile.address,
+      whatsapp: memberRaw.whatsapp ?? "",
+      facebook: memberRaw.facebook ?? "",
+      insurance: memberRaw.insurance ?? "",
       dateJoined: memberProfile.dateJoined,
       voteRole: memberProfile.voteRole,
+      goodStanding: memberRaw.goodStanding ?? "",
+      financialGoodStanding: memberRaw.financialGoodStanding ?? "",
       monthlyDues: toNumericInputValue(memberProfile.monthlyDues),
       totalPaid: toNumericInputValue(memberProfile.totalPaid),
       outstanding: toNumericInputValue(memberProfile.outstanding),
@@ -493,11 +529,17 @@ export default function MemberViewPage() {
       // PATCH /admin/members/:id — defined in admin.ts, handles both
       // MemberRecord rows and user. prefixed virtual ids.
       await apiPatch(`/admin/members/${memberId}`, {
+        title: editMemberForm.title.trim() || null,
         fName,
         lName,
         email,
         phone,
         address,
+        whatsapp: editMemberForm.whatsapp.trim() || null,
+        facebook: editMemberForm.facebook.trim() || null,
+        insurance: editMemberForm.insurance.trim() || null,
+        goodStanding: editMemberForm.goodStanding.trim() || null,
+        financialGoodStanding: editMemberForm.financialGoodStanding.trim() || null,
         dateJoined: dateJoined || null,
         voteRole,
         monthlyDues,
@@ -507,6 +549,15 @@ export default function MemberViewPage() {
       });
 
       // Reflect the update locally so the UI doesn't need a full refetch
+      setMemberRaw((prev) => ({
+        ...prev,
+        title: editMemberForm.title.trim() || null,
+        whatsapp: editMemberForm.whatsapp.trim() || null,
+        facebook: editMemberForm.facebook.trim() || null,
+        insurance: editMemberForm.insurance.trim() || null,
+        goodStanding: editMemberForm.goodStanding.trim() || null,
+        financialGoodStanding: editMemberForm.financialGoodStanding.trim() || null,
+      }));
       setMemberProfile((currentProfile) => ({
         ...currentProfile,
         name: `${fName} ${lName}`.trim(),
@@ -875,10 +926,27 @@ export default function MemberViewPage() {
           </div>
 
           <article className="member-view-page__details-card">
+            {/* ── Top Identity + Quick Stats ──────────────────────── */}
             <div className="member-view-page__details-main">
               <div className="member-view-page__identity">
                 <span className="member-view-page__eyebrow">Member ID {memberProfile.memberId}</span>
                 <h3>{memberProfile.name}</h3>
+
+                <div className="member-view-page__status-badges">
+                  <span className={`member-view-page__badge member-view-page__badge--${memberProfile.status === "Active" ? "active" : "inactive"}`}>
+                    {memberProfile.status}
+                  </span>
+                  {memberRaw.goodStanding && (
+                    <span className="member-view-page__badge member-view-page__badge--standing">
+                      {memberRaw.goodStanding}
+                    </span>
+                  )}
+                  {memberRaw.insurance && (
+                    <span className="member-view-page__badge member-view-page__badge--insurance">
+                      Insured
+                    </span>
+                  )}
+                </div>
 
                 <div className="member-view-page__contact-list">
                   <div className="member-view-page__contact-item">
@@ -895,6 +963,24 @@ export default function MemberViewPage() {
                       <strong>{memberProfile.phoneNumber}</strong>
                     </div>
                   </div>
+                  {memberRaw.whatsapp && (
+                    <div className="member-view-page__contact-item">
+                      <FiPhone size={18} />
+                      <div>
+                        <span className="member-view-page__contact-label">WhatsApp</span>
+                        <strong>{memberRaw.whatsapp}</strong>
+                      </div>
+                    </div>
+                  )}
+                  {memberRaw.facebook && (
+                    <div className="member-view-page__contact-item">
+                      <FiUsers size={18} />
+                      <div>
+                        <span className="member-view-page__contact-label">Facebook</span>
+                        <strong>{memberRaw.facebook}</strong>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -907,6 +993,97 @@ export default function MemberViewPage() {
                 ))}
               </div>
             </div>
+
+            {/* ── Full Info Grid ────────────────────────────────────── */}
+            <div className="member-view-page__info-grid">
+              <div className="member-view-page__info-item">
+                <span className="member-view-page__info-label">Title / Prefix</span>
+                <span className="member-view-page__info-value">{memberRaw.title || "—"}</span>
+              </div>
+              <div className="member-view-page__info-item">
+                <span className="member-view-page__info-label">Date Joined</span>
+                <span className="member-view-page__info-value">{memberProfile.dateJoined || "—"}</span>
+              </div>
+              <div className="member-view-page__info-item">
+                <span className="member-view-page__info-label">Address</span>
+                <span className="member-view-page__info-value">{memberProfile.address || "—"}</span>
+              </div>
+              <div className="member-view-page__info-item">
+                <span className="member-view-page__info-label">Voter Status</span>
+                <span className="member-view-page__info-value">{memberProfile.voteRole}</span>
+              </div>
+              <div className="member-view-page__info-item">
+                <span className="member-view-page__info-label">Attendance %</span>
+                <span className="member-view-page__info-value">{memberProfile.attendance ? `${memberProfile.attendance}%` : "—"}</span>
+              </div>
+              <div className="member-view-page__info-item">
+                <span className="member-view-page__info-label">Financial Standing</span>
+                <span className="member-view-page__info-value">{memberRaw.financialGoodStanding || "—"}</span>
+              </div>
+              <div className="member-view-page__info-item">
+                <span className="member-view-page__info-label">Good Standing</span>
+                <span className="member-view-page__info-value">{memberRaw.goodStanding || "—"}</span>
+              </div>
+              <div className="member-view-page__info-item">
+                <span className="member-view-page__info-label">Insurance</span>
+                <span className="member-view-page__info-value">{memberRaw.insurance || "—"}</span>
+              </div>
+            </div>
+
+            {/* ── Attendance Month Grid ─────────────────────────────── */}
+            <div className="member-view-page__section-divider">
+              <span>Monthly Attendance</span>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontSize: "0.82rem", color: "#64748b" }}>Year:</span>
+                <select
+                  value={attendanceYear}
+                  onChange={(e) => setAttendanceYear(Number(e.target.value))}
+                  className="member-view-page__year-select"
+                >
+                  {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="member-view-page__attendance-grid">
+              {MONTH_OPTIONS.map((m) => {
+                const due = rawDues.find(d => d.year === attendanceYear && d.month === m.value);
+                const isPresent = due?.present === true;
+                const hasDue = !!due;
+                return (
+                  <div
+                    key={m.value}
+                    className={`member-view-page__attendance-cell member-view-page__attendance-cell--${isPresent ? "present" : hasDue ? "absent" : "none"}`}
+                    title={`${m.label} ${attendanceYear}: ${isPresent ? "Present" : hasDue ? "Absent" : "No record"}`}
+                  >
+                    <span className="member-view-page__attendance-month">{m.label.slice(0, 3)}</span>
+                    <span className="member-view-page__attendance-dot">{isPresent ? "✓" : hasDue ? "✗" : "–"}</span>
+                    {due && due.duesPaid > 0 && (
+                      <span className="member-view-page__attendance-dues">${Number(due.duesPaid).toLocaleString()}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* ── Hosting Schedule ──────────────────────────────────── */}
+            {(() => {
+              const memberFirstLast = `${memberRaw.firstName ?? ""} ${memberRaw.lastName ?? ""}`.toLowerCase().trim();
+              const myHosting = hostingSchedule.filter(h => h.hostMember.toLowerCase().includes(memberFirstLast) && memberFirstLast.length > 0);
+              if (myHosting.length === 0) return null;
+              return (
+                <>
+                  <div className="member-view-page__section-divider"><span>Hosting Schedule</span></div>
+                  <div className="member-view-page__hosting-list">
+                    {myHosting.sort((a, b) => a.year !== b.year ? b.year - a.year : b.month - a.month).map(h => (
+                      <div key={h.id} className="member-view-page__hosting-item">
+                        <FiCalendar size={15} />
+                        <span>{MONTH_NAMES[h.month - 1]} {h.year}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
 
             <div className="member-view-page__action-row">
               <button type="button" className="member-view-page__outline-button" onClick={handleOpenEditMemberModal}>
@@ -1355,8 +1532,24 @@ export default function MemberViewPage() {
             )}
 
             <div className="member-view-page__modal-grid member-view-page__modal-grid--cols-3">
+              {/* Title */}
               <div className="admin-dashboard__modal-section">
-                <label htmlFor="member-profile-fname" className="admin-dashboard__modal-label" id="member-profile-edit-modal-title">
+                <label htmlFor="member-profile-title" className="admin-dashboard__modal-label" id="member-profile-edit-modal-title">
+                  Edit Member
+                </label>
+                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                  <input
+                    id="member-profile-title"
+                    value={editMemberForm.title}
+                    onChange={(event) => handleEditMemberChange("title", event.target.value)}
+                    placeholder="e.g. Dr, Mr, Mrs"
+                    aria-label="Title or prefix"
+                  />
+                </div>
+              </div>
+
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="member-profile-fname" className="admin-dashboard__modal-label">
                   First Name *
                 </label>
                 <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
@@ -1540,6 +1733,77 @@ export default function MemberViewPage() {
                     onChange={(event) => handleEditMemberChange("outstanding", event.target.value)}
                     placeholder="0"
                     aria-label="Outstanding"
+                  />
+                </div>
+              </div>
+
+              {/* WhatsApp */}
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="member-profile-whatsapp" className="admin-dashboard__modal-label">WhatsApp</label>
+                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                  <input
+                    id="member-profile-whatsapp"
+                    type="tel"
+                    value={editMemberForm.whatsapp}
+                    onChange={(event) => handleEditMemberChange("whatsapp", event.target.value)}
+                    placeholder="WhatsApp number"
+                    aria-label="WhatsApp"
+                  />
+                </div>
+              </div>
+
+              {/* Facebook */}
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="member-profile-facebook" className="admin-dashboard__modal-label">Facebook</label>
+                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                  <input
+                    id="member-profile-facebook"
+                    value={editMemberForm.facebook}
+                    onChange={(event) => handleEditMemberChange("facebook", event.target.value)}
+                    placeholder="Facebook profile"
+                    aria-label="Facebook"
+                  />
+                </div>
+              </div>
+
+              {/* Insurance */}
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="member-profile-insurance" className="admin-dashboard__modal-label">Insurance</label>
+                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                  <input
+                    id="member-profile-insurance"
+                    value={editMemberForm.insurance}
+                    onChange={(event) => handleEditMemberChange("insurance", event.target.value)}
+                    placeholder="Insurance policy / provider"
+                    aria-label="Insurance"
+                  />
+                </div>
+              </div>
+
+              {/* Good Standing */}
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="member-profile-good-standing" className="admin-dashboard__modal-label">Good Standing</label>
+                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                  <input
+                    id="member-profile-good-standing"
+                    value={editMemberForm.goodStanding}
+                    onChange={(event) => handleEditMemberChange("goodStanding", event.target.value)}
+                    placeholder="e.g. Good Standing"
+                    aria-label="Good Standing"
+                  />
+                </div>
+              </div>
+
+              {/* Financial Good Standing */}
+              <div className="admin-dashboard__modal-section">
+                <label htmlFor="member-profile-fin-standing" className="admin-dashboard__modal-label">Financial Standing</label>
+                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                  <input
+                    id="member-profile-fin-standing"
+                    value={editMemberForm.financialGoodStanding}
+                    onChange={(event) => handleEditMemberChange("financialGoodStanding", event.target.value)}
+                    placeholder="e.g. Good Financial Standing"
+                    aria-label="Financial Good Standing"
                   />
                 </div>
               </div>

@@ -527,3 +527,51 @@
   .member-account__table-wrap { overflow: visible !important; }
 }
 
+/* ── Member Profile Info Card ────────────────────────────── */
+.member-account__profile-card {
+  background: linear-gradient(135deg, #f8fafc, #f0fdf4);
+  border: 1px solid #d1fae5;
+  border-radius: 18px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.member-account__profile-card-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #d1fae5;
+}
+
+.member-account__profile-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px 20px;
+
+  @media (max-width: 480px) {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.member-account__profile-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.member-account__profile-info-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.member-account__profile-info-value {
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: #1e293b;
+  word-break: break-word;
+}

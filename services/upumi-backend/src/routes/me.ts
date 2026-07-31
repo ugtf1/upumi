@@ -120,6 +120,13 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
         attendancePct: mr.attendancePct,
         email: (rawJson.Email as string) ?? null,
         phone: (rawJson.Phone as string) ?? null,
+        address: user.address ?? (rawJson.Address as string) ?? null,
+        whatsapp: mr.whatsapp ?? (rawJson.Whatsapp as string) ?? (rawJson.WhatsApp as string) ?? null,
+        facebook: mr.facebook ?? (rawJson.Facebook as string) ?? (rawJson.FaceBook as string) ?? null,
+        voteRole: user.voteRole ?? null,
+        monthlyDuesAmount: decimalToNumber(user.monthlyDues),
+        totalPaid: decimalToNumber(user.totalPaid),
+        outstanding: decimalToNumber(user.outstanding),
       },
       monthlyDues: mr.monthlyDues.map((d) => {
         const attendedInTable = attendanceMap.get(d.month) ?? false;

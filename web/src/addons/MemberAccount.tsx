@@ -64,13 +64,21 @@ type MemberProfileResponse = {
     lastName?: string | null;
     email?: string | null;
     phone?: string | null;
-    status?: string | null;
     address?: string | null;
+    whatsapp?: string | null;
+    facebook?: string | null;
+    insurance?: string | null;
+    status?: string | null;
     dateJoined?: string | null;
     voteRole?: string | null;
+    goodStanding?: string | null;
     financialGoodStanding?: string | null;
+    attendancePct?: string | null;
+    monthlyDuesAmount?: number | null;
+    totalPaid?: number | null;
+    outstanding?: number | null;
   } | null;
-  linked?: { userId?: string | null } | null;
+  linked?: { userId?: string | null; memberKey?: string | null; displayMemberId?: string | null } | null;
   monthlyDues?: MonthlyDueRecord[];
 };
 
@@ -130,32 +138,44 @@ export default function MemberAccount() {
     fetchData();
   }, []);
 
-  // Fetch ALL platform transactions + dues on mount
+  // Filter transactions to only this member's records
+  const memberUserId = memberProfile?.linked?.userId ?? null;
+  const memberFullName = memberProfile?.member
+    ? `${memberProfile.member.firstName ?? ""} ${memberProfile.member.lastName ?? ""}`.toLowerCase().trim()
+    : "";
+
   useEffect(() => {
     let active = true;
     setTxLoading(true);
     setTxError(null);
 
     Promise.all([
-      getAllTransactionsReadOnly() as Promise<{ id: string; fullName: string; title: string; amount: string | number; date: string }[]>,
+      getAllTransactionsReadOnly() as Promise<{ id: string; userId?: string | null; fullName: string; title: string; amount: string | number; date: string }[]>,
       getAllDuesReadOnly() as Promise<{ id: string; memberRecordId?: string; year?: number; month?: number; duesPaid: string | number; createdAt?: string; member?: { firstName?: string | null; lastName?: string | null; email?: string | null; phone?: string | null } }[]>,
     ])
       .then(([txRows, dueRows]) => {
         if (!active) return;
 
-        const txNorm: AllTransactionRow[] = txRows.map((row) => ({
-          id: row.id,
-          date: row.date
-            ? new Date(row.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-            : "-",
-          fullName: row.fullName,
-          title: row.title,
-          amount: `$${Number(row.amount ?? 0).toLocaleString()}`,
-          status: "Completed",
-          rawDate: row.date || "",
-          rawAmount: Number(row.amount ?? 0),
-          isDue: false,
-        }));
+        // Only show transactions belonging to this member
+        const txNorm: AllTransactionRow[] = txRows
+          .filter((row) => {
+            if (memberUserId && row.userId === memberUserId) return true;
+            if (memberFullName && row.fullName?.toLowerCase().includes(memberFullName)) return true;
+            return false;
+          })
+          .map((row) => ({
+            id: row.id,
+            date: row.date
+              ? new Date(row.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+              : "-",
+            fullName: row.fullName,
+            title: row.title,
+            amount: `$${Number(row.amount ?? 0).toLocaleString()}`,
+            status: "Completed",
+            rawDate: row.date || "",
+            rawAmount: Number(row.amount ?? 0),
+            isDue: false,
+          }));
 
         const dueNorm: AllTransactionRow[] = dueRows.map((row) => {
           const monthIdx = (row.month ?? 1) - 1;
@@ -191,7 +211,7 @@ export default function MemberAccount() {
       });
 
     return () => { active = false; };
-  }, []);
+  }, [memberUserId, memberFullName]);
 
   // Pagination derived
   const txTotalPages = Math.max(1, Math.ceil(allTxRows.length / TX_PAGE_SIZE));
@@ -326,6 +346,94 @@ export default function MemberAccount() {
             </div>
           )}
 
+          {/* Member profile info card */}
+          {memberProfile?.member && (
+            <section className="member-account__profile-card">
+              <div className="member-account__profile-card-header">
+                <div className="member-account__profile-avatar" aria-hidden="true" style={{ width: "48px", height: "48px", fontSize: "1.4rem" }}>
+                  {memberName.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <div className="member-account__profile-name" style={{ fontSize: "1.1rem" }}>{memberName}</div>
+                  <div className="member-account__profile-email">
+                    {memberProfile.linked?.displayMemberId ? `ID: ${memberProfile.linked.displayMemberId} · ` : ""}
+                    {memberProfile.member.status || "Active"}
+                  </div>
+                </div>
+              </div>
+              <div className="member-account__profile-info-grid">
+                {memberProfile.member.email && (
+                  <div className="member-account__profile-info-item">
+                    <span className="member-account__profile-info-label">Email</span>
+                    <span className="member-account__profile-info-value">{memberProfile.member.email}</span>
+                  </div>
+                )}
+                {memberProfile.member.phone && (
+                  <div className="member-account__profile-info-item">
+                    <span className="member-account__profile-info-label">Phone</span>
+                    <span className="member-account__profile-info-value">{memberProfile.member.phone}</span>
+                  </div>
+                )}
+                {memberProfile.member.whatsapp && (
+                  <div className="member-account__profile-info-item">
+                    <span className="member-account__profile-info-label">WhatsApp</span>
+                    <span className="member-account__profile-info-value">{memberProfile.member.whatsapp}</span>
+                  </div>
+                )}
+                {memberProfile.member.facebook && (
+                  <div className="member-account__profile-info-item">
+                    <span className="member-account__profile-info-label">Facebook</span>
+                    <span className="member-account__profile-info-value">{memberProfile.member.facebook}</span>
+                  </div>
+                )}
+                {memberProfile.member.address && (
+                  <div className="member-account__profile-info-item">
+                    <span className="member-account__profile-info-label">Address</span>
+                    <span className="member-account__profile-info-value">{memberProfile.member.address}</span>
+                  </div>
+                )}
+                {memberProfile.member.dateJoined && (
+                  <div className="member-account__profile-info-item">
+                    <span className="member-account__profile-info-label">Joined</span>
+                    <span className="member-account__profile-info-value">
+                      {new Date(memberProfile.member.dateJoined).toLocaleDateString(undefined, { year: "numeric", month: "long" })}
+                    </span>
+                  </div>
+                )}
+                {memberProfile.member.voteRole && (
+                  <div className="member-account__profile-info-item">
+                    <span className="member-account__profile-info-label">Voter Status</span>
+                    <span className="member-account__profile-info-value">{memberProfile.member.voteRole}</span>
+                  </div>
+                )}
+                {memberProfile.member.goodStanding && (
+                  <div className="member-account__profile-info-item">
+                    <span className="member-account__profile-info-label">Good Standing</span>
+                    <span className="member-account__profile-info-value">{memberProfile.member.goodStanding}</span>
+                  </div>
+                )}
+                {memberProfile.member.financialGoodStanding && (
+                  <div className="member-account__profile-info-item">
+                    <span className="member-account__profile-info-label">Financial Standing</span>
+                    <span className="member-account__profile-info-value">{memberProfile.member.financialGoodStanding}</span>
+                  </div>
+                )}
+                {memberProfile.member.insurance && (
+                  <div className="member-account__profile-info-item">
+                    <span className="member-account__profile-info-label">Insurance</span>
+                    <span className="member-account__profile-info-value">{memberProfile.member.insurance}</span>
+                  </div>
+                )}
+                {memberProfile.member.attendancePct && (
+                  <div className="member-account__profile-info-item">
+                    <span className="member-account__profile-info-label">Attendance</span>
+                    <span className="member-account__profile-info-value">{memberProfile.member.attendancePct}%</span>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
           {/* Summary cards */}
           <section className="member-account__stats">
             {summaryCards.map((card) => {
@@ -395,9 +503,9 @@ export default function MemberAccount() {
           {/* All platform transactions table */}
           <section className="member-account__card member-account__table-card">
             <div style={{ marginBottom: "16px" }}>
-              <h2 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 700, color: "#191d1c" }}>Recent Transactions</h2>
+              <h2 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 700, color: "#191d1c" }}>My Transactions</h2>
               <p style={{ margin: "4px 0 0", color: "#8d8d8b", fontSize: "0.88rem" }}>
-                {txLoading ? "Loading..." : `${allTxRows.length} transaction${allTxRows.length !== 1 ? "s" : ""} platform-wide`}
+                {txLoading ? "Loading..." : `${allTxRows.length} transaction${allTxRows.length !== 1 ? "s" : ""} recorded`}
               </p>
             </div>
 

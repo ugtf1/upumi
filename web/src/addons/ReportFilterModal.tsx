@@ -37,7 +37,17 @@ type ReportFilterModalProps = {
   onClose: () => void;
 };
 
-type ReportCategory = "dues" | "transactions" | "hosting" | "member";
+type ReportCategory = "dues" | "transactions" | "hosting" | "member" | "attendance";
+
+type AttendanceReportDetail = {
+  year: number;
+  month: number;
+  presentCount: number;
+  absentCount: number;
+  totalCount: number;
+  presentMembers: MemberInfo[];
+  absentMembers: MemberInfo[];
+};
 
 type ApiMonthlyDue = {
   id: string;
@@ -126,7 +136,7 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  // Month/Year for Hosting
+  // Month/Year for Hosting & Attendance
   const [startMonth, setStartMonth] = useState("");
   const [endMonth, setEndMonth] = useState("");
   const [hostingYear, setHostingYear] = useState<number>(new Date().getFullYear());
@@ -146,6 +156,7 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
   const [resultsTransactions, setResultsTransactions] = useState<ApiTransactionRow[] | null>(null);
   const [resultsHosting, setResultsHosting] = useState<HostingScheduleApiRow[] | null>(null);
   const [resultsMember, setResultsMember] = useState<MemberReportData | null>(null);
+  const [resultsAttendance, setResultsAttendance] = useState<AttendanceReportDetail[] | null>(null);
 
   // Tracker year inside Member Report
   const [trackerYear, setTrackerYear] = useState<number>(new Date().getFullYear());
@@ -189,6 +200,7 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
     setResultsTransactions(null);
     setResultsHosting(null);
     setResultsMember(null);
+    setResultsAttendance(null);
     setError(null);
   }
 
@@ -345,6 +357,64 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
           transactions: memberTransactions,
           hosting: memberHosting,
         });
+      } else if (category === "attendance") {
+        if (!startMonth || !endMonth) throw new Error("Please select both start and end months.");
+        const sm = Number(startMonth);
+        const em = Number(endMonth);
+        if (sm > em) throw new Error("Start month cannot be after end month.");
+
+        const [attendanceRows, memberList] = await Promise.all([
+          apiGet<AttendanceApiRow[]>("/members/database/attendance").catch(() => []),
+          getMemberSafeMemberList() as Promise<MemberInfo[]>,
+        ]);
+
+        const filteredAttendance = attendanceRows.filter(r => {
+          return r.year === hostingYear && r.month >= sm && r.month <= em;
+        });
+
+        const compiled = filteredAttendance.map(att => {
+          const usersInList = String(att.usersIn ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+          
+          const presentMembers = memberList.filter(m => {
+            return (
+              usersInList.includes(m.userId || "") ||
+              usersInList.includes(m.id) ||
+              usersInList.includes(m.memberKey) ||
+              usersInList.includes(`user.${m.userId}`)
+            );
+          });
+
+          const absentMembers = memberList.filter(m => !presentMembers.some(p => p.id === m.id));
+
+          return {
+            year: att.year,
+            month: att.month,
+            presentCount: presentMembers.length,
+            absentCount: absentMembers.length,
+            totalCount: memberList.length,
+            presentMembers,
+            absentMembers,
+          };
+        });
+
+        // Filter by selected member if set
+        let finalResults = compiled;
+        if (selectedMember) {
+          finalResults = compiled.map(c => {
+            const isPresent = c.presentMembers.some(p => p.id === selectedMember.id);
+            return {
+              ...c,
+              presentMembers: isPresent ? [selectedMember] : [],
+              absentMembers: !isPresent ? [selectedMember] : [],
+              presentCount: isPresent ? 1 : 0,
+              absentCount: !isPresent ? 1 : 0,
+              totalCount: 1,
+            };
+          });
+        }
+
+        finalResults.sort((a, b) => a.month - b.month);
+        setResultsAttendance(finalResults);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred generating the report.");
@@ -660,6 +730,90 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
       );
     }
 
+    if (resultsAttendance) {
+      if (resultsAttendance.length === 0) {
+        return <div className="report-modal__empty-text">No attendance records found for this period.</div>;
+      }
+
+      const overallPresent = resultsAttendance.reduce((s, r) => s + r.presentCount, 0);
+      const overallTotal = resultsAttendance.reduce((s, r) => s + r.totalCount, 0);
+      const overallRate = overallTotal > 0 ? Math.round((overallPresent / overallTotal) * 100) : 0;
+
+      return (
+        <div style={{ marginTop: "1rem" }}>
+          {/* Summary Banner */}
+          <div className="report-modal__attendance-summary">
+            <div className="report-modal__attendance-summary-stat">
+              <span className="report-modal__attendance-summary-label">Months Covered</span>
+              <span className="report-modal__attendance-summary-value">{resultsAttendance.length}</span>
+            </div>
+            <div className="report-modal__attendance-summary-stat">
+              <span className="report-modal__attendance-summary-label">Overall Rate</span>
+              <span className="report-modal__attendance-summary-value" style={{ color: overallRate >= 75 ? "#16a34a" : overallRate >= 50 ? "#d97706" : "#dc2626" }}>
+                {overallRate}%
+              </span>
+            </div>
+            <div className="report-modal__attendance-summary-stat">
+              <span className="report-modal__attendance-summary-label">Total Attendances</span>
+              <span className="report-modal__attendance-summary-value">{overallPresent}</span>
+            </div>
+          </div>
+
+          {/* Per-Month Cards */}
+          <div className="report-modal__attendance-months">
+            {resultsAttendance.map((att) => {
+              const rate = att.totalCount > 0 ? Math.round((att.presentCount / att.totalCount) * 100) : 0;
+              const monthLabel = MONTH_NAMES[att.month - 1] + " " + att.year;
+              const rateColor = rate >= 75 ? "#16a34a" : rate >= 50 ? "#d97706" : "#dc2626";
+              return (
+                <details key={`${att.year}-${att.month}`} className="report-modal__attendance-month-detail">
+                  <summary className="report-modal__attendance-month-summary">
+                    <div className="report-modal__attendance-month-info">
+                      <span className="report-modal__attendance-month-name">{monthLabel}</span>
+                      <div className="report-modal__attendance-month-stats">
+                        <span style={{ color: "#16a34a", fontWeight: 600 }}>{att.presentCount} present</span>
+                        <span style={{ color: "#64748b" }}>·</span>
+                        <span style={{ color: "#dc2626", fontWeight: 600 }}>{att.absentCount} absent</span>
+                      </div>
+                    </div>
+                    <div className="report-modal__attendance-rate-wrap">
+                      <span style={{ fontSize: "0.85rem", fontWeight: 700, color: rateColor }}>{rate}%</span>
+                      <div className="report-modal__progress-bar">
+                        <div className="report-modal__progress-fill" style={{ width: `${rate}%`, background: rateColor }} />
+                      </div>
+                    </div>
+                  </summary>
+
+                  <div className="report-modal__attendance-lists">
+                    {att.presentMembers.length > 0 && (
+                      <div className="report-modal__attendance-list-block report-modal__attendance-list-block--present">
+                        <div className="report-modal__attendance-list-header">✅ Present ({att.presentMembers.length})</div>
+                        {att.presentMembers.map(m => (
+                          <div key={m.id} className="report-modal__attendance-member-item">
+                            {m.title ? `${m.title} ` : ""}{m.firstName} {m.lastName}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {att.absentMembers.length > 0 && (
+                      <div className="report-modal__attendance-list-block report-modal__attendance-list-block--absent">
+                        <div className="report-modal__attendance-list-header">❌ Absent ({att.absentMembers.length})</div>
+                        {att.absentMembers.map(m => (
+                          <div key={m.id} className="report-modal__attendance-member-item">
+                            {m.title ? `${m.title} ` : ""}{m.firstName} {m.lastName}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </details>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
     return null;
   }
 
@@ -740,6 +894,13 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
             onClick={() => handleCategoryChange("member")}
           >
             Member Profile
+          </button>
+          <button
+            type="button"
+            className={`report-modal__tab ${category === "attendance" ? "report-modal__tab--active" : ""}`}
+            onClick={() => handleCategoryChange("attendance")}
+          >
+            Attendance
           </button>
         </div>
 
@@ -897,13 +1058,60 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
               </>
             )}
 
+            {/* Attendance Specific Inputs */}
+            {category === "attendance" && (
+              <>
+                <div className="admin-dashboard__modal-section">
+                  <label className="admin-dashboard__modal-label">Year</label>
+                  <div className="admin-dashboard__modal-input-field" style={{ padding: "0 12px", display: "flex", alignItems: "center", background: "#fff", position: "relative" }}>
+                    <select
+                      value={hostingYear}
+                      onChange={(e) => { setHostingYear(Number(e.target.value)); resetResults(); }}
+                      style={{ border: "none", outline: "none", width: "100%", background: "transparent", cursor: "pointer", font: "inherit", height: "100%", appearance: "none" }}
+                    >
+                      {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                    <FiChevronDown style={{ position: "absolute", right: "12px", pointerEvents: "none", color: "#64748b" }} />
+                  </div>
+                </div>
+                <div className="admin-dashboard__modal-section">
+                  <label className="admin-dashboard__modal-label">From Month</label>
+                  <div className="admin-dashboard__modal-input-field" style={{ padding: "0 12px", display: "flex", alignItems: "center", background: "#fff", position: "relative" }}>
+                    <select
+                      value={startMonth}
+                      onChange={(e) => { setStartMonth(e.target.value); resetResults(); }}
+                      style={{ border: "none", outline: "none", width: "100%", background: "transparent", cursor: "pointer", font: "inherit", height: "100%", appearance: "none" }}
+                    >
+                      <option value="">Select month</option>
+                      {MONTH_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                    </select>
+                    <FiChevronDown style={{ position: "absolute", right: "12px", pointerEvents: "none", color: "#64748b" }} />
+                  </div>
+                </div>
+                <div className="admin-dashboard__modal-section">
+                  <label className="admin-dashboard__modal-label">To Month</label>
+                  <div className="admin-dashboard__modal-input-field" style={{ padding: "0 12px", display: "flex", alignItems: "center", background: "#fff", position: "relative" }}>
+                    <select
+                      value={endMonth}
+                      onChange={(e) => { setEndMonth(e.target.value); resetResults(); }}
+                      style={{ border: "none", outline: "none", width: "100%", background: "transparent", cursor: "pointer", font: "inherit", height: "100%", appearance: "none" }}
+                    >
+                      <option value="">Select month</option>
+                      {MONTH_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                    </select>
+                    <FiChevronDown style={{ position: "absolute", right: "12px", pointerEvents: "none", color: "#64748b" }} />
+                  </div>
+                </div>
+              </>
+            )}
+
             {/* Generate Button inside selection grid to save space */}
             <div className="admin-dashboard__modal-section" style={{ gridColumn: category === "member" ? "auto" : "span 1" }}>
               <button
                 type="button"
                 className="admin-dashboard__modal-button admin-dashboard__modal-button--primary"
                 onClick={handleGenerateReport}
-                disabled={loading || (category === "member" && !selectedMember)}
+                disabled={loading || (category === "member" && !selectedMember) || ((category === "hosting" || category === "attendance") && (!startMonth || !endMonth))}
                 style={{ width: "100%", minHeight: "44px", borderRadius: "12px" }}
               >
                 {loading ? "Generating..." : "Generate"}

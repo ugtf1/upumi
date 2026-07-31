@@ -344,3 +344,211 @@
   .member-view-page__table-wrap { overflow: visible !important; }
 }
 
+/* ── Status Badges ────────────────────────────────────────── */
+.member-view-page__status-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.member-view-page__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+
+  &--active   { background: #dcfce7; color: #15803d; }
+  &--inactive { background: #fee2e2; color: #b91c1c; }
+  &--standing { background: #e0f2fe; color: #0369a1; }
+  &--insurance { background: #fef3c7; color: #b45309; }
+}
+
+/* ── Full Info Grid ───────────────────────────────────────── */
+.member-view-page__info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px 20px;
+  padding: 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+
+  @media (max-width: 480px) {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.member-view-page__info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.member-view-page__info-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.member-view-page__info-value {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #1e293b;
+  word-break: break-word;
+}
+
+/* ── Section Divider ─────────────────────────────────────── */
+.member-view-page__section-divider {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+
+  span {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+
+  &::before, &::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: #e2e8f0;
+  }
+
+  &::before { display: none; }
+}
+
+/* ── Year select ─────────────────────────────────────────── */
+.member-view-page__year-select {
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #1e293b;
+  outline: none;
+  cursor: pointer;
+
+  &:focus { border-color: #166d2e; }
+}
+
+/* ── Monthly Attendance Grid ─────────────────────────────── */
+.member-view-page__attendance-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+
+  @media (max-width: 768px) { grid-template-columns: repeat(4, 1fr); }
+  @media (max-width: 480px) { grid-template-columns: repeat(3, 1fr); }
+}
+
+.member-view-page__attendance-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 8px;
+  border-radius: 12px;
+  border: 1.5px solid #e2e8f0;
+  background: #f8fafc;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  cursor: default;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.06);
+  }
+
+  &--present {
+    background: #f0fdf4;
+    border-color: #86efac;
+  }
+
+  &--absent {
+    background: #fff1f2;
+    border-color: #fca5a5;
+  }
+
+  &--none {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+    opacity: 0.7;
+  }
+}
+
+.member-view-page__attendance-month {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.member-view-page__attendance-dot {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+
+  .member-view-page__attendance-cell--present & { color: #16a34a; }
+  .member-view-page__attendance-cell--absent &  { color: #dc2626; }
+  .member-view-page__attendance-cell--none &    { color: #94a3b8; }
+}
+
+.member-view-page__attendance-dues {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #166d2e;
+  background: #dcfce7;
+  border-radius: 9999px;
+  padding: 1px 6px;
+}
+
+/* ── Hosting Schedule ─────────────────────────────────────── */
+.member-view-page__hosting-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.member-view-page__hosting-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 9999px;
+  padding: 5px 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #1d4ed8;
+
+  svg { color: #3b82f6; }
+}
+
+/* ── Report tab grid update — 5 tabs ─────────────────────── */
+.report-modal__tabs {
+  grid-template-columns: repeat(5, 1fr) !important;
+
+  @media (max-width: 640px) {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+
+  @media (max-width: 400px) {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}

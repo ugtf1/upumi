@@ -249,6 +249,21 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       };
     }
 
+    const attendanceRows = await prismaAny.attendance.findMany({
+      select: { year: true, month: true, usersIn: true }
+    }).catch(() => []);
+
+    const attendanceMap = new Map<string, boolean>();
+    for (const att of attendanceRows) {
+      const usersInList = String(att.usersIn ?? '').split(',').map((s: string) => s.trim()).filter(Boolean);
+      const isPresent =
+        usersInList.includes(row.userId || '') ||
+        usersInList.includes(row.id) ||
+        usersInList.includes(row.memberKey) ||
+        usersInList.includes(`user.${row.userId}`);
+      attendanceMap.set(`${att.year}-${att.month}`, isPresent);
+    }
+
     const raw = parseRawJson(row.rawJson);
     return {
       id: row.id,
@@ -269,14 +284,21 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       monthlyDuesAmount: decimalToNumber(row.user?.monthlyDues) ?? rawMoney(raw, ['Monthly Dues', 'monthlyDues']),
       totalPaid: decimalToNumber(row.user?.totalPaid) ?? rawMoney(raw, ['Total', '2026 dues paid', '2025 dues paid']),
       outstanding: decimalToNumber(row.user?.outstanding) ?? rawMoney(raw, ['Balance', '2026 balance', '2025 balance']),
-      monthlyDues: row.monthlyDues.map((due: any) => ({
-        id: due.id,
-        year: due.year,
-        month: due.month,
-        present: due.present ?? null,
-        duesPaid: decimalToNumber(due.duesPaid) ?? 0,
-        createdAt: due.createdAt,
-      })),
+      whatsapp: strCell(row.whatsapp) ?? strCell(raw.Whatsapp ?? raw.WhatsApp),
+      facebook: strCell(row.facebook) ?? strCell(raw.Facebook ?? raw.FaceBook),
+      insurance: strCell(row.insurance) ?? strCell(raw.Insurance ?? raw['Insurance?']),
+      monthlyDues: row.monthlyDues.map((due: any) => {
+        const attKey = `${due.year}-${due.month}`;
+        const presentInTable = attendanceMap.get(attKey) ?? false;
+        return {
+          id: due.id,
+          year: due.year,
+          month: due.month,
+          present: due.present === true || presentInTable,
+          duesPaid: decimalToNumber(due.duesPaid) ?? 0,
+          createdAt: due.createdAt,
+        };
+      }),
       rawJson: sanitizeRawJson(raw),
       userId: row.userId,
       updatedAt: row.updatedAt,
@@ -579,19 +601,28 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       totalPaid: z.number().optional(),
       outstanding: z.number().optional(),
       status: z.string().optional(),
+      whatsapp: z.string().optional(),
+      facebook: z.string().optional(),
+      insurance: z.string().optional(),
+      goodStanding: z.string().optional(),
+      financialGoodStanding: z.string().optional(),
     }).parse(req.body ?? {});
 
     // Normalize phone so it matches the format used at login
     const normalizedPhone = Body.phone !== undefined ? normalizePhone(Body.phone) : undefined;
 
-    const existing = await prisma.memberRecord.findUnique({
-      where: { id },
-      select: { id: true, userId: true },
-    });
     const userOnlyId = id.startsWith('user.') ? id.slice('user.'.length) : id;
-    const userOnly = existing ? null : await prisma.user.findUnique({
+    let existing = await prisma.memberRecord.findUnique({
+      where: { id },
+    });
+    if (!existing) {
+      existing = await prisma.memberRecord.findFirst({
+        where: { userId: userOnlyId },
+      });
+    }
+
+    const userOnly = await prisma.user.findUnique({
       where: { id: userOnlyId },
-      select: { id: true },
     });
     if (!existing && !userOnly) return reply.code(404).send({ message: 'Member not found' });
 
@@ -601,32 +632,57 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       return Number.isNaN(parsed.getTime()) ? null : parsed;
     };
 
-    const updated = existing
-      ? await prisma.memberRecord.update({
-          where: { id },
-          data: {
-            ...(Body.fName !== undefined ? { firstName: Body.fName } : {}),
-            ...(Body.lName !== undefined ? { lastName: Body.lName } : {}),
-            ...(Body.email !== undefined ? { email: Body.email.toLowerCase().trim() } : {}),
-            ...(normalizedPhone !== undefined ? { phone: normalizedPhone } : {}),
-            ...(Body.status !== undefined ? { status: Body.status } : {}),
-            ...(Body.dateJoined !== undefined ? { joined: Body.dateJoined ?? null } : {}),
-            ...(Body.voteRole !== undefined ? { voter: Body.voteRole } : {}),
-          },
-          select: {
-            id: true,
-            memberKey: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            phone: true,
-            joined: true,
-            status: true,
-            voter: true,
-            userId: true,
-          },
-        })
-      : { id: userOnlyId, memberKey: `user.${userOnlyId}`, userId: userOnlyId };
+    let memberRecord = existing;
+    if (!memberRecord && userOnly) {
+      memberRecord = await prisma.memberRecord.create({
+        data: {
+          memberKey: `user.${userOnly.id}`,
+          status: Body.status ?? 'Active',
+          firstName: Body.fName ?? userOnly.fName ?? null,
+          lastName: Body.lName ?? userOnly.lName ?? null,
+          joined: userOnly.dateJoined?.toISOString() ?? userOnly.createdAt.toISOString(),
+          phone: normalizedPhone ?? userOnly.phone ?? null,
+          email: Body.email?.toLowerCase().trim() ?? userOnly.email ?? null,
+          userId: userOnly.id,
+          rawJson: '{}',
+        } as any,
+      });
+    }
+
+    const updated = await prisma.memberRecord.update({
+      where: { id: memberRecord!.id },
+      data: {
+        ...(Body.fName !== undefined ? { firstName: Body.fName } : {}),
+        ...(Body.lName !== undefined ? { lastName: Body.lName } : {}),
+        ...(Body.email !== undefined ? { email: Body.email.toLowerCase().trim() } : {}),
+        ...(normalizedPhone !== undefined ? { phone: normalizedPhone } : {}),
+        ...(Body.status !== undefined ? { status: Body.status } : {}),
+        ...(Body.dateJoined !== undefined ? { joined: Body.dateJoined ?? null } : {}),
+        ...(Body.voteRole !== undefined ? { voter: Body.voteRole } : {}),
+        ...(Body.whatsapp !== undefined ? { whatsapp: Body.whatsapp } : {}),
+        ...(Body.facebook !== undefined ? { facebook: Body.facebook } : {}),
+        ...(Body.insurance !== undefined ? { insurance: Body.insurance } : {}),
+        ...(Body.goodStanding !== undefined ? { goodStanding: Body.goodStanding } : {}),
+        ...(Body.financialGoodStanding !== undefined ? { financialGoodStanding: Body.financialGoodStanding } : {}),
+      },
+      select: {
+        id: true,
+        memberKey: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        phone: true,
+        joined: true,
+        status: true,
+        voter: true,
+        userId: true,
+        whatsapp: true,
+        facebook: true,
+        insurance: true,
+        goodStanding: true,
+        financialGoodStanding: true,
+      },
+    });
 
     if (existing?.userId || userOnly) {
       await prisma.user.update({

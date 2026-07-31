@@ -463,4 +463,171 @@
     border: 1px dashed #cbd5e1;
     border-radius: 12px;
   }
+
+  /* Attendance report summary banner */
+  &__attendance-summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+    border: 1px solid #bbf7d0;
+    border-radius: 16px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+
+    @media (max-width: 480px) {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  &__attendance-summary-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    text-align: center;
+  }
+
+  &__attendance-summary-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #166534;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  &__attendance-summary-value {
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: #15803d;
+  }
+
+  /* Per-month accordion */
+  &__attendance-months {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  &__attendance-month-detail {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    overflow: hidden;
+    transition: box-shadow 0.2s ease;
+
+    &[open] {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+    }
+  }
+
+  &__attendance-month-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 18px;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+
+    &::-webkit-details-marker { display: none; }
+
+    @media (max-width: 520px) {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 10px;
+    }
+  }
+
+  &__attendance-month-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  &__attendance-month-name {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #0f172a;
+  }
+
+  &__attendance-month-stats {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+  }
+
+  &__attendance-rate-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+    min-width: 120px;
+
+    @media (max-width: 520px) {
+      align-items: flex-start;
+      width: 100%;
+    }
+  }
+
+  &__progress-bar {
+    width: 100%;
+    height: 6px;
+    background: #e2e8f0;
+    border-radius: 9999px;
+    overflow: hidden;
+  }
+
+  &__progress-fill {
+    height: 100%;
+    border-radius: 9999px;
+    transition: width 0.4s ease;
+  }
+
+  /* Expanded member lists */
+  &__attendance-lists {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    padding: 0 18px 18px;
+
+    @media (max-width: 600px) {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  &__attendance-list-block {
+    background: #f8fafc;
+    border-radius: 10px;
+    padding: 12px 14px;
+    border: 1px solid #e2e8f0;
+
+    &--present {
+      border-left: 3px solid #16a34a;
+    }
+
+    &--absent {
+      border-left: 3px solid #dc2626;
+    }
+  }
+
+  &__attendance-list-header {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #475569;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  &__attendance-member-item {
+    font-size: 0.85rem;
+    color: #1e293b;
+    padding: 4px 0;
+    border-bottom: 1px solid #f1f5f9;
+
+    &:last-child { border-bottom: none; }
+  }
 }
