@@ -1,7 +1,10 @@
 import React, { useState } from "react";
-import { FiX, FiFilter, FiDownload } from "react-icons/fi";
+import { FiX, FiFilter } from "react-icons/fi";
 import { getAllDuesReadOnly, getAllTransactionsReadOnly, getHostingSchedule } from "./api";
-import { MONTH_NAMES } from "./member-data";
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
+];
 import "./admin-page.scss";
 
 type ReportFilterModalProps = {
@@ -41,7 +44,7 @@ type HostingScheduleApiRow = {
 };
 
 const YEAR_OPTIONS = [2024, 2025, 2026, 2027];
-const MONTH_OPTIONS = MONTH_NAMES.map((name, i) => ({ value: i + 1, label: name }));
+const MONTH_OPTIONS = MONTH_NAMES.map((name: string, i: number) => ({ value: i + 1, label: name }));
 
 function formatCurrency(amount: number | string): string {
   const numeric = Number(amount);
@@ -164,9 +167,9 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
                 </tr>
               </thead>
               <tbody>
-                {resultsDues.map(row => {
+                {resultsDues.map((row: ApiMonthlyDue) => {
                   const name = [row.member?.firstName, row.member?.lastName].filter(Boolean).join(" ") || row.member?.email || "Unknown Member";
-                  const monthName = MONTH_OPTIONS.find(m => m.value === row.month)?.label || String(row.month);
+                  const monthName = MONTH_OPTIONS.find((m: { value: number; label: string }) => m.value === row.month)?.label || String(row.month);
                   return (
                     <tr key={row.id}>
                       <td data-label="Member Name">{name}</td>
@@ -205,7 +208,7 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
                 </tr>
               </thead>
               <tbody>
-                {resultsTransactions.map(row => (
+                {resultsTransactions.map((row: ApiTransactionRow) => (
                   <tr key={row.id}>
                     <td data-label="Name / User">{row.fullName}</td>
                     <td data-label="Title">{row.title}</td>
@@ -237,8 +240,8 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
                 </tr>
               </thead>
               <tbody>
-                {resultsHosting.map(row => {
-                  const monthName = MONTH_OPTIONS.find(m => m.value === row.month)?.label || String(row.month);
+                {resultsHosting.map((row: HostingScheduleApiRow) => {
+                  const monthName = MONTH_OPTIONS.find((m: { value: number; label: string }) => m.value === row.month)?.label || String(row.month);
                   return (
                     <tr key={row.id}>
                       <td data-label="Month">{monthName} {row.year}</td>
@@ -340,7 +343,7 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
                     className={startMonth ? "has-value" : ""}
                   >
                     <option value="">Select month</option>
-                    {MONTH_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                    {MONTH_OPTIONS.map((m: { value: number; label: string }) => <option key={m.value} value={m.value}>{m.label}</option>)}
                   </select>
                 </div>
               </div>
@@ -353,7 +356,7 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
                     className={endMonth ? "has-value" : ""}
                   >
                     <option value="">Select month</option>
-                    {MONTH_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                    {MONTH_OPTIONS.map((m: { value: number; label: string }) => <option key={m.value} value={m.value}>{m.label}</option>)}
                   </select>
                 </div>
               </div>
