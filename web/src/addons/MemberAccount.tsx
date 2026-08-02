@@ -133,7 +133,6 @@ export default function MemberAccount() {
 
   // Member profile for sidebar / summary cards
   const [memberProfile, setMemberProfile] = useState<MemberProfileResponse | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // All-platform transaction rows (filtered strictly for this member)
@@ -153,15 +152,12 @@ export default function MemberAccount() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        setLoading(true);
         setError(null);
         const profile = (await getMemberProfile()) as MemberProfileResponse;
         setMemberProfile(profile);
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : "Failed to load account data";
         setError(errMsg);
-      } finally {
-        setLoading(false);
       }
     };
     fetchData();
