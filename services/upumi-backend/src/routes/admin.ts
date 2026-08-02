@@ -254,15 +254,26 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     }).catch(() => []);
 
     const attendanceMap = new Map<string, boolean>();
+    let presentCount = 0;
+    const memberName = `${row.firstName ?? ''} ${row.lastName ?? ''}`.trim().toLowerCase();
+
     for (const att of attendanceRows) {
-      const usersInList = String(att.usersIn ?? '').split(',').map((s: string) => s.trim()).filter(Boolean);
+      const usersInList = String(att.usersIn ?? '').split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean);
       const isPresent =
-        usersInList.includes(row.userId || '') ||
-        usersInList.includes(row.id) ||
-        usersInList.includes(row.memberKey) ||
-        usersInList.includes(`user.${row.userId}`);
+        (row.userId && usersInList.includes(row.userId.toLowerCase())) ||
+        usersInList.includes(row.id.toLowerCase()) ||
+        usersInList.includes(row.memberKey.toLowerCase()) ||
+        (row.userId && usersInList.includes(`user.${row.userId.toLowerCase()}`)) ||
+        (memberName.length > 0 && usersInList.some((u: string) => u.includes(memberName) || memberName.includes(u)));
+
       attendanceMap.set(`${att.year}-${att.month}`, isPresent);
+      if (isPresent) {
+        presentCount++;
+      }
     }
+
+    const totalMeetings = attendanceRows.length;
+    const computedPct = totalMeetings > 0 ? String(Math.round((presentCount / totalMeetings) * 100)) : (strCell(row.attendancePct) ?? '0');
 
     const raw = parseRawJson(row.rawJson);
     return {
@@ -277,7 +288,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       phone: strCell(row.phone) ?? strCell(row.user?.phone) ?? strCell(raw.Phone),
       email: strCell(row.email) ?? strCell(row.user?.email) ?? strCell(raw.Email),
       address: strCell(row.user?.address) ?? strCell(raw.Address),
-      attendancePct: strCell(row.attendancePct) ?? strCell(raw['%Attendance']),
+      attendancePct: computedPct,
+      attendanceCount: presentCount,
+      totalMeetings: totalMeetings,
       voter: strCell(row.voter) ?? strCell(row.user?.voteRole) ?? strCell(raw.Voter),
       goodStanding: strCell(row.goodStanding) ?? strCell(raw.GoodStanding),
       financialGoodStanding: strCell(row.financialGoodStanding) ?? strCell(raw['Financial GoodStanding']),

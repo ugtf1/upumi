@@ -408,13 +408,36 @@
   }
 
   .member-account__sidebar-body {
-    gap: 28px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 16px 20px;
+    align-items: flex-start;
+  }
+
+  .member-account__nav {
+    flex: 1 1 200px;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
   .member-account__sidebar-footer {
+    flex: 0 0 auto;
     margin-top: 0;
-    gap: 24px;
+    gap: 12px;
     padding-top: 0;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .member-account__sidebar-links {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
   }
 
   .member-account__topbar {
@@ -436,13 +459,16 @@
     margin: 0;
   }
 
-  .member-account__content,
+  .member-account__content {
+    padding-inline: 14px;
+  }
+
   .member-account__table-card {
     padding-inline: 14px;
   }
 
   .member-account__chart-shell {
-    height: 420px;
+    height: 380px;
   }
 }
 
@@ -456,22 +482,44 @@
     font-size: 1.75rem;
   }
 
-  .member-account__sidebar-body,
+  .member-account__sidebar-body {
+    flex-direction: column;
+    padding: 16px 12px;
+    gap: 12px;
+  }
+
+  .member-account__nav {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .member-account__sidebar-links {
+    flex-direction: column;
+  }
+
+  .member-account__sidebar-footer {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+
   .member-account__content {
-    padding: 18px 12px;
+    padding: 14px 12px;
+    gap: 16px;
   }
 
   .member-account__stats {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
   }
 
   .member-account__nav,
   .member-account__sidebar-links {
-    gap: 12px;
+    gap: 10px;
   }
 
   .member-account__chart-shell {
-    height: 340px;
+    height: 280px;
   }
 
   .member-account__table-card {
@@ -520,6 +568,17 @@
     color: #9a9997;
     font-size: 0.8rem;
     font-weight: 600;
+  }
+}
+
+@media (max-width: 400px) {
+  .member-account__stats {
+    grid-template-columns: 1fr;
+  }
+
+  .member-account__summary-card,
+  .member-account__status-card {
+    min-height: unset;
   }
 }
 

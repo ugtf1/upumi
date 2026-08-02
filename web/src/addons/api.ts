@@ -175,6 +175,11 @@ export async function getAllDuesReadOnly(): Promise<unknown[]> {
   return apiGet<unknown[]>("/members/database/dues");
 }
 
+// GET /members/database/attendance — member-safe read of all attendance records.
+export async function getAllAttendanceReadOnly(): Promise<unknown[]> {
+  return apiGet<unknown[]>("/members/database/attendance");
+}
+
 // ── Meeting API helpers ───────────────────────────────────────────────────────
 
 export type Meeting = {

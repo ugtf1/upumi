@@ -87,25 +87,42 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
 
     const rawJson = parseRawJson(mr.rawJson);
 
-    // Fetch attendance records for current year to verify monthly attendance
-    const attendanceRows = await (prisma as any).attendance.findMany({
-      where: { year: currentYear },
-      select: { month: true, usersIn: true },
+    // Fetch ALL attendance records directly from the database table to count meetings present
+    const allAttendanceRows = await (prisma as any).attendance.findMany({
+      select: { year: true, month: true, usersIn: true },
     }).catch(() => []);
 
     const attendanceMap = new Map<number, boolean>();
-    for (const att of attendanceRows) {
-      const usersInList = String(att.usersIn ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+    let presentCount = 0;
+    const memberName = `${mr.firstName ?? ''} ${mr.lastName ?? ''}`.trim().toLowerCase();
+
+    for (const att of allAttendanceRows) {
+      const usersInList = String(att.usersIn ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
       const isPresent =
-        usersInList.includes(user.id) ||
-        usersInList.includes(mr.id) ||
-        usersInList.includes(mr.memberKey) ||
-        usersInList.includes(`user.${user.id}`);
-      attendanceMap.set(att.month, isPresent);
+        usersInList.includes(user.id.toLowerCase()) ||
+        usersInList.includes(mr.id.toLowerCase()) ||
+        usersInList.includes(mr.memberKey.toLowerCase()) ||
+        usersInList.includes(`user.${user.id}`.toLowerCase()) ||
+        (memberName.length > 0 && usersInList.some((u) => u.includes(memberName) || memberName.includes(u)));
+
+      if (att.year === currentYear) {
+        attendanceMap.set(att.month, isPresent);
+      }
+      if (isPresent) {
+        presentCount++;
+      }
     }
 
+    const totalMeetings = allAttendanceRows.length;
+    const computedPct = totalMeetings > 0 ? String(Math.round((presentCount / totalMeetings) * 100)) : (mr.attendancePct ?? '0');
+
     return {
-      linked: true,
+      linked: {
+        userId: user.id,
+        memberRecordId: mr.id,
+        memberKey: mr.memberKey,
+        displayMemberId: mr.memberKey,
+      },
       user: { id: user.id },
       member: {
         firstName: mr.firstName,
@@ -117,7 +134,9 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
         financialGoodStanding: mr.financialGoodStanding,
         voter: mr.voter,
         insurance: mr.insurance,
-        attendancePct: mr.attendancePct,
+        attendancePct: computedPct,
+        attendanceCount: presentCount,
+        totalMeetings: totalMeetings,
         email: (rawJson.Email as string) ?? null,
         phone: (rawJson.Phone as string) ?? null,
         address: user.address ?? (rawJson.Address as string) ?? null,

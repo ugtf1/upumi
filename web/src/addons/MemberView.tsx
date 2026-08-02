@@ -361,7 +361,9 @@ export default function MemberViewPage() {
           phoneNumber: row.phone || "-",
           address: row.address || "",
           dateJoined: formatDateDisplay(row.joined),
-          attendance: row.attendancePct || "",
+          attendance: row.attendanceCount != null && row.totalMeetings != null
+            ? `${row.attendanceCount} / ${row.totalMeetings} Meetings (${row.attendancePct || 0}%)`
+            : row.attendancePct ? `${row.attendancePct}%` : "-",
           voteRole: String(row.voter ?? "").trim().toUpperCase() === "YES" ? "YES" : "NO",
           monthlyDues: formatCurrencyAmount(row.monthlyDuesAmount),
           totalPaid: formatCurrencyAmount(row.totalPaid),
@@ -831,6 +833,7 @@ export default function MemberViewPage() {
   const summaryCards: SummaryCard[] = [
     { label: "Monthly Dues", value: memberProfile.monthlyDues },
     { label: "Total Paid", value: `$${totalPaidFromAllSources.toLocaleString()}`, tone: "success" },
+    { label: "Attendance", value: memberProfile.attendance || "0 Meetings", tone: "success" },
     { label: "Outstanding", value: memberProfile.outstanding, tone: "danger" },
   ];
 
