@@ -4,6 +4,7 @@ import type { IconType } from "react-icons";
 import {
   FiCalendar,
   FiCheck,
+  FiCheckCircle,
   FiCreditCard,
   FiEdit2,
   FiFilter,
@@ -17,6 +18,7 @@ import {
   FiUsers,
   FiMoreVertical,
   FiTrash2,
+  FiXCircle,
 } from "react-icons/fi";
 
 import { apiGet, apiPatch, apiPost, apiDelete, clearToken } from "./api";
@@ -75,6 +77,14 @@ type ApiTransactionRow = {
   date: string;
   createdAt?: string;
 };
+
+type AttendanceApiRow = {
+  id: string;
+  year: number;
+  month: number;
+  usersIn: string;
+};
+
 
 type RecordAttendanceFormState = {
   year: string;
@@ -298,6 +308,10 @@ export default function MemberViewPage() {
   // Extra raw member detail fields (not in MemberDetailRecord)
   const [memberRaw, setMemberRaw] = useState<Partial<ApiMemberDetail>>({});
   const [hostingSchedule, setHostingSchedule] = useState<{ id: string; year: number; month: number; hostMember: string }[]>([]);
+  // Live attendance rows from the database (used for the attendance grid)
+  const [liveAttendanceRows, setLiveAttendanceRows] = useState<AttendanceApiRow[]>([]);
+  // Recent transactions for this member (all categories, not just dues)
+  const [recentMemberTxRows, setRecentMemberTxRows] = useState<{ id: string; date: string; title: string; amount: string; status: string; isDue: boolean }[]>([]);
   // Tracker year for the attendance grid
   const [attendanceYear, setAttendanceYear] = useState<number>(new Date().getFullYear());
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -405,8 +419,17 @@ export default function MemberViewPage() {
         if (active) setHostingSchedule([]);
       });
 
-    // Once both resolve, build the merged list
-    Promise.all([memberPromise, txPromise, hostingPromise]).then(() => {
+    const attendancePromise = apiGet<AttendanceApiRow[]>("/admin/database/attendance")
+      .then((rows) => {
+        if (!active) return;
+        setLiveAttendanceRows(rows || []);
+      })
+      .catch(() => {
+        if (active) setLiveAttendanceRows([]);
+      });
+
+    // Once all resolve, build the merged payment list and recent transactions
+    Promise.all([memberPromise, txPromise, hostingPromise, attendancePromise]).then(() => {
       if (!active) return;
       setUnifiedPayments(mergeAndSortPayments(resolvedDues, [], resolvedUserId));
     });
@@ -418,6 +441,59 @@ export default function MemberViewPage() {
   useEffect(() => {
     setUnifiedPayments(mergeAndSortPayments(rawDues, rawTransactions, memberUserId));
   }, [rawDues, rawTransactions, memberUserId]);
+
+  // Build recent all-category transaction rows for this member whenever rawTransactions or memberUserId changes
+  useEffect(() => {
+    if (!memberUserId && !memberRaw.firstName) return;
+    const memberFullName = [memberRaw.firstName, memberRaw.lastName].filter(Boolean).join(" ").toLowerCase().trim();
+    const MONTH_NAMES_LONG = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December",
+    ];
+
+    // 1. All-category transactions belonging to this member
+    const txNorm = rawTransactions
+      .filter((row) => {
+        if (memberUserId && row.userId === memberUserId) return true;
+        if (memberFullName && row.fullName?.toLowerCase().includes(memberFullName)) return true;
+        return false;
+      })
+      .map((row) => ({
+        id: `tx-${row.id}`,
+        date: row.date
+          ? new Date(row.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+          : "-",
+        title: row.title,
+        amount: `$${Number(row.amount ?? 0).toLocaleString()}`,
+        status: "Completed",
+        rawDate: row.date || "",
+        rawAmount: Number(row.amount ?? 0),
+        isDue: row.title?.toLowerCase().includes("due"),
+      }));
+
+    // 2. Monthly dues records for this member
+    const dueNorm = rawDues.map((row) => {
+      const monthName = MONTH_NAMES_LONG[(row.month ?? 1) - 1] ?? String(row.month);
+      return {
+        id: `due-${row.id}`,
+        date: row.createdAt
+          ? new Date(row.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+          : "-",
+        title: `Monthly Dues – ${monthName} ${row.year ?? ""}`,
+        amount: `$${Number(row.duesPaid ?? 0).toLocaleString()}`,
+        status: "Completed",
+        rawDate: row.createdAt || "",
+        rawAmount: Number(row.duesPaid ?? 0),
+        isDue: true,
+      };
+    });
+
+    const combined = [...txNorm, ...dueNorm].sort(
+      (a, b) => new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime()
+    );
+    setRecentMemberTxRows(combined);
+  }, [rawTransactions, rawDues, memberUserId, memberRaw]);
+
 
   useEffect(() => {
     if (!isEditMemberModalOpen && !isAddTransactionModalOpen) return undefined;
@@ -1049,21 +1125,46 @@ export default function MemberViewPage() {
                 </select>
               </div>
             </div>
-            <div className="member-view-page__attendance-grid">
+            <div className="member-view-page__attendance-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(78px, 1fr))", gap: "10px" }}>
               {MONTH_OPTIONS.map((m) => {
-                const due = rawDues.find(d => d.year === attendanceYear && d.month === m.value);
-                const isPresent = due?.present === true;
-                const hasDue = !!due;
+                const mNum = m.value;
+                // Check live attendance rows from the database (same method as MemberAccount)
+                const liveRow = liveAttendanceRows.find(att => att.year === attendanceYear && att.month === mNum);
+                const viewerUserId = memberRaw.userId ?? memberRaw.user?.id ?? null;
+                const memberKey = memberRaw.memberKey ?? null;
+                const memberFirstLast = [memberRaw.firstName, memberRaw.lastName].filter(Boolean).join(" ").toLowerCase().trim();
+                let isPresentInDb = false;
+                if (liveRow) {
+                  const usersInList = String(liveRow.usersIn ?? "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+                  isPresentInDb =
+                    (viewerUserId != null && usersInList.includes(viewerUserId.toLowerCase())) ||
+                    (memberKey != null && usersInList.includes(memberKey.toLowerCase())) ||
+                    (memberFirstLast.length > 0 && usersInList.some(u => u.includes(memberFirstLast) || memberFirstLast.includes(u)));
+                }
+                // Also check due record's 'present' flag as fallback
+                const due = rawDues.find(d => d.year === attendanceYear && d.month === mNum);
+                const isPresent = isPresentInDb || due?.present === true;
                 return (
                   <div
                     key={m.value}
-                    className={`member-view-page__attendance-cell member-view-page__attendance-cell--${isPresent ? "present" : hasDue ? "absent" : "none"}`}
-                    title={`${m.label} ${attendanceYear}: ${isPresent ? "Present" : hasDue ? "Absent" : "No record"}`}
+                    style={{
+                      padding: "10px 6px",
+                      borderRadius: "10px",
+                      textAlign: "center",
+                      border: isPresent ? "1px solid #a7f3d0" : "1px solid #e2e8f0",
+                      backgroundColor: isPresent ? "#ecfdf5" : "#f8fafc",
+                    }}
+                    title={`${m.label} ${attendanceYear}: ${isPresent ? "Present" : liveRow || due ? "Absent" : "No record"}`}
                   >
-                    <span className="member-view-page__attendance-month">{m.label.slice(0, 3)}</span>
-                    <span className="member-view-page__attendance-dot">{isPresent ? "✓" : hasDue ? "✗" : "–"}</span>
+                    <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#64748b" }}>{m.label.slice(0, 3)}</div>
+                    <div style={{ margin: "6px 0", display: "flex", justifyContent: "center" }}>
+                      {isPresent ? <FiCheckCircle size={20} color="#059669" /> : <FiXCircle size={20} color="#94a3b8" />}
+                    </div>
+                    <span style={{ fontSize: "0.7rem", fontWeight: 600, color: isPresent ? "#047857" : "#64748b" }}>
+                      {isPresent ? "Present" : "Absent"}
+                    </span>
                     {due && due.duesPaid > 0 && (
-                      <span className="member-view-page__attendance-dues">${Number(due.duesPaid).toLocaleString()}</span>
+                      <div style={{ fontSize: "0.68rem", color: "#0284c7", marginTop: "2px" }}>${Number(due.duesPaid).toLocaleString()}</div>
                     )}
                   </div>
                 );
@@ -1223,6 +1324,72 @@ export default function MemberViewPage() {
                 </table>
               </div>
             )}
+          </div>
+
+          {/* ── Recent Transactions for this Member ─────────────────────── */}
+          <div className="admin-dashboard__section-copy member-page__section-copy" style={{ marginTop: "24px" }}>
+            <h2>Recent Transactions</h2>
+            <p>
+              {(memberLoading || txLoading)
+                ? "Loading..."
+                : `${recentMemberTxRows.length} transaction${recentMemberTxRows.length !== 1 ? "s" : ""} recorded — all categories`}
+            </p>
+          </div>
+
+          <div className="admin-dashboard__table-shell member-view-page__table-shell">
+            <div className="admin-dashboard__table-wrap member-view-page__table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Title / Category</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(memberLoading || txLoading) ? (
+                    <tr>
+                      <td colSpan={4} className="member-view-page__table-state">Loading transactions...</td>
+                    </tr>
+                  ) : recentMemberTxRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="member-view-page__table-state">No transactions recorded yet.</td>
+                    </tr>
+                  ) : (
+                    recentMemberTxRows.slice(0, 20).map((row) => (
+                      <tr key={row.id}>
+                        <td data-label="Date">{row.date}</td>
+                        <td data-label="Title">
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <span>{row.title}</span>
+                            {row.isDue && (
+                              <span style={{
+                                display: "inline-flex", alignItems: "center", padding: "2px 8px",
+                                fontSize: "0.75rem", fontWeight: 600, borderRadius: "999px",
+                                backgroundColor: "rgba(2, 132, 199, 0.12)", color: "#0369a1", whiteSpace: "nowrap",
+                              }}>
+                                Dues
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td data-label="Amount">{row.amount}</td>
+                        <td data-label="Status">
+                          <span style={{
+                            display: "inline-flex", alignItems: "center", padding: "4px 12px",
+                            borderRadius: "999px", fontSize: "0.82rem", fontWeight: 600,
+                            backgroundColor: "#e6f4ea", color: "#137333",
+                          }}>
+                            {row.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
       </main>

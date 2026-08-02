@@ -14,16 +14,7 @@ import {
   FiUsers,
   FiXCircle,
 } from "react-icons/fi";
-import {
-  CartesianGrid,
-  LabelList,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+
 
 import {
   clearToken,
@@ -57,10 +48,6 @@ function formatCurrency(value: number | null | undefined) {
   return `${sign}$${Math.abs(value ?? 0).toLocaleString()}`;
 }
 
-function renderTooltipValue(value: number | string | Array<number | string>) {
-  if (Array.isArray(value)) return value.join(", ");
-  return typeof value === "number" ? value.toLocaleString() : value;
-}
 
 type MonthlyDueRecord = {
   year: number;
@@ -314,14 +301,6 @@ export default function MemberAccount() {
     ];
   }, [memberProfile, allTxRows]);
 
-  // Monthly chart data
-  const monthlyBalanceData = useMemo(() => {
-    if (!memberProfile?.monthlyDues) return [];
-    return memberProfile.monthlyDues.map((d: MonthlyDueRecord) => ({
-      month: MONTH_OPTIONS_SHORT[d.month - 1] || `M${d.month}`,
-      value: d.duesPaid ?? 0,
-    }));
-  }, [memberProfile]);
 
   // Build attendance map for selected year from live database records
   const memberAttendanceMap = useMemo(() => {
@@ -653,36 +632,6 @@ export default function MemberAccount() {
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-          </section>
-
-          {/* Chart */}
-          <section className="member-account__card member-account__chart-card">
-            <div className="member-account__chart-legend">
-              <span className="member-account__chart-dot" />
-              <span>Monthly Dues Paid</span>
-            </div>
-            <div className="member-account__chart-shell">
-              {loading ? (
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "300px" }}>Loading...</div>
-              ) : monthlyBalanceData.length === 0 ? (
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "300px" }}>No dues data available</div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={monthlyBalanceData} margin={{ top: 34, right: 34, left: 8, bottom: 8 }}>
-                    <CartesianGrid stroke="#edf1ee" strokeDasharray="0" vertical={false} />
-                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "#a7afb4", fontSize: 14 }} dy={10} />
-                    <YAxis axisLine={false} tickLine={false} domain={[0, "dataMax + 10"]} tick={{ fill: "#9ea8ad", fontSize: 14 }} dx={-10} />
-                    <Tooltip
-                      formatter={renderTooltipValue}
-                      contentStyle={{ borderRadius: 14, border: "1px solid #dfe8e2", boxShadow: "0 16px 32px rgba(16, 27, 20, 0.08)" }}
-                    />
-                    <Line type="linear" dataKey="value" stroke="#13a594" strokeWidth={3} dot={{ r: 6, fill: "#119c8b", strokeWidth: 0 }} activeDot={{ r: 7, fill: "#119c8b", strokeWidth: 0 }}>
-                      <LabelList dataKey="value" position="top" offset={12} fill="#18a294" fontSize={14} />
-                    </Line>
-                  </LineChart>
-                </ResponsiveContainer>
               )}
             </div>
           </section>
