@@ -202,6 +202,46 @@ export async function deleteYearlyBalance(id: string): Promise<{ ok: boolean }> 
   return apiDelete<{ ok: boolean }>(`/admin/database/yearlyBalances/${id}`);
 }
 
+// ── Member Yearly Balance (per-member, linked to MemberRecord) ───────────────
+
+export type MemberYearlyBalanceApiRow = {
+  id: string;
+  memberRecordId: string;
+  year: number;
+  balance: number | string;
+};
+
+/** Member-safe: returns only the logged-in member's own yearly balance records. */
+export async function getMemberYearlyBalances(): Promise<MemberYearlyBalanceApiRow[]> {
+  return apiGet<MemberYearlyBalanceApiRow[]>("/members/database/memberYearlyBalances");
+}
+
+/** Admin: fetch ALL member yearly balances (filtered by memberRecordId in the UI). */
+export async function getAllMemberYearlyBalances(): Promise<MemberYearlyBalanceApiRow[]> {
+  return apiGet<MemberYearlyBalanceApiRow[]>("/admin/database/memberYearlyBalances");
+}
+
+/** Admin: create or update a member yearly balance record. */
+export async function saveMemberYearlyBalance(payload: {
+  id?: string;
+  memberRecordId: string;
+  year: number;
+  balance: number;
+}): Promise<MemberYearlyBalanceApiRow> {
+  if (payload.id) {
+    return apiPatch<MemberYearlyBalanceApiRow>(
+      `/admin/database/memberYearlyBalances/${payload.id}`,
+      { balance: payload.balance }
+    );
+  }
+  return apiPost<MemberYearlyBalanceApiRow>("/admin/database/memberYearlyBalances", payload);
+}
+
+/** Admin: delete a member yearly balance record. */
+export async function deleteMemberYearlyBalance(id: string): Promise<{ ok: boolean }> {
+  return apiDelete<{ ok: boolean }>(`/admin/database/memberYearlyBalances/${id}`);
+}
+
 // ── Meeting API helpers ───────────────────────────────────────────────────────
 
 export type Meeting = {

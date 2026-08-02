@@ -17,6 +17,7 @@ const TABLES = {
   expenses: 'expense',
   memberFinance: 'memberFinance',
   yearlyBalances: 'yearlyBalance',
+  memberYearlyBalances: 'memberYearlyBalance',
 } as const;
 
 type TableName = keyof typeof TABLES;
@@ -159,6 +160,15 @@ async function sanitizeData(table: TableName, body: any, partial = false) {
         z.object({ year: z.number() }).parse(body);
       }
       return {
+        ...pick('year', Number),
+        ...pick('balance', money),
+      };
+    case 'memberYearlyBalances':
+      if (!partial) {
+        z.object({ memberRecordId: z.string().min(1), year: z.number() }).parse(body);
+      }
+      return {
+        ...pick('memberRecordId', String),
         ...pick('year', Number),
         ...pick('balance', money),
       };
@@ -354,8 +364,22 @@ export const adminDatabaseRoutes: FastifyPluginAsync = async (app) => {
 };
 
 export const memberDatabaseRoutes: FastifyPluginAsync = async (app) => {
-  app.get('/:table', { preHandler: requireAuth }, async (req: any) => {
+  app.get('/:table', { preHandler: requireAuth }, async (req: any, reply) => {
     const { table } = TableParamSchema.parse(req.params);
+
+    // Member yearly balances: scope to only this member's records
+    if (table === 'memberYearlyBalances') {
+      const memberRecord = await prisma.memberRecord.findFirst({
+        where: { userId: req.user.sub },
+        select: { id: true },
+      });
+      if (!memberRecord) return [];
+      return prismaAny.memberYearlyBalance.findMany({
+        where: { memberRecordId: memberRecord.id },
+        orderBy: { year: 'desc' },
+      });
+    }
+
     return listRows(table);
   });
 };

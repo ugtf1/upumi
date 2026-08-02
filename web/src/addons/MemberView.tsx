@@ -21,7 +21,7 @@ import {
   FiXCircle,
 } from "react-icons/fi";
 
-import { apiGet, apiPatch, apiPost, apiDelete, clearToken } from "./api";
+import { apiGet, apiPatch, apiPost, apiDelete, clearToken, getAllMemberYearlyBalances, saveMemberYearlyBalance, deleteMemberYearlyBalance, type MemberYearlyBalanceApiRow } from "./api";
 import { MEMBER_STATUS_OPTIONS, type MemberDetailRecord, type MemberStatus } from "./member-data";
 import "./admin-page.scss";
 import "./member-page.scss";
@@ -330,6 +330,16 @@ export default function MemberViewPage() {
   const [editPaymentLoading, setEditPaymentLoading] = useState(false);
   const [editPaymentError, setEditPaymentError] = useState<string | null>(null);
 
+  // ── Member Yearly Balance state ──────────────────────────────────────────
+  const MYB_YEAR_OPTIONS = Array.from({ length: new Date().getFullYear() - 2018 + 1 }, (_, i) => 2018 + i).reverse();
+  const [mybBalances, setMybBalances] = useState<MemberYearlyBalanceApiRow[]>([]);
+  const [mybLoading, setMybLoading] = useState(false);
+  const [mybError, setMybError] = useState<string | null>(null);
+  const [mybIsAdding, setMybIsAdding] = useState(false);
+  const [mybEditingId, setMybEditingId] = useState<string | null>(null);
+  const [mybEditYear, setMybEditYear] = useState<number>(new Date().getFullYear());
+  const [mybEditBalance, setMybEditBalance] = useState<string>("");
+
   // Use a stable ref + useEffect for the action menu outside-click handler
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -433,6 +443,20 @@ export default function MemberViewPage() {
       if (!active) return;
       setUnifiedPayments(mergeAndSortPayments(resolvedDues, [], resolvedUserId));
     });
+
+    // Fetch member yearly balances for this member record
+    const fetchMybBalances = () => {
+      setMybLoading(true);
+      getAllMemberYearlyBalances()
+        .then((rows) => {
+          if (!active) return;
+          // Filter to this member's records (will be further confirmed by memberRecordId)
+          setMybBalances(rows);
+        })
+        .catch(() => { if (active) setMybBalances([]); })
+        .finally(() => { if (active) setMybLoading(false); });
+    };
+    fetchMybBalances();
 
     return () => { active = false; };
   }, [memberId]);
@@ -1187,6 +1211,160 @@ export default function MemberViewPage() {
                       </div>
                     ))}
                   </div>
+                </>
+              );
+            })()}
+
+            {/* ── Member Yearly Balance ────────────────────────────────────── */}
+            {(() => {
+              // Filter balances to this specific member's MemberRecord
+              const thisMemberRecordId = memberRaw.id ?? null;
+              const memberBalances = thisMemberRecordId
+                ? mybBalances.filter(b => b.memberRecordId === thisMemberRecordId)
+                : [];
+
+              const handleMybSave = async () => {
+                if (!mybEditYear || !mybEditBalance || !thisMemberRecordId) return;
+                setMybError(null);
+                try {
+                  await saveMemberYearlyBalance({
+                    id: mybEditingId || undefined,
+                    memberRecordId: thisMemberRecordId,
+                    year: mybEditYear,
+                    balance: Number(mybEditBalance),
+                  });
+                  setMybIsAdding(false);
+                  setMybEditingId(null);
+                  setMybEditBalance("");
+                  // Refresh
+                  const updated = await getAllMemberYearlyBalances();
+                  setMybBalances(updated);
+                } catch (err) {
+                  setMybError(err instanceof Error ? err.message : "Failed to save");
+                }
+              };
+
+              const handleMybDelete = async (id: string) => {
+                if (!window.confirm("Delete this yearly balance record?")) return;
+                setMybError(null);
+                try {
+                  await deleteMemberYearlyBalance(id);
+                  const updated = await getAllMemberYearlyBalances();
+                  setMybBalances(updated);
+                } catch (err) {
+                  setMybError(err instanceof Error ? err.message : "Failed to delete");
+                }
+              };
+
+              return (
+                <>
+                  <div className="member-view-page__section-divider" style={{ marginTop: "20px" }}>
+                    <span>Member Yearly Balance</span>
+                    {!mybIsAdding && !mybEditingId && (
+                      <button
+                        type="button"
+                        onClick={() => { setMybIsAdding(true); setMybEditingId(null); setMybEditYear(new Date().getFullYear()); setMybEditBalance(""); }}
+                        style={{
+                          display: "flex", alignItems: "center", gap: "5px",
+                          padding: "5px 12px", borderRadius: "6px", border: "none",
+                          backgroundColor: "#2563eb", color: "#fff", cursor: "pointer",
+                          fontSize: "0.8rem", fontWeight: 600,
+                        }}
+                      >
+                        <FiPlus size={13} /> Add Balance
+                      </button>
+                    )}
+                  </div>
+
+                  {mybError && (
+                    <div style={{ color: "#dc2626", fontSize: "0.82rem", marginBottom: "10px" }}>{mybError}</div>
+                  )}
+
+                  {(mybIsAdding || mybEditingId) && (
+                    <div style={{
+                      display: "flex", alignItems: "flex-end", gap: "12px", flexWrap: "wrap",
+                      padding: "14px", backgroundColor: "#f8fafc", borderRadius: "8px",
+                      border: "1px solid #e2e8f0", marginBottom: "14px",
+                    }}>
+                      <div>
+                        <label style={{ display: "block", fontSize: "0.73rem", color: "#64748b", marginBottom: "4px" }}>Year</label>
+                        <select
+                          value={mybEditYear}
+                          onChange={(e) => setMybEditYear(Number(e.target.value))}
+                          style={{ padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "0.88rem", minWidth: "110px", outline: "none" }}
+                        >
+                          {MYB_YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ display: "block", fontSize: "0.73rem", color: "#64748b", marginBottom: "4px" }}>Balance ($)</label>
+                        <input
+                          type="number"
+                          value={mybEditBalance}
+                          onChange={(e) => setMybEditBalance(e.target.value)}
+                          placeholder="e.g. 5000"
+                          style={{ padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "0.88rem", outline: "none", width: "130px" }}
+                        />
+                      </div>
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <button
+                          type="button"
+                          onClick={() => { setMybIsAdding(false); setMybEditingId(null); setMybError(null); }}
+                          style={{ padding: "7px 12px", borderRadius: "6px", border: "1px solid #cbd5e1", backgroundColor: "#fff", color: "#475569", cursor: "pointer", fontWeight: 600, fontSize: "0.82rem" }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleMybSave}
+                          disabled={!mybEditBalance || !mybEditYear}
+                          style={{ padding: "7px 14px", borderRadius: "6px", border: "none", backgroundColor: "#16a34a", color: "#fff", cursor: "pointer", fontWeight: 600, fontSize: "0.82rem" }}
+                        >
+                          <FiCheck size={13} style={{ marginRight: 4 }} /> Save
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {mybLoading ? (
+                    <div style={{ color: "#64748b", fontSize: "0.88rem", padding: "10px 0" }}>Loading...</div>
+                  ) : memberBalances.length === 0 && !mybIsAdding ? (
+                    <div style={{ color: "#94a3b8", fontSize: "0.88rem", padding: "10px 0" }}>No yearly balance records for this member yet.</div>
+                  ) : (
+                    <div style={{ display: "grid", gap: "10px", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", marginBottom: "4px" }}>
+                      {memberBalances.sort((a, b) => b.year - a.year).map(row => (
+                        <div key={row.id} style={{
+                          padding: "14px", borderRadius: "8px",
+                          border: mybEditingId === row.id ? "1.5px solid #3b82f6" : "1px solid #e2e8f0",
+                          backgroundColor: mybEditingId === row.id ? "#eff6ff" : "#fff",
+                          display: "flex", flexDirection: "column", gap: "10px",
+                        }}>
+                          <div>
+                            <div style={{ fontSize: "0.78rem", color: "#64748b", fontWeight: 600 }}>{row.year} Balance</div>
+                            <div style={{ fontSize: "1.15rem", fontWeight: 700, color: "#0f172a", marginTop: "3px" }}>
+                              ${Number(row.balance).toLocaleString()}
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", gap: "6px", paddingTop: "10px", borderTop: "1px solid #f1f5f9" }}>
+                            <button
+                              type="button"
+                              onClick={() => { setMybEditingId(row.id); setMybEditYear(row.year); setMybEditBalance(String(row.balance)); setMybIsAdding(false); }}
+                              style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "4px", fontSize: "0.73rem", padding: "5px 8px", borderRadius: "4px", border: "none", backgroundColor: "#e0e7ff", color: "#4338ca", cursor: "pointer", fontWeight: 600 }}
+                            >
+                              <FiEdit2 size={11} /> Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMybDelete(row.id)}
+                              style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "4px", fontSize: "0.73rem", padding: "5px 8px", borderRadius: "4px", border: "none", backgroundColor: "#fee2e2", color: "#b91c1c", cursor: "pointer", fontWeight: 600 }}
+                            >
+                              <FiTrash2 size={11} /> Delete
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </>
               );
             })()}

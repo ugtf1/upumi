@@ -14,7 +14,6 @@ import {
   FiUsers,
   FiXCircle,
 } from "react-icons/fi";
-import YearlyBalanceManager from "./YearlyBalanceManager";
 
 import {
   clearToken,
@@ -23,6 +22,8 @@ import {
   getAllDuesReadOnly,
   getHostingSchedule,
   getAllAttendanceReadOnly,
+  getMemberYearlyBalances,
+  type MemberYearlyBalanceApiRow,
 } from "./api";
 import "./member-account.scss";
 
@@ -148,6 +149,12 @@ export default function MemberAccount() {
   // Pagination
   const [txPage, setTxPage] = useState(1);
 
+  // Member Yearly Balance
+  const myb_YEAR_OPTIONS = Array.from({ length: new Date().getFullYear() - 2018 + 1 }, (_, i) => 2018 + i).reverse();
+  const [mybBalances, setMybBalances] = useState<MemberYearlyBalanceApiRow[]>([]);
+  const [mybSelectedYear, setMybSelectedYear] = useState<number>(new Date().getFullYear() - 1);
+  const [mybLoading, setMybLoading] = useState(false);
+
   // Fetch member profile on mount (for summary cards + chart)
   useEffect(() => {
     const fetchData = async () => {
@@ -161,6 +168,17 @@ export default function MemberAccount() {
       }
     };
     fetchData();
+  }, []);
+
+  // Fetch this member's own yearly balances
+  useEffect(() => {
+    let active = true;
+    setMybLoading(true);
+    getMemberYearlyBalances()
+      .then((rows) => { if (active) setMybBalances(rows || []); })
+      .catch(() => { if (active) setMybBalances([]); })
+      .finally(() => { if (active) setMybLoading(false); });
+    return () => { active = false; };
   }, []);
 
   // Member identifiers derived from profile
@@ -542,7 +560,38 @@ export default function MemberAccount() {
               );
             })}
 
-            <YearlyBalanceManager isAdmin={false} />
+            {/* Member Yearly Balance (read-only, member's own records) */}
+            <article className="member-account__card member-account__summary-card">
+              <div className="member-account__summary-head">
+                <div className="member-account__summary-icon">
+                  <FiDollarSign size={22} />
+                </div>
+                <div className="member-account__summary-copy">
+                  <h2>My Yearly Balance</h2>
+                  <select
+                    value={mybSelectedYear}
+                    onChange={(e) => setMybSelectedYear(Number(e.target.value))}
+                    style={{
+                      marginTop: "4px", padding: "2px 8px", borderRadius: "4px",
+                      border: "1px solid #cbd5e1", fontSize: "0.8rem", outline: "none",
+                      backgroundColor: "#f8fafc", color: "#475569", fontWeight: 600,
+                    }}
+                  >
+                    {myb_YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="member-account__summary-footer">
+                {mybLoading ? (
+                  <strong style={{ color: "#94a3b8" }}>Loading...</strong>
+                ) : (() => {
+                  const rec = mybBalances.find(b => b.year === mybSelectedYear);
+                  return rec
+                    ? <strong>${Number(rec.balance).toLocaleString()}</strong>
+                    : <strong style={{ color: "#94a3b8" }}>No Record</strong>;
+                })()}
+              </div>
+            </article>
 
             <article className="member-account__card member-account__status-card">
               <h2>Membership Status</h2>

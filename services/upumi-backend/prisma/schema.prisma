@@ -177,7 +177,8 @@ model MemberRecord {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  monthlyDues MonthlyDue[]
+  monthlyDues    MonthlyDue[]
+  yearlyBalances MemberYearlyBalance[]
 }
 
 model WorkbookRow {
@@ -234,4 +235,18 @@ model YearlyBalance {
   updatedAt DateTime @updatedAt
 
   @@map("yearlyBalances")
+}
+
+model MemberYearlyBalance {
+  id             String       @id @default(cuid())
+  memberRecordId String       @map("member_record_id")
+  memberRecord   MemberRecord @relation(fields: [memberRecordId], references: [id], onDelete: Cascade)
+  year           Int
+  balance        Decimal      @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([memberRecordId, year])
+  @@index([memberRecordId])
+  @@map("memberYearlyBalances")
 }
