@@ -14,7 +14,7 @@ import {
   FiUsers,
   FiXCircle,
 } from "react-icons/fi";
-
+import YearlyBalanceManager from "./YearlyBalanceManager";
 
 import {
   clearToken,
@@ -541,6 +541,8 @@ export default function MemberAccount() {
                 </article>
               );
             })}
+
+            <YearlyBalanceManager isAdmin={false} />
 
             <article className="member-account__card member-account__status-card">
               <h2>Membership Status</h2>

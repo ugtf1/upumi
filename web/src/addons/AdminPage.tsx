@@ -35,6 +35,7 @@ import {
 } from "recharts";
 
 import { apiGet, apiPatch, apiPost, clearToken, getMeetings, deleteMeeting, Meeting } from "./api";
+import YearlyBalanceManager from "./YearlyBalanceManager";
 import MeetingRecorder from "./MeetingRecorder";
 import ReportFilterModal from "./ReportFilterModal";
 import "./admin-page.scss";
@@ -721,6 +722,10 @@ export default function AdminPage() {
               </article>
             );
           })}
+        </section>
+
+        <section className="admin-dashboard__charts" id="admin-dashboard-yearly">
+          <YearlyBalanceManager isAdmin={true} />
         </section>
 
         <section className="admin-dashboard__charts" id="admin-dashboard-transaction">

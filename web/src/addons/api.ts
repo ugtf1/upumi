@@ -180,6 +180,28 @@ export async function getAllAttendanceReadOnly(): Promise<unknown[]> {
   return apiGet<unknown[]>("/members/database/attendance");
 }
 
+export type YearlyBalanceApiRow = {
+  id: string;
+  year: number;
+  balance: number | string;
+};
+
+export async function getYearlyBalancesReadOnly(): Promise<YearlyBalanceApiRow[]> {
+  return apiGet<YearlyBalanceApiRow[]>("/members/database/yearlyBalances");
+}
+
+export async function saveYearlyBalance(payload: { id?: string; year: number; balance: number }): Promise<YearlyBalanceApiRow> {
+  if (payload.id) {
+    return apiPatch<YearlyBalanceApiRow>(`/admin/database/yearlyBalances/${payload.id}`, payload);
+  } else {
+    return apiPost<YearlyBalanceApiRow>("/admin/database/yearlyBalances", payload);
+  }
+}
+
+export async function deleteYearlyBalance(id: string): Promise<{ ok: boolean }> {
+  return apiDelete<{ ok: boolean }>(`/admin/database/yearlyBalances/${id}`);
+}
+
 // ── Meeting API helpers ───────────────────────────────────────────────────────
 
 export type Meeting = {

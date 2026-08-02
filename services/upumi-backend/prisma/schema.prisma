@@ -225,3 +225,13 @@ model Meeting {
 
   @@map("meetings")
 }
+
+model YearlyBalance {
+  id        String   @id @default(cuid())
+  year      Int      @unique
+  balance   Decimal  @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("yearlyBalances")
+}

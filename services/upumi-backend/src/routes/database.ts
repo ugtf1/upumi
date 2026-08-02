@@ -16,6 +16,7 @@ const TABLES = {
   transactions: 'transaction',
   expenses: 'expense',
   memberFinance: 'memberFinance',
+  yearlyBalances: 'yearlyBalance',
 } as const;
 
 type TableName = keyof typeof TABLES;
@@ -153,6 +154,16 @@ async function sanitizeData(table: TableName, body: any, partial = false) {
         ...pick('totalPaid', money),
         ...pick('outstanding', money),
       };
+    case 'yearlyBalances':
+      if (!partial) {
+        z.object({ year: z.number() }).parse(body);
+      }
+      return {
+        ...pick('year', Number),
+        ...pick('balance', money),
+      };
+    default:
+      return {};
   }
 }
 

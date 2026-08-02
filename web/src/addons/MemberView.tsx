@@ -1208,7 +1208,7 @@ export default function MemberViewPage() {
           </article>
 
           <div className="admin-dashboard__section-copy member-page__section-copy">
-            <h2>Payment History</h2>
+            <h2>Dues Payment History</h2>
             <p>
               {(memberLoading || txLoading)
                 ? "Loading..."
