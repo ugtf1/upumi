@@ -236,6 +236,13 @@ async function listRows(table: TableName) {
         select: transactionSelectWithoutDescription,
       });
     }
+    // P2021: table does not exist (migration not yet applied) — return empty list
+    // rather than crashing the whole request with a 500.
+    const prismaErr = error as { code?: string };
+    if (prismaErr?.code === 'P2021') {
+      console.warn(`[database] Table for "${table}" does not exist yet (P2021). Returning [].`);
+      return [];
+    }
     throw error;
   }
 }
