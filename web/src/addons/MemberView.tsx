@@ -174,6 +174,8 @@ type ApiMemberDetail = {
   joined?: string | null;
   voter?: string | null;
   attendancePct?: string | null;
+  attendanceCount?: number | null;
+  totalMeetings?: number | null;
   monthlyDuesAmount?: number | null;
   totalPaid?: number | null;
   outstanding?: number | null;
