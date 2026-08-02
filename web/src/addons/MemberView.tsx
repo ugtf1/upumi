@@ -311,7 +311,16 @@ export default function MemberViewPage() {
   // Live attendance rows from the database (used for the attendance grid)
   const [liveAttendanceRows, setLiveAttendanceRows] = useState<AttendanceApiRow[]>([]);
   // Recent transactions for this member (all categories, not just dues)
-  const [recentMemberTxRows, setRecentMemberTxRows] = useState<{ id: string; date: string; title: string; amount: string; status: string; isDue: boolean }[]>([]);
+  const [recentMemberTxRows, setRecentMemberTxRows] = useState<{
+    id: string;
+    date: string;
+    title: string;
+    amount: string;
+    status: string;
+    isDue: boolean;
+    rawAmount: number;
+    rawDate: string;
+  }[]>([]);
   // Tracker year for the attendance grid
   const [attendanceYear, setAttendanceYear] = useState<number>(new Date().getFullYear());
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -927,10 +936,12 @@ export default function MemberViewPage() {
     { label: "Logout", icon: FiLogOut, action: handleLogout, tone: "danger" },
   ];
 
-  // Sum ALL dues payments — both MonthlyDue rows and Transaction rows with title "Dues"
-  const totalPaidFromAllSources = unifiedPayments.reduce((sum, row) => {
-    return sum + (row.rawAmount ?? 0);
-  }, 0);
+  // Sum ALL dues entries — MonthlyDue rows AND any Transaction rows whose title includes "due"
+  // recentMemberTxRows is more inclusive than unifiedPayments: it matches by userId OR fullName
+  // and already merges both rawDues and rawTransactions, so it is the correct source for total paid.
+  const totalPaidFromAllSources = recentMemberTxRows
+    .filter((row) => row.isDue)
+    .reduce((sum, row) => sum + (row.rawAmount ?? 0), 0);
 
   const summaryCards: SummaryCard[] = [
     { label: "Monthly Dues", value: memberProfile.monthlyDues },

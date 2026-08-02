@@ -292,14 +292,12 @@ export default function MemberAccount() {
       ];
     }
     const dues = memberProfile.monthlyDues || [];
-    // Sum duesPaid from MonthlyDue records (canonical source)
-    const totalPaidFromDues = dues.reduce((sum: number, d: MonthlyDueRecord) => sum + (d.duesPaid ?? 0), 0);
-    // Also sum dues transactions from the transactions table
-    const totalPaidFromTxDues = allTxRows
+    // Sum every dues entry across all sources:
+    // allTxRows already merges MonthlyDue records (isDue=true) AND Dues-titled
+    // transactions from the transaction page, all filtered strictly to this member.
+    const unifiedTotalPaid = allTxRows
       .filter((r) => r.isDue)
       .reduce((sum, r) => sum + r.rawAmount, 0);
-    // Use whichever is larger (avoids double counting when both point to same MonthlyDue)
-    const unifiedTotalPaid = Math.max(totalPaidFromDues, totalPaidFromTxDues, memberProfile.member.totalPaid ?? 0);
     const currentBalance = dues.length > 0 ? dues[dues.length - 1].duesPaid ?? 0 : 0;
     const outstanding = Math.max(0, (dues.length * 20) - unifiedTotalPaid);
 
