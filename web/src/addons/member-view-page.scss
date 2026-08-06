@@ -194,6 +194,19 @@
   border-radius: 12px;
 }
 
+.member-view-page__modal-input.admin-dashboard__modal-input--error {
+  border: 1px solid #dc2626 !important;
+  background-color: #fef2f2 !important;
+}
+
+.member-view-page__field-error {
+  color: #dc2626;
+  font-size: 0.78rem;
+  font-weight: 500;
+  margin-top: 4px;
+  display: block;
+}
+
 .member-view-page__modal-input input {
   font-size: 0.9rem;
 }

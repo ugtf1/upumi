@@ -2,13 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { IconType } from "react-icons";
 import {
-  FiBell,
   FiCalendar,
   FiChevronDown,
   FiClock,
   FiCreditCard,
   FiDollarSign,
-  FiFilter,
   FiHome,
   FiLogOut,
   FiSearch,
@@ -108,7 +106,7 @@ export default function MemberDashboard() {
   const location = useLocation();
 
   const [activeNav, setActiveNav] = useState("Community Dashboard");
-  const [headerSearch, setHeaderSearch] = useState("");
+
   const [membershipSearch, setMembershipSearch] = useState("");
   const [scheduleSearch, setScheduleSearch] = useState("");
 
@@ -530,33 +528,8 @@ type MemberProfileData = {
         </div>
       </aside>
 
+
       <main className="admin-dashboard__main member-dashboard__main">
-        <section className="admin-dashboard__hero member-dashboard__hero" id="member-dashboard-top">
-          <div>
-            <h1>Community Dashboard</h1>
-            <p>Pivot-style member details for all signed-in members.</p>
-          </div>
-
-          <div className="admin-dashboard__hero-actions member-dashboard__hero-actions">
-            <label className="admin-dashboard__search member-dashboard__search">
-              <input
-                value={headerSearch}
-                onChange={(event) => setHeaderSearch(event.target.value)}
-                placeholder="Search member, expense, balance, income...."
-                aria-label="Search dashboard"
-              />
-              <FiSearch size={18} />
-            </label>
-
-            <button type="button" className="admin-dashboard__icon-button" aria-label="Filter and generate reports" onClick={() => setIsReportModalOpen(true)} title="Generate Reports">
-              <FiFilter size={18} />
-            </button>
-            <button type="button" className="admin-dashboard__icon-button" aria-label="Notifications">
-              <FiBell size={18} />
-            </button>
-          </div>
-        </section>
-
         <section className="admin-dashboard__stats member-dashboard__stats">
           {error && (
             <div style={{ gridColumn: "1 / -1", padding: "1rem", backgroundColor: "#fee", color: "#c33", borderRadius: "4px" }}>

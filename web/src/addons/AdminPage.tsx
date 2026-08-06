@@ -1,13 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
-  FiBell,
   FiCalendar,
   FiCheck,
   FiClock,
   FiCreditCard,
   FiDollarSign,
-  FiFilter,
   FiHome,
   FiLogOut,
   FiPlus,
@@ -197,7 +195,6 @@ export default function AdminPage() {
   const [pendingPayment, setPendingPayment] = useState<number | null>(null);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [year, setYear] = useState(2026);
-  const [search, setSearch] = useState("");
   const [hostingScheduleRows, setHostingScheduleRows] = useState<HostingScheduleApiRow[]>([]);
   const [hostingScheduleLoaded, setHostingScheduleLoaded] = useState(false);
   const [scheduleSearch, setScheduleSearch] = useState("");
@@ -650,31 +647,6 @@ export default function AdminPage() {
       </aside>
 
       <main className="admin-dashboard__main">
-        <section className="admin-dashboard__hero" id="admin-dashboard-top">
-          <div>
-            <h1>Admin Console</h1>
-            <p>Pivot-style member details for all signed-in members.</p>
-          </div>
-
-          <div className="admin-dashboard__hero-actions">
-            <label className="admin-dashboard__search">
-              <FiSearch size={18} />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search member, expense, balance, income..."
-                aria-label="Search members"
-              />
-            </label>
-
-            <button type="button" className="admin-dashboard__icon-button" aria-label="Filter and generate reports" onClick={() => setIsReportModalOpen(true)} title="Generate Reports">
-              <FiFilter size={18} />
-            </button>
-            <button type="button" className="admin-dashboard__icon-button" aria-label="Notifications">
-              <FiBell size={18} />
-            </button>
-          </div>
-        </section>
 
         {err && <div className="admin-dashboard__alert admin-dashboard__alert--error">{err}</div>}
         {loading && <div className="admin-dashboard__alert">Loading live dashboard data...</div>}

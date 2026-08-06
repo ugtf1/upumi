@@ -285,6 +285,8 @@ export default function MemberViewPage() {
   });
   const [editMemberLoading, setEditMemberLoading] = useState(false);
   const [editMemberError, setEditMemberError] = useState<string | null>(null);
+  const [editMemberTouched, setEditMemberTouched] = useState<Partial<Record<keyof EditMemberFormState, boolean>>>({});
+  const [editMemberSubmitAttempted, setEditMemberSubmitAttempted] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [addTransactionForm, setAddTransactionForm] = useState<AddTransactionFormState>({
     title: "",
@@ -579,16 +581,25 @@ export default function MemberViewPage() {
       status: memberProfile.status,
     });
     setEditMemberError(null);
+    setEditMemberTouched({});
+    setEditMemberSubmitAttempted(false);
     setIsEditMemberModalOpen(true);
   }
 
   function handleCloseEditMemberModal() {
     setIsEditMemberModalOpen(false);
     setEditMemberError(null);
+    setEditMemberTouched({});
+    setEditMemberSubmitAttempted(false);
   }
 
   function handleEditMemberChange(field: keyof EditMemberFormState, value: string) {
     setEditMemberForm((currentForm) => ({ ...currentForm, [field]: value }));
+    setEditMemberTouched((prev) => ({ ...prev, [field]: true }));
+  }
+
+  function handleEditMemberBlur(field: keyof EditMemberFormState) {
+    setEditMemberTouched((prev) => ({ ...prev, [field]: true }));
   }
 
   async function handleSaveEditedMember() {
@@ -596,6 +607,11 @@ export default function MemberViewPage() {
     setEditMemberLoading(true);
 
     try {
+      if (!isEditMemberFormValid) {
+        setEditMemberSubmitAttempted(true);
+        setEditMemberLoading(false);
+        return;
+      }
       const fName = editMemberForm.fName.trim();
       const lName = editMemberForm.lName.trim();
       const email = editMemberForm.email.trim();
@@ -702,11 +718,23 @@ export default function MemberViewPage() {
     editMemberForm.lName.trim() &&
     editMemberForm.email.trim() &&
     editMemberForm.phone.trim() &&
+    editMemberForm.address.trim() &&
     editMemberForm.voteRole.trim() &&
+    editMemberForm.dateJoined.trim() &&
     editMemberForm.status.trim() &&
     editMemberForm.monthlyDues.trim() !== "" &&
     editMemberForm.totalPaid.trim() !== "" &&
-    editMemberForm.outstanding.trim() !== "";
+    editMemberForm.outstanding.trim() !== "" &&
+    editMemberForm.whatsapp.trim() &&
+    editMemberForm.facebook.trim() &&
+    editMemberForm.insurance.trim() &&
+    editMemberForm.goodStanding.trim() &&
+    editMemberForm.financialGoodStanding.trim();
+
+  function editFieldHasError(field: keyof EditMemberFormState): boolean {
+    return (editMemberTouched[field] === true || editMemberSubmitAttempted) &&
+      !editMemberForm[field].trim();
+  }
 
   function resetAddTransactionForm() {
     setAddTransactionForm({ title: "", description: "", amount: "", paymentDate: "" });
@@ -1896,107 +1924,120 @@ export default function MemberViewPage() {
               {/* Title */}
               <div className="admin-dashboard__modal-section">
                 <label htmlFor="member-profile-title" className="admin-dashboard__modal-label" id="member-profile-edit-modal-title">
-                  Edit Member
+                  Title *
                 </label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                <div className={`admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input ${editFieldHasError("title") ? "admin-dashboard__modal-input--error" : ""}`}>
                   <input
                     id="member-profile-title"
                     value={editMemberForm.title}
                     onChange={(event) => handleEditMemberChange("title", event.target.value)}
+                    onBlur={() => handleEditMemberBlur("title")}
                     placeholder="e.g. Dr, Mr, Mrs"
                     aria-label="Title or prefix"
                   />
                 </div>
+                {editFieldHasError("title") && <span className="member-view-page__field-error">This field is required</span>}
               </div>
 
               <div className="admin-dashboard__modal-section">
                 <label htmlFor="member-profile-fname" className="admin-dashboard__modal-label">
                   First Name *
                 </label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                <div className={`admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input ${editFieldHasError("fName") ? "admin-dashboard__modal-input--error" : ""}`}>
                   <input
                     id="member-profile-fname"
                     value={editMemberForm.fName}
                     onChange={(event) => handleEditMemberChange("fName", event.target.value)}
+                    onBlur={() => handleEditMemberBlur("fName")}
                     placeholder="Agbara"
                     aria-label="First name"
                   />
                 </div>
+                {editFieldHasError("fName") && <span className="member-view-page__field-error">This field is required</span>}
               </div>
 
               <div className="admin-dashboard__modal-section">
                 <label htmlFor="member-profile-lname" className="admin-dashboard__modal-label">
                   Last Name *
                 </label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                <div className={`admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input ${editFieldHasError("lName") ? "admin-dashboard__modal-input--error" : ""}`}>
                   <input
                     id="member-profile-lname"
                     value={editMemberForm.lName}
                     onChange={(event) => handleEditMemberChange("lName", event.target.value)}
+                    onBlur={() => handleEditMemberBlur("lName")}
                     placeholder="Onome"
                     aria-label="Last name"
                   />
                 </div>
+                {editFieldHasError("lName") && <span className="member-view-page__field-error">This field is required</span>}
               </div>
 
               <div className="admin-dashboard__modal-section">
                 <label htmlFor="member-profile-email" className="admin-dashboard__modal-label">
                   Email Address *
                 </label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                <div className={`admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input ${editFieldHasError("email") ? "admin-dashboard__modal-input--error" : ""}`}>
                   <FiMail size={20} />
                   <input
                     id="member-profile-email"
                     type="email"
                     value={editMemberForm.email}
                     onChange={(event) => handleEditMemberChange("email", event.target.value)}
+                    onBlur={() => handleEditMemberBlur("email")}
                     placeholder="Andrew.karl@gmail.com"
                     aria-label="Email address"
                   />
                 </div>
+                {editFieldHasError("email") && <span className="member-view-page__field-error">This field is required</span>}
               </div>
 
               <div className="admin-dashboard__modal-section">
                 <label htmlFor="member-profile-phone" className="admin-dashboard__modal-label">
                   Phone *
                 </label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                <div className={`admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input ${editFieldHasError("phone") ? "admin-dashboard__modal-input--error" : ""}`}>
                   <FiPhone size={20} />
                   <input
                     id="member-profile-phone"
                     type="tel"
                     value={editMemberForm.phone}
                     onChange={(event) => handleEditMemberChange("phone", event.target.value)}
+                    onBlur={() => handleEditMemberBlur("phone")}
                     placeholder="+234 818 481 9383"
                     aria-label="Phone number"
                   />
                 </div>
+                {editFieldHasError("phone") && <span className="member-view-page__field-error">This field is required</span>}
               </div>
 
               <div className="admin-dashboard__modal-section">
                 <label htmlFor="member-profile-address" className="admin-dashboard__modal-label">
-                  Address
+                  Address *
                 </label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                <div className={`admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input ${editFieldHasError("address") ? "admin-dashboard__modal-input--error" : ""}`}>
                   <input
                     id="member-profile-address"
                     value={editMemberForm.address}
                     onChange={(event) => handleEditMemberChange("address", event.target.value)}
+                    onBlur={() => handleEditMemberBlur("address")}
                     placeholder="Enter address"
                     aria-label="Address"
                   />
                 </div>
+                {editFieldHasError("address") && <span className="member-view-page__field-error">This field is required</span>}
               </div>
 
               <div className="admin-dashboard__modal-section">
                 <label htmlFor="member-profile-vote-role" className="admin-dashboard__modal-label">
                   Vote Role *
                 </label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input member-view-page__modal-select-wrap">
+                <div className={`admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input member-view-page__modal-select-wrap ${editFieldHasError("voteRole") ? "admin-dashboard__modal-input--error" : ""}`}>
                   <select
                     id="member-profile-vote-role"
                     value={editMemberForm.voteRole}
                     onChange={(event) => handleEditMemberChange("voteRole", event.target.value)}
+                    onBlur={() => handleEditMemberBlur("voteRole")}
                     aria-label="Vote role"
                     className={editMemberForm.voteRole ? "has-value" : ""}
                   >
@@ -2008,33 +2049,37 @@ export default function MemberViewPage() {
                     ))}
                   </select>
                 </div>
+                {editFieldHasError("voteRole") && <span className="member-view-page__field-error">This field is required</span>}
               </div>
 
               <div className="admin-dashboard__modal-section">
                 <label htmlFor="member-profile-date-joined" className="admin-dashboard__modal-label">
-                  Date Joined
+                  Date Joined *
                 </label>
-                <div className="admin-dashboard__modal-input member-view-page__modal-input">
+                <div className={`admin-dashboard__modal-input member-view-page__modal-input ${editFieldHasError("dateJoined") ? "admin-dashboard__modal-input--error" : ""}`}>
                   <FiCalendar size={20} />
                   <input
                     id="member-profile-date-joined"
                     value={editMemberForm.dateJoined}
                     onChange={(event) => handleEditMemberChange("dateJoined", event.target.value)}
+                    onBlur={() => handleEditMemberBlur("dateJoined")}
                     placeholder="12 Jan 2024"
                     aria-label="Date joined"
                   />
                 </div>
+                {editFieldHasError("dateJoined") && <span className="member-view-page__field-error">This field is required</span>}
               </div>
 
               <div className="admin-dashboard__modal-section">
                 <label htmlFor="member-profile-status" className="admin-dashboard__modal-label">
                   Status *
                 </label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input member-view-page__modal-select-wrap">
+                <div className={`admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input member-view-page__modal-select-wrap ${editFieldHasError("status") ? "admin-dashboard__modal-input--error" : ""}`}>
                   <select
                     id="member-profile-status"
                     value={editMemberForm.status}
                     onChange={(event) => handleEditMemberChange("status", event.target.value)}
+                    onBlur={() => handleEditMemberBlur("status")}
                     aria-label="Status"
                     className={editMemberForm.status ? "has-value" : ""}
                   >
@@ -2045,128 +2090,145 @@ export default function MemberViewPage() {
                     ))}
                   </select>
                 </div>
+                {editFieldHasError("status") && <span className="member-view-page__field-error">This field is required</span>}
               </div>
 
               <div className="admin-dashboard__modal-section">
                 <label htmlFor="member-profile-monthly-dues" className="admin-dashboard__modal-label">
                   Monthly Dues *
                 </label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                <div className={`admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input ${editFieldHasError("monthlyDues") ? "admin-dashboard__modal-input--error" : ""}`}>
                   <input
                     id="member-profile-monthly-dues"
                     type="number"
                     inputMode="decimal"
                     value={editMemberForm.monthlyDues}
                     onChange={(event) => handleEditMemberChange("monthlyDues", event.target.value)}
+                    onBlur={() => handleEditMemberBlur("monthlyDues")}
                     placeholder="0"
                     aria-label="Monthly dues"
                   />
                 </div>
+                {editFieldHasError("monthlyDues") && <span className="member-view-page__field-error">This field is required</span>}
               </div>
 
               <div className="admin-dashboard__modal-section">
                 <label htmlFor="member-profile-total-paid" className="admin-dashboard__modal-label">
                   Total Paid *
                 </label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                <div className={`admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input ${editFieldHasError("totalPaid") ? "admin-dashboard__modal-input--error" : ""}`}>
                   <input
                     id="member-profile-total-paid"
                     type="number"
                     inputMode="decimal"
                     value={editMemberForm.totalPaid}
                     onChange={(event) => handleEditMemberChange("totalPaid", event.target.value)}
+                    onBlur={() => handleEditMemberBlur("totalPaid")}
                     placeholder="0"
                     aria-label="Total paid"
                   />
                 </div>
+                {editFieldHasError("totalPaid") && <span className="member-view-page__field-error">This field is required</span>}
               </div>
 
               <div className="admin-dashboard__modal-section">
                 <label htmlFor="member-profile-outstanding" className="admin-dashboard__modal-label">
                   Outstanding *
                 </label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                <div className={`admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input ${editFieldHasError("outstanding") ? "admin-dashboard__modal-input--error" : ""}`}>
                   <input
                     id="member-profile-outstanding"
                     type="number"
                     inputMode="decimal"
                     value={editMemberForm.outstanding}
                     onChange={(event) => handleEditMemberChange("outstanding", event.target.value)}
+                    onBlur={() => handleEditMemberBlur("outstanding")}
                     placeholder="0"
                     aria-label="Outstanding"
                   />
                 </div>
+                {editFieldHasError("outstanding") && <span className="member-view-page__field-error">This field is required</span>}
               </div>
 
               {/* WhatsApp */}
               <div className="admin-dashboard__modal-section">
-                <label htmlFor="member-profile-whatsapp" className="admin-dashboard__modal-label">WhatsApp</label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                <label htmlFor="member-profile-whatsapp" className="admin-dashboard__modal-label">WhatsApp *</label>
+                <div className={`admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input ${editFieldHasError("whatsapp") ? "admin-dashboard__modal-input--error" : ""}`}>
                   <input
                     id="member-profile-whatsapp"
                     type="tel"
                     value={editMemberForm.whatsapp}
                     onChange={(event) => handleEditMemberChange("whatsapp", event.target.value)}
+                    onBlur={() => handleEditMemberBlur("whatsapp")}
                     placeholder="WhatsApp number"
                     aria-label="WhatsApp"
                   />
                 </div>
+                {editFieldHasError("whatsapp") && <span className="member-view-page__field-error">This field is required</span>}
               </div>
 
               {/* Facebook */}
               <div className="admin-dashboard__modal-section">
-                <label htmlFor="member-profile-facebook" className="admin-dashboard__modal-label">Facebook</label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                <label htmlFor="member-profile-facebook" className="admin-dashboard__modal-label">Facebook *</label>
+                <div className={`admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input ${editFieldHasError("facebook") ? "admin-dashboard__modal-input--error" : ""}`}>
                   <input
                     id="member-profile-facebook"
                     value={editMemberForm.facebook}
                     onChange={(event) => handleEditMemberChange("facebook", event.target.value)}
+                    onBlur={() => handleEditMemberBlur("facebook")}
                     placeholder="Facebook profile"
                     aria-label="Facebook"
                   />
                 </div>
+                {editFieldHasError("facebook") && <span className="member-view-page__field-error">This field is required</span>}
               </div>
 
               {/* Insurance */}
               <div className="admin-dashboard__modal-section">
-                <label htmlFor="member-profile-insurance" className="admin-dashboard__modal-label">Insurance</label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                <label htmlFor="member-profile-insurance" className="admin-dashboard__modal-label">Insurance *</label>
+                <div className={`admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input ${editFieldHasError("insurance") ? "admin-dashboard__modal-input--error" : ""}`}>
                   <input
                     id="member-profile-insurance"
                     value={editMemberForm.insurance}
                     onChange={(event) => handleEditMemberChange("insurance", event.target.value)}
+                    onBlur={() => handleEditMemberBlur("insurance")}
                     placeholder="Insurance policy / provider"
                     aria-label="Insurance"
                   />
                 </div>
+                {editFieldHasError("insurance") && <span className="member-view-page__field-error">This field is required</span>}
               </div>
 
               {/* Good Standing */}
               <div className="admin-dashboard__modal-section">
-                <label htmlFor="member-profile-good-standing" className="admin-dashboard__modal-label">Good Standing</label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                <label htmlFor="member-profile-good-standing" className="admin-dashboard__modal-label">Good Standing *</label>
+                <div className={`admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input ${editFieldHasError("goodStanding") ? "admin-dashboard__modal-input--error" : ""}`}>
                   <input
                     id="member-profile-good-standing"
                     value={editMemberForm.goodStanding}
                     onChange={(event) => handleEditMemberChange("goodStanding", event.target.value)}
+                    onBlur={() => handleEditMemberBlur("goodStanding")}
                     placeholder="e.g. Good Standing"
                     aria-label="Good Standing"
                   />
                 </div>
+                {editFieldHasError("goodStanding") && <span className="member-view-page__field-error">This field is required</span>}
               </div>
 
               {/* Financial Good Standing */}
               <div className="admin-dashboard__modal-section">
-                <label htmlFor="member-profile-fin-standing" className="admin-dashboard__modal-label">Financial Standing</label>
-                <div className="admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input">
+                <label htmlFor="member-profile-fin-standing" className="admin-dashboard__modal-label">Financial Standing *</label>
+                <div className={`admin-dashboard__modal-input admin-dashboard__modal-input--plain member-view-page__modal-input ${editFieldHasError("financialGoodStanding") ? "admin-dashboard__modal-input--error" : ""}`}>
                   <input
                     id="member-profile-fin-standing"
                     value={editMemberForm.financialGoodStanding}
                     onChange={(event) => handleEditMemberChange("financialGoodStanding", event.target.value)}
+                    onBlur={() => handleEditMemberBlur("financialGoodStanding")}
                     placeholder="e.g. Good Financial Standing"
                     aria-label="Financial Good Standing"
                   />
                 </div>
+                {editFieldHasError("financialGoodStanding") && <span className="member-view-page__field-error">This field is required</span>}
               </div>
             </div>
 
