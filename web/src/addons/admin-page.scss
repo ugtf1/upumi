@@ -1269,3 +1269,18 @@
   .admin-dashboard__table-wrap, .admin-dashboard__schedule-table-wrap { overflow: visible !important; }
 }
 
+.admin-dashboard__modal-input-field select,
+.admin-dashboard__modal-input select,
+.admin-dashboard__modal select {
+  color: #0f172a !important;
+}
+
+.admin-dashboard__modal-input-field select option,
+.admin-dashboard__modal-input select option,
+.admin-dashboard__modal select option,
+select option,
+option {
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+}
+

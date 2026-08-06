@@ -23,6 +23,7 @@ import {
 
 import { apiGet, apiPatch, apiPost, apiDelete, clearToken, getAllMemberYearlyBalances, saveMemberYearlyBalance, deleteMemberYearlyBalance, type MemberYearlyBalanceApiRow } from "./api";
 import { MEMBER_STATUS_OPTIONS, type MemberDetailRecord, type MemberStatus } from "./member-data";
+import MemberFilterReportModal from "./MemberFilterReportModal";
 import "./admin-page.scss";
 import "./member-page.scss";
 import "./member-view-page.scss";
@@ -350,6 +351,8 @@ export default function MemberViewPage() {
   const [mybEditingId, setMybEditingId] = useState<string | null>(null);
   const [mybEditYear, setMybEditYear] = useState<number>(new Date().getFullYear());
   const [mybEditBalance, setMybEditBalance] = useState<string>("");
+
+  const [isMemberFilterModalOpen, setIsMemberFilterModalOpen] = useState(false);
 
   // Use a stable ref + useEffect for the action menu outside-click handler
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1052,14 +1055,10 @@ export default function MemberViewPage() {
               <FiSearch size={18} />
             </label>
 
-            <button type="button" className="admin-dashboard__icon-button" aria-label="Filter members">
+            <button type="button" className="admin-dashboard__icon-button" aria-label="Filter members" onClick={() => setIsMemberFilterModalOpen(true)}>
               <FiFilter size={18} />
             </button>
 
-            <button type="button" className="member-page__add-button">
-              <FiPlus size={18} />
-              <span>Add New</span>
-            </button>
           </div>
         </section>
 
@@ -2357,6 +2356,12 @@ export default function MemberViewPage() {
           <span>{toast}</span>
         </div>
       )}
+
+      <MemberFilterReportModal
+        isOpen={isMemberFilterModalOpen}
+        onClose={() => setIsMemberFilterModalOpen(false)}
+        memberSafe={false}
+      />
     </div>
   );
 }

@@ -21,6 +21,7 @@ import {
 } from "react-icons/fi";
 
 import { apiGet, apiPost, clearToken } from "./api";
+import MemberFilterReportModal from "./MemberFilterReportModal";
 import "./admin-page.scss";
 import "./member-page.scss";
 
@@ -140,6 +141,7 @@ export default function MemberPage() {
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const [isMemberFilterModalOpen, setIsMemberFilterModalOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -423,7 +425,7 @@ export default function MemberPage() {
               />
             </label>
 
-            <button type="button" className="admin-dashboard__icon-button member-page__filter-button" aria-label="Filter members">
+            <button type="button" className="admin-dashboard__icon-button member-page__filter-button" aria-label="Filter members" onClick={() => setIsMemberFilterModalOpen(true)}>
               <FiFilter size={18} />
             </button>
 
@@ -787,6 +789,12 @@ export default function MemberPage() {
           <span>{toast}</span>
         </div>
       )}
+
+      <MemberFilterReportModal
+        isOpen={isMemberFilterModalOpen}
+        onClose={() => setIsMemberFilterModalOpen(false)}
+        memberSafe={false}
+      />
     </div>
   );
 }

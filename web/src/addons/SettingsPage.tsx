@@ -5,7 +5,6 @@ import {
   FiCreditCard,
   FiHome,
   FiLogOut,
-  FiPlus,
   FiSearch,
   FiSettings,
   FiUsers,
@@ -154,10 +153,6 @@ export default function SettingsPage() {
                 aria-label="Search admin settings"
               />
             </label>
-            <button type="button" className="admin-dashboard__schedule-button settings-page__add-button">
-              <FiPlus size={18} />
-              <span>Add New</span>
-            </button>
           </div>
         </section>
 

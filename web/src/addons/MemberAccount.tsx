@@ -5,6 +5,7 @@ import {
   FiCalendar,
   FiCheckCircle,
   FiDollarSign,
+  FiFilter,
   FiHome,
   FiLogOut,
   FiSettings,
@@ -25,6 +26,7 @@ import {
   getMemberYearlyBalances,
   type MemberYearlyBalanceApiRow,
 } from "./api";
+import MemberFilterReportModal from "./MemberFilterReportModal";
 import "./member-account.scss";
 
 type NavigationItem = {
@@ -154,6 +156,7 @@ export default function MemberAccount() {
   const [mybBalances, setMybBalances] = useState<MemberYearlyBalanceApiRow[]>([]);
   const [mybSelectedYear, setMybSelectedYear] = useState<number>(new Date().getFullYear() - 1);
   const [mybLoading, setMybLoading] = useState(false);
+  const [isMemberFilterModalOpen, setIsMemberFilterModalOpen] = useState(false);
 
   // Fetch member profile on mount (for summary cards + chart)
   useEffect(() => {
@@ -442,13 +445,27 @@ export default function MemberAccount() {
                 <div className="member-account__profile-avatar" aria-hidden="true" style={{ width: "48px", height: "48px", fontSize: "1.4rem" }}>
                   {memberName.charAt(0).toUpperCase()}
                 </div>
-                <div>
+                <div style={{ flex: 1 }}>
                   <div className="member-account__profile-name" style={{ fontSize: "1.1rem" }}>{memberName}</div>
                   <div className="member-account__profile-email">
                     {memberProfile.linked?.displayMemberId ? `ID: ${memberProfile.linked.displayMemberId} · ` : ""}
                     {memberProfile.member.status || "Active"}
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setIsMemberFilterModalOpen(true)}
+                  aria-label="Filter member report"
+                  style={{
+                    display: "flex", alignItems: "center", gap: "6px",
+                    background: "rgba(99,102,241,0.1)", border: "1.5px solid rgba(99,102,241,0.3)",
+                    borderRadius: "8px", padding: "7px 14px", cursor: "pointer",
+                    color: "#6366f1", fontWeight: 600, fontSize: "0.82rem",
+                  }}
+                >
+                  <FiFilter size={15} />
+                  Member Report
+                </button>
               </div>
               <div className="member-account__profile-info-grid">
                 {memberProfile.member.email && (
@@ -785,6 +802,12 @@ export default function MemberAccount() {
           </section>
         </main>
       </div>
+
+      <MemberFilterReportModal
+        isOpen={isMemberFilterModalOpen}
+        onClose={() => setIsMemberFilterModalOpen(false)}
+        memberSafe={true}
+      />
     </div>
   );
 }

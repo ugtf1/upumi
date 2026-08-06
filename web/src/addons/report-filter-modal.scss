@@ -630,4 +630,13 @@
 
     &:last-child { border-bottom: none; }
   }
+
+  select {
+    color: #0f172a !important;
+  }
+
+  option {
+    color: #0f172a !important;
+    background-color: #ffffff !important;
+  }
 }

@@ -226,7 +226,28 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
     setLoading(true);
 
     try {
-      if (category === "dues" || category === "transactions") {
+      if (category === "dues") {
+        const duesRows = await getAllDuesReadOnly().catch(() => []) as ApiMonthlyDue[];
+        let filtered = duesRows.filter(r => Number(r.duesPaid || 0) > 0);
+
+        if (startDate && endDate) {
+          const start = new Date(startDate).getTime();
+          const end = new Date(endDate).setHours(23, 59, 59, 999);
+          if (start > end) throw new Error("Start date cannot be after end date.");
+          filtered = filtered.filter(r => {
+            if (!r.createdAt) return false;
+            const t = new Date(r.createdAt).getTime();
+            return t >= start && t <= end;
+          });
+        }
+
+        if (selectedMember) {
+          filtered = filtered.filter(r => r.memberRecordId === selectedMember.id);
+        }
+
+        setResultsDues(filtered);
+
+      } else if (category === "transactions") {
         const [duesRows, txRows] = await Promise.all([
           getAllDuesReadOnly().catch(() => []) as Promise<ApiMonthlyDue[]>,
           getAllTransactionsReadOnly().catch(() => []) as Promise<ApiTransactionRow[]>,
@@ -326,14 +347,15 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
         setResultsUnified(filtered);
 
       } else if (category === "hosting") {
-        if (!startMonth || !endMonth) throw new Error("Please select both start and end months.");
-        const sm = Number(startMonth);
-        const em = Number(endMonth);
-        if (sm > em) throw new Error("Start month cannot be after end month.");
+        const sm = startMonth ? Number(startMonth) : 1;
+        const em = endMonth ? Number(endMonth) : 12;
+        if (sm > em) throw new Error("From Month cannot be after To Month.");
 
         const rows = await getHostingSchedule() as HostingScheduleApiRow[];
         let filtered = rows.filter(r => {
-          return r.year === hostingYear && r.month >= sm && r.month <= em;
+          const yearMatch = !hostingYear || hostingYear === 0 || r.year === hostingYear;
+          const monthMatch = r.month >= sm && r.month <= em;
+          return yearMatch && monthMatch;
         });
 
         // Filter by selected member name/ID if set
@@ -429,10 +451,9 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
           hosting: memberHosting,
         });
       } else if (category === "attendance") {
-        if (!startMonth || !endMonth) throw new Error("Please select both start and end months.");
-        const sm = Number(startMonth);
-        const em = Number(endMonth);
-        if (sm > em) throw new Error("Start month cannot be after end month.");
+        const sm = startMonth ? Number(startMonth) : 1;
+        const em = endMonth ? Number(endMonth) : 12;
+        if (sm > em) throw new Error("From Month cannot be after To Month.");
 
         const [attendanceRows, memberList] = await Promise.all([
           apiGet<AttendanceApiRow[]>("/members/database/attendance").catch(() => []),
@@ -440,7 +461,9 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
         ]);
 
         const filteredAttendance = attendanceRows.filter(r => {
-          return r.year === hostingYear && r.month >= sm && r.month <= em;
+          const yearMatch = !hostingYear || hostingYear === 0 || r.year === hostingYear;
+          const monthMatch = r.month >= sm && r.month <= em;
+          return yearMatch && monthMatch;
         });
 
         const compiled = filteredAttendance.map(att => {
@@ -1177,8 +1200,36 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
               </div>
             </div>
 
-            {/* Dues & Transactions Specific Inputs */}
-            {(category === "dues" || category === "transactions") && (
+            {/* Dues Specific Inputs — filters within dues paid only */}
+            {category === "dues" && (
+              <>
+                <div className="admin-dashboard__modal-section">
+                  <label className="admin-dashboard__modal-label">From Date (Optional)</label>
+                  <div className="admin-dashboard__modal-input-field" style={{ padding: "0 12px", display: "flex", alignItems: "center", background: "#fff" }}>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => { setStartDate(e.target.value); resetResults(); }}
+                      style={{ border: "none", outline: "none", width: "100%", height: "100%", font: "inherit", color: "#0f172a" }}
+                    />
+                  </div>
+                </div>
+                <div className="admin-dashboard__modal-section">
+                  <label className="admin-dashboard__modal-label">To Date (Optional)</label>
+                  <div className="admin-dashboard__modal-input-field" style={{ padding: "0 12px", display: "flex", alignItems: "center", background: "#fff" }}>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => { setEndDate(e.target.value); resetResults(); }}
+                      style={{ border: "none", outline: "none", width: "100%", height: "100%", font: "inherit", color: "#0f172a" }}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Transactions Specific Inputs */}
+            {category === "transactions" && (
               <>
                 <div className="admin-dashboard__modal-section">
                   <label className="admin-dashboard__modal-label">Transaction Category / Title</label>
@@ -1186,7 +1237,7 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
                     <select
                       value={selectedTxTitle}
                       onChange={(e) => { setSelectedTxTitle(e.target.value); resetResults(); }}
-                      style={{ border: "none", outline: "none", width: "100%", background: "transparent", cursor: "pointer", font: "inherit", height: "100%", appearance: "none" }}
+                      style={{ border: "none", outline: "none", width: "100%", background: "transparent", cursor: "pointer", font: "inherit", height: "100%", appearance: "none", color: "#0f172a" }}
                     >
                       <option value="ALL_REVENUE">Total Income / Revenue (Dues, Raffles, Levies...)</option>
                       <option value="ALL_EXPENSES">Total Expenses (Outgoings)</option>
@@ -1203,14 +1254,13 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
                     <FiChevronDown style={{ position: "absolute", right: "12px", pointerEvents: "none", color: "#64748b" }} />
                   </div>
                 </div>
-
                 <div className="admin-dashboard__modal-section">
                   <label className="admin-dashboard__modal-label">Month</label>
                   <div className="admin-dashboard__modal-input-field" style={{ padding: "0 12px", display: "flex", alignItems: "center", background: "#fff", position: "relative" }}>
                     <select
                       value={selectedMonth}
                       onChange={(e) => { setSelectedMonth(e.target.value); resetResults(); }}
-                      style={{ border: "none", outline: "none", width: "100%", background: "transparent", cursor: "pointer", font: "inherit", height: "100%", appearance: "none" }}
+                      style={{ border: "none", outline: "none", width: "100%", background: "transparent", cursor: "pointer", font: "inherit", height: "100%", appearance: "none", color: "#0f172a" }}
                     >
                       <option value="ALL">All Months</option>
                       {MONTH_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
@@ -1218,14 +1268,13 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
                     <FiChevronDown style={{ position: "absolute", right: "12px", pointerEvents: "none", color: "#64748b" }} />
                   </div>
                 </div>
-
                 <div className="admin-dashboard__modal-section">
                   <label className="admin-dashboard__modal-label">Year</label>
                   <div className="admin-dashboard__modal-input-field" style={{ padding: "0 12px", display: "flex", alignItems: "center", background: "#fff", position: "relative" }}>
                     <select
                       value={selectedYear}
                       onChange={(e) => { setSelectedYear(e.target.value); resetResults(); }}
-                      style={{ border: "none", outline: "none", width: "100%", background: "transparent", cursor: "pointer", font: "inherit", height: "100%", appearance: "none" }}
+                      style={{ border: "none", outline: "none", width: "100%", background: "transparent", cursor: "pointer", font: "inherit", height: "100%", appearance: "none", color: "#0f172a" }}
                     >
                       <option value="ALL">All Years</option>
                       {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
@@ -1233,7 +1282,6 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
                     <FiChevronDown style={{ position: "absolute", right: "12px", pointerEvents: "none", color: "#64748b" }} />
                   </div>
                 </div>
-
                 <div className="admin-dashboard__modal-section">
                   <label className="admin-dashboard__modal-label">From Date (Optional)</label>
                   <div className="admin-dashboard__modal-input-field" style={{ padding: "0 12px", display: "flex", alignItems: "center", background: "#fff" }}>
@@ -1241,11 +1289,10 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
                       type="date"
                       value={startDate}
                       onChange={(e) => { setStartDate(e.target.value); resetResults(); }}
-                      style={{ border: "none", outline: "none", width: "100%", height: "100%", font: "inherit" }}
+                      style={{ border: "none", outline: "none", width: "100%", height: "100%", font: "inherit", color: "#0f172a" }}
                     />
                   </div>
                 </div>
-
                 <div className="admin-dashboard__modal-section">
                   <label className="admin-dashboard__modal-label">To Date (Optional)</label>
                   <div className="admin-dashboard__modal-input-field" style={{ padding: "0 12px", display: "flex", alignItems: "center", background: "#fff" }}>
@@ -1253,52 +1300,53 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
                       type="date"
                       value={endDate}
                       onChange={(e) => { setEndDate(e.target.value); resetResults(); }}
-                      style={{ border: "none", outline: "none", width: "100%", height: "100%", font: "inherit" }}
+                      style={{ border: "none", outline: "none", width: "100%", height: "100%", font: "inherit", color: "#0f172a" }}
                     />
                   </div>
                 </div>
               </>
             )}
 
-            {/* Hosting Specific Inputs */}
+            {/* Hosting Specific Inputs — Year and Month are all optional */}
             {category === "hosting" && (
               <>
                 <div className="admin-dashboard__modal-section">
-                  <label className="admin-dashboard__modal-label">Year</label>
+                  <label className="admin-dashboard__modal-label">Year (Optional)</label>
                   <div className="admin-dashboard__modal-input-field" style={{ padding: "0 12px", display: "flex", alignItems: "center", background: "#fff", position: "relative" }}>
                     <select
-                      value={hostingYear}
-                      onChange={(e) => { setHostingYear(Number(e.target.value)); resetResults(); }}
-                      style={{ border: "none", outline: "none", width: "100%", background: "transparent", cursor: "pointer", font: "inherit", height: "100%", appearance: "none" }}
+                      value={hostingYear || ""}
+                      onChange={(e) => { setHostingYear(e.target.value ? Number(e.target.value) : 0); resetResults(); }}
+                      style={{ border: "none", outline: "none", width: "100%", background: "transparent", cursor: "pointer", font: "inherit", height: "100%", appearance: "none", color: "#0f172a" }}
                     >
+                      <option value="">All Years</option>
                       {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
                     </select>
                     <FiChevronDown style={{ position: "absolute", right: "12px", pointerEvents: "none", color: "#64748b" }} />
                   </div>
                 </div>
                 <div className="admin-dashboard__modal-section">
-                  <label className="admin-dashboard__modal-label">From Month</label>
+                  <label className="admin-dashboard__modal-label">From Month (Optional)</label>
                   <div className="admin-dashboard__modal-input-field" style={{ padding: "0 12px", display: "flex", alignItems: "center", background: "#fff", position: "relative" }}>
                     <select
                       value={startMonth}
                       onChange={(e) => { setStartMonth(e.target.value); resetResults(); }}
-                      style={{ border: "none", outline: "none", width: "100%", background: "transparent", cursor: "pointer", font: "inherit", height: "100%", appearance: "none" }}
+                      style={{ border: "none", outline: "none", width: "100%", background: "transparent", cursor: "pointer", font: "inherit", height: "100%", appearance: "none", color: "#0f172a" }}
                     >
-                      <option value="">Select month</option>
+                      <option value="">All Months</option>
                       {MONTH_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                     </select>
                     <FiChevronDown style={{ position: "absolute", right: "12px", pointerEvents: "none", color: "#64748b" }} />
                   </div>
                 </div>
                 <div className="admin-dashboard__modal-section">
-                  <label className="admin-dashboard__modal-label">To Month</label>
+                  <label className="admin-dashboard__modal-label">To Month (Optional)</label>
                   <div className="admin-dashboard__modal-input-field" style={{ padding: "0 12px", display: "flex", alignItems: "center", background: "#fff", position: "relative" }}>
                     <select
                       value={endMonth}
                       onChange={(e) => { setEndMonth(e.target.value); resetResults(); }}
-                      style={{ border: "none", outline: "none", width: "100%", background: "transparent", cursor: "pointer", font: "inherit", height: "100%", appearance: "none" }}
+                      style={{ border: "none", outline: "none", width: "100%", background: "transparent", cursor: "pointer", font: "inherit", height: "100%", appearance: "none", color: "#0f172a" }}
                     >
-                      <option value="">Select month</option>
+                      <option value="">All Months</option>
                       {MONTH_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                     </select>
                     <FiChevronDown style={{ position: "absolute", right: "12px", pointerEvents: "none", color: "#64748b" }} />
@@ -1307,45 +1355,46 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
               </>
             )}
 
-            {/* Attendance Specific Inputs */}
+            {/* Attendance Specific Inputs — all filters optional */}
             {category === "attendance" && (
               <>
                 <div className="admin-dashboard__modal-section">
-                  <label className="admin-dashboard__modal-label">Year</label>
+                  <label className="admin-dashboard__modal-label">Year (Optional)</label>
                   <div className="admin-dashboard__modal-input-field" style={{ padding: "0 12px", display: "flex", alignItems: "center", background: "#fff", position: "relative" }}>
                     <select
-                      value={hostingYear}
-                      onChange={(e) => { setHostingYear(Number(e.target.value)); resetResults(); }}
-                      style={{ border: "none", outline: "none", width: "100%", background: "transparent", cursor: "pointer", font: "inherit", height: "100%", appearance: "none" }}
+                      value={hostingYear || ""}
+                      onChange={(e) => { setHostingYear(e.target.value ? Number(e.target.value) : 0); resetResults(); }}
+                      style={{ border: "none", outline: "none", width: "100%", background: "transparent", cursor: "pointer", font: "inherit", height: "100%", appearance: "none", color: "#0f172a" }}
                     >
+                      <option value="">All Years</option>
                       {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
                     </select>
                     <FiChevronDown style={{ position: "absolute", right: "12px", pointerEvents: "none", color: "#64748b" }} />
                   </div>
                 </div>
                 <div className="admin-dashboard__modal-section">
-                  <label className="admin-dashboard__modal-label">From Month</label>
+                  <label className="admin-dashboard__modal-label">From Month (Optional)</label>
                   <div className="admin-dashboard__modal-input-field" style={{ padding: "0 12px", display: "flex", alignItems: "center", background: "#fff", position: "relative" }}>
                     <select
                       value={startMonth}
                       onChange={(e) => { setStartMonth(e.target.value); resetResults(); }}
-                      style={{ border: "none", outline: "none", width: "100%", background: "transparent", cursor: "pointer", font: "inherit", height: "100%", appearance: "none" }}
+                      style={{ border: "none", outline: "none", width: "100%", background: "transparent", cursor: "pointer", font: "inherit", height: "100%", appearance: "none", color: "#0f172a" }}
                     >
-                      <option value="">Select month</option>
+                      <option value="">All Months</option>
                       {MONTH_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                     </select>
                     <FiChevronDown style={{ position: "absolute", right: "12px", pointerEvents: "none", color: "#64748b" }} />
                   </div>
                 </div>
                 <div className="admin-dashboard__modal-section">
-                  <label className="admin-dashboard__modal-label">To Month</label>
+                  <label className="admin-dashboard__modal-label">To Month (Optional)</label>
                   <div className="admin-dashboard__modal-input-field" style={{ padding: "0 12px", display: "flex", alignItems: "center", background: "#fff", position: "relative" }}>
                     <select
                       value={endMonth}
                       onChange={(e) => { setEndMonth(e.target.value); resetResults(); }}
-                      style={{ border: "none", outline: "none", width: "100%", background: "transparent", cursor: "pointer", font: "inherit", height: "100%", appearance: "none" }}
+                      style={{ border: "none", outline: "none", width: "100%", background: "transparent", cursor: "pointer", font: "inherit", height: "100%", appearance: "none", color: "#0f172a" }}
                     >
-                      <option value="">Select month</option>
+                      <option value="">All Months</option>
                       {MONTH_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                     </select>
                     <FiChevronDown style={{ position: "absolute", right: "12px", pointerEvents: "none", color: "#64748b" }} />

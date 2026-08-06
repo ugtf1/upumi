@@ -161,3 +161,13 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+/* Fix for dropdown select inputs and option popups across all pages */
+select {
+  color: #0f172a !important;
+}
+
+option {
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+}
