@@ -3,6 +3,7 @@ import { FiChevronDown, FiDownload, FiX } from "react-icons/fi";
 import { apiGet, getAllMemberYearlyBalances, type MemberYearlyBalanceApiRow } from "./api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+// Member Filter Report Modal - v1.0.1
 
 type RawMember = {
   id: string;
