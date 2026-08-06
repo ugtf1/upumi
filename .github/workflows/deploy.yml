@@ -435,10 +435,10 @@ jobs:
           SUMMARY=$(python -c 'import json; d=json.load(open("seo-results.json")); i=d.get("issues",[]); print(", ".join(i[:5]) if i else "No issues detected")')
           echo "issues_summary=$SUMMARY" >> $GITHUB_OUTPUT
 
-  # 5) Notify via Email (runs when either service changed)
+  # 5) Notify via Email
   notify:
-    needs: [detect-changes, deploy-web, build-api-image, migrate-database, deploy-api, health-check-web, health-check-api, lighthouse-audit, seo-audit]
-    if: always() && (needs.detect-changes.outputs.web == 'true' || needs.detect-changes.outputs.api == 'true')
+    needs: [deploy-web, build-api-image, migrate-database, deploy-api, health-check-web, health-check-api, lighthouse-audit, seo-audit]
+    if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Send Email Summary
@@ -453,10 +453,6 @@ jobs:
           from: UGTF CI Bot
           body: |
             ✅ Deployment pipeline finished
-
-            Changed:
-              - web: ${{ needs.detect-changes.outputs.web }}
-              - api: ${{ needs.detect-changes.outputs.api }}
 
             WEB:
               - deploy: ${{ needs.deploy-web.result }}
