@@ -4,12 +4,14 @@ import { useNavigate, useLocation } from "react-router-dom";
 import {
   FiCreditCard,
   FiDollarSign,
+  FiFilter,
   FiLogOut,
   FiSettings,
   FiUsers,
 } from "react-icons/fi";
 
 import { clearToken, getAllTransactionsReadOnly, getAllExpensesReadOnly } from "./api";
+import ReportFilterModal from "./ReportFilterModal";
 import memberImage from "./upu-logo.svg";
 import "./admin-page.scss";
 import "./transaction-page.scss";
@@ -79,6 +81,7 @@ export default function MemberTransaction() {
   const navigate = useNavigate();
   const location = useLocation();
   const [activeNav, setActiveNav] = useState("Community Dashboard");
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   // const MEMBER_NAV_ITEMS: NavigationItem[] = [
   //   {
@@ -431,7 +434,37 @@ export default function MemberTransaction() {
           </div>
         </section> */}
 
-        <section className="transaction-page__tools">
+        <section className="transaction-page__tools" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem", flexWrap: "wrap", gap: "1rem" }}>
+          <div>
+            <h2 style={{ fontSize: "1.3rem", fontWeight: 700, margin: 0, color: "#0f172a" }}>Member Transactions</h2>
+            <p style={{ margin: "4px 0 0 0", color: "#64748b", fontSize: "0.88rem" }}>View transactions, expenses, and generate monthly reports.</p>
+          </div>
+          <div>
+            <button
+              type="button"
+              className="admin-dashboard__icon-button"
+              onClick={() => setIsReportModalOpen(true)}
+              title="Generate Financial Reports"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "10px 18px",
+                borderRadius: "12px",
+                backgroundColor: "#166d2e",
+                color: "#fff",
+                border: "none",
+                fontWeight: 600,
+                cursor: "pointer",
+                fontSize: "0.9rem",
+                width: "auto",
+                height: "auto"
+              }}
+            >
+              <FiFilter size={18} />
+              <span>Filter & Reports</span>
+            </button>
+          </div>
         </section>
 
         <section className="admin-dashboard__stats transaction-page__summary">
@@ -659,6 +692,9 @@ export default function MemberTransaction() {
             </div>
           </div>
         </div>
+      )}
+      {isReportModalOpen && (
+        <ReportFilterModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} />
       )}
     </div>
   );

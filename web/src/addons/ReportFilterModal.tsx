@@ -129,10 +129,25 @@ function formatCurrency(amount: number | string): string {
   return `$${numeric.toLocaleString()}`;
 }
 
-export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModalProps) {
-  const [category, setCategory] = useState<ReportCategory>("dues");
+type UnifiedReportRow = {
+  id: string;
+  date: string;
+  year: number;
+  month: number;
+  title: string;
+  name: string;
+  description: string;
+  amount: number;
+  isExpense: boolean;
+};
 
-  // Dates for Dues & Transactions
+export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModalProps) {
+  const [category, setCategory] = useState<ReportCategory>("transactions");
+
+  // Filter selections for Financials/Transactions & Dues
+  const [selectedTxTitle, setSelectedTxTitle] = useState<string>("ALL_REVENUE");
+  const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
+  const [selectedMonth, setSelectedMonth] = useState<string>("ALL");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
@@ -152,6 +167,7 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
   const [error, setError] = useState<string | null>(null);
 
   // Result state
+  const [resultsUnified, setResultsUnified] = useState<UnifiedReportRow[] | null>(null);
   const [resultsDues, setResultsDues] = useState<ApiMonthlyDue[] | null>(null);
   const [resultsTransactions, setResultsTransactions] = useState<ApiTransactionRow[] | null>(null);
   const [resultsHosting, setResultsHosting] = useState<HostingScheduleApiRow[] | null>(null);
@@ -196,6 +212,7 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
   if (!isOpen) return null;
 
   function resetResults() {
+    setResultsUnified(null);
     setResultsDues(null);
     setResultsTransactions(null);
     setResultsHosting(null);
@@ -209,50 +226,104 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
     setLoading(true);
 
     try {
-      if (category === "dues") {
-        if (!startDate || !endDate) throw new Error("Please select both a start and end date.");
-        const start = new Date(startDate).getTime();
-        const end = new Date(endDate).setHours(23, 59, 59, 999);
-        if (start > end) throw new Error("Start date cannot be after end date.");
+      if (category === "dues" || category === "transactions") {
+        const [duesRows, txRows] = await Promise.all([
+          getAllDuesReadOnly().catch(() => []) as Promise<ApiMonthlyDue[]>,
+          getAllTransactionsReadOnly().catch(() => []) as Promise<ApiTransactionRow[]>,
+        ]);
 
-        const rows = await getAllDuesReadOnly() as ApiMonthlyDue[];
-        let filtered = rows.filter(r => {
-          if (!r.createdAt) return false;
-          const t = new Date(r.createdAt).getTime();
-          return t >= start && t <= end && Number(r.duesPaid) > 0; // only paid dues
-        });
+        const unifiedList: UnifiedReportRow[] = [];
 
-        // Filter by selected member name/ID if set
-        if (selectedMember) {
-          filtered = filtered.filter(r => r.memberRecordId === selectedMember.id);
-        }
-
-        setResultsDues(filtered);
-
-      } else if (category === "transactions") {
-        if (!startDate || !endDate) throw new Error("Please select both a start and end date.");
-        const start = new Date(startDate).getTime();
-        const end = new Date(endDate).setHours(23, 59, 59, 999);
-        if (start > end) throw new Error("Start date cannot be after end date.");
-
-        const rows = await getAllTransactionsReadOnly() as ApiTransactionRow[];
-        let filtered = rows.filter(r => {
-          if (!r.date) return false;
-          const t = new Date(r.date).getTime();
-          return t >= start && t <= end;
-        });
-
-        // Filter by selected member name/ID if set
-        if (selectedMember) {
-          const nameToMatch = `${selectedMember.firstName} ${selectedMember.lastName}`.toLowerCase().trim();
-          filtered = filtered.filter(r => {
-            const hasUserId = r.userId && r.userId === selectedMember.userId;
-            const hasNameMatch = r.fullName && r.fullName.toLowerCase().includes(nameToMatch);
-            return hasUserId || hasNameMatch;
+        // 1. Process Dues payments
+        for (const d of duesRows) {
+          const amt = Number(d.duesPaid || 0);
+          if (amt <= 0) continue;
+          const name = [d.member?.firstName, d.member?.lastName].filter(Boolean).join(" ") || d.member?.email || "Member";
+          const dateStr = d.createdAt
+            ? new Date(d.createdAt).toISOString().split("T")[0]
+            : `${d.year}-${String(d.month).padStart(2, "0")}-01`;
+          unifiedList.push({
+            id: `due-${d.id}`,
+            date: dateStr,
+            year: d.year,
+            month: d.month,
+            title: "Dues",
+            name,
+            description: `Dues payment for ${SHORT_MONTH_NAMES[d.month - 1] || d.month} ${d.year}`,
+            amount: amt,
+            isExpense: false,
           });
         }
 
-        setResultsTransactions(filtered);
+        // 2. Process Transactions
+        for (const t of txRows) {
+          const amt = Number(t.amount || 0);
+          const dateObj = t.date ? new Date(t.date) : new Date();
+          const yr = dateObj.getFullYear();
+          const mo = dateObj.getMonth() + 1;
+          const titleClean = (t.title || "Transaction").trim();
+          const isExp = titleClean.toLowerCase().includes("expense") || amt < 0;
+          unifiedList.push({
+            id: `tx-${t.id}`,
+            date: t.date || dateObj.toISOString().split("T")[0],
+            year: yr,
+            month: mo,
+            title: titleClean,
+            name: t.fullName || "N/A",
+            description: t.description || "",
+            amount: Math.abs(amt),
+            isExpense: isExp,
+          });
+        }
+
+        // Apply Title/Category filter
+        let filtered = unifiedList;
+        if (selectedTxTitle === "ALL_REVENUE") {
+          filtered = filtered.filter(r => !r.isExpense);
+        } else if (selectedTxTitle === "ALL_EXPENSES") {
+          filtered = filtered.filter(r => r.isExpense);
+        } else if (selectedTxTitle === "ALL") {
+          // All records
+        } else if (selectedTxTitle === "Dues") {
+          filtered = filtered.filter(r => r.title.toLowerCase() === "dues");
+        } else if (selectedTxTitle === "Expense" || selectedTxTitle === "Expenses") {
+          filtered = filtered.filter(r => r.isExpense);
+        } else {
+          filtered = filtered.filter(r => r.title.toLowerCase() === selectedTxTitle.toLowerCase());
+        }
+
+        // Apply Year filter
+        if (selectedYear !== "ALL") {
+          const targetYr = Number(selectedYear);
+          filtered = filtered.filter(r => r.year === targetYr);
+        }
+
+        // Apply Month filter
+        if (selectedMonth !== "ALL") {
+          const targetMo = Number(selectedMonth);
+          filtered = filtered.filter(r => r.month === targetMo);
+        }
+
+        // Apply Date Range filter if set
+        if (startDate && endDate) {
+          const start = new Date(startDate).getTime();
+          const end = new Date(endDate).setHours(23, 59, 59, 999);
+          if (start > end) throw new Error("Start date cannot be after end date.");
+          filtered = filtered.filter(r => {
+            const t = new Date(r.date).getTime();
+            return t >= start && t <= end;
+          });
+        }
+
+        // Apply Member Filter if set
+        if (selectedMember) {
+          const nameToMatch = `${selectedMember.firstName} ${selectedMember.lastName}`.toLowerCase().trim();
+          filtered = filtered.filter(r => r.name.toLowerCase().includes(nameToMatch));
+        }
+
+        // Sort by date descending
+        filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        setResultsUnified(filtered);
 
       } else if (category === "hosting") {
         if (!startMonth || !endMonth) throw new Error("Please select both start and end months.");
@@ -463,6 +534,84 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
       );
     }
 
+    if (resultsUnified) {
+      if (resultsUnified.length === 0) {
+        return <div className="report-modal__empty-text">No transaction or financial records found for this period.</div>;
+      }
+
+      const totalIncome = resultsUnified.filter(r => !r.isExpense).reduce((sum, r) => sum + r.amount, 0);
+      const totalExpense = resultsUnified.filter(r => r.isExpense).reduce((sum, r) => sum + r.amount, 0);
+      const netTotal = totalIncome - totalExpense;
+
+      return (
+        <div style={{ marginTop: "1rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "8px", marginBottom: "1.25rem", paddingInline: "4px", alignItems: "center" }}>
+            <span style={{ fontSize: "0.95rem", color: "#475569" }}>
+              Found <strong>{resultsUnified.length}</strong> record{resultsUnified.length !== 1 ? "s" : ""}
+            </span>
+            <div style={{ display: "flex", gap: "16px", fontSize: "1rem" }}>
+              {totalIncome > 0 && (
+                <span style={{ color: "#1e293b" }}>Total Income: <strong style={{ color: "#166d2e" }}>{formatCurrency(totalIncome)}</strong></span>
+              )}
+              {totalExpense > 0 && (
+                <span style={{ color: "#1e293b" }}>Total Expense: <strong style={{ color: "#dc2626" }}>{formatCurrency(totalExpense)}</strong></span>
+              )}
+            </div>
+          </div>
+
+          <div className="admin-dashboard__table-container">
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left" }}>Date / Period</th>
+                  <th style={{ textAlign: "left" }}>Title / Category</th>
+                  <th style={{ textAlign: "left" }}>Member / Source</th>
+                  <th style={{ textAlign: "left" }}>Description</th>
+                  <th style={{ textAlign: "right" }}>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {resultsUnified.map((row) => (
+                  <tr key={row.id}>
+                    <td data-label="Date / Period" style={{ whiteSpace: "nowrap" }}>
+                      {new Date(row.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                    </td>
+                    <td data-label="Title / Category">
+                      <span
+                        className={`admin-dashboard__status-pill ${row.isExpense ? "is-bad" : "is-good"}`}
+                        style={{ fontSize: "0.78rem", padding: "3px 8px" }}
+                      >
+                        {row.title}
+                      </span>
+                    </td>
+                    <td data-label="Member / Source" style={{ fontWeight: 600, color: "#1e293b" }}>
+                      {row.name}
+                    </td>
+                    <td data-label="Description" style={{ color: "#475569", fontSize: "0.85rem" }}>
+                      {row.description || "-"}
+                    </td>
+                    <td data-label="Amount" style={{ textAlign: "right", fontWeight: 700, color: row.isExpense ? "#dc2626" : "#166d2e" }}>
+                      {row.isExpense ? `-${formatCurrency(row.amount)}` : formatCurrency(row.amount)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ background: "#f1f5f9", fontWeight: 700, fontSize: "1.05rem", borderTop: "2px solid #cbd5e1" }}>
+                  <td colSpan={4} style={{ textAlign: "right", padding: "14px 16px", color: "#0f172a" }}>
+                    TOTAL AMOUNT:
+                  </td>
+                  <td style={{ textAlign: "right", padding: "14px 16px", color: netTotal < 0 ? "#dc2626" : "#166d2e", fontSize: "1.15rem" }}>
+                    {formatCurrency(netTotal)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      );
+    }
+
     if (resultsDues) {
       if (resultsDues.length === 0) {
         return <div className="report-modal__empty-text">No dues payments found for this period.</div>;
@@ -477,7 +626,6 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
             <span style={{ fontSize: "1.05rem", color: "#1e293b" }}>Total Dues: <strong style={{ color: "#166d2e" }}>{formatCurrency(total)}</strong></span>
           </div>
 
-          {/* Desktop Table View */}
           <div className="admin-dashboard__table-container">
             <table>
               <thead>
@@ -485,7 +633,7 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
                   <th>Member Name</th>
                   <th>For Period</th>
                   <th>Date Paid</th>
-                  <th>Amount</th>
+                  <th style={{ textAlign: "right" }}>Amount</th>
                 </tr>
               </thead>
               <tbody>
@@ -497,11 +645,21 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
                       <td data-label="Member Name" style={{ fontWeight: 600, color: "#1e293b" }}>{name}</td>
                       <td data-label="For Period">{monthName} {row.year}</td>
                       <td data-label="Date Paid">{new Date(row.createdAt).toLocaleDateString()}</td>
-                      <td data-label="Amount" style={{ fontWeight: 700, color: "#166d2e" }}>{formatCurrency(row.duesPaid)}</td>
+                      <td data-label="Amount" style={{ fontWeight: 700, color: "#166d2e", textAlign: "right" }}>{formatCurrency(row.duesPaid)}</td>
                     </tr>
                   );
                 })}
               </tbody>
+              <tfoot>
+                <tr style={{ background: "#f1f5f9", fontWeight: 700, fontSize: "1.05rem", borderTop: "2px solid #cbd5e1" }}>
+                  <td colSpan={3} style={{ textAlign: "right", padding: "14px 16px", color: "#0f172a" }}>
+                    TOTAL DUES:
+                  </td>
+                  <td style={{ textAlign: "right", padding: "14px 16px", color: "#166d2e", fontSize: "1.15rem" }}>
+                    {formatCurrency(total)}
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>
@@ -522,20 +680,39 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
             <span style={{ fontSize: "1.05rem", color: "#1e293b" }}>Total Amount: <strong style={{ color: "#166d2e" }}>{formatCurrency(total)}</strong></span>
           </div>
 
-          <div className="report-modal__transactions-list">
-            {resultsTransactions.map((row: ApiTransactionRow) => (
-              <div key={row.id} className="report-modal__transaction-card">
-                <div className="report-modal__transaction-details">
-                  <span className="report-modal__transaction-title">{row.title}</span>
-                  <span style={{ fontSize: "0.82rem", color: "#64748b" }}>Paid by: <strong>{row.fullName}</strong></span>
-                  {row.description && <span style={{ fontSize: "0.82rem", color: "#475569", background: "#f8fafc", padding: "4px 8px", borderRadius: "6px", marginTop: "4px" }}>{row.description}</span>}
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
-                  <span className="report-modal__transaction-amount">{formatCurrency(row.amount)}</span>
-                  <span className="report-modal__transaction-date">{new Date(row.date).toLocaleDateString()}</span>
-                </div>
-              </div>
-            ))}
+          <div className="admin-dashboard__table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Title</th>
+                  <th>Member Name</th>
+                  <th>Description</th>
+                  <th style={{ textAlign: "right" }}>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {resultsTransactions.map((row: ApiTransactionRow) => (
+                  <tr key={row.id}>
+                    <td data-label="Date">{new Date(row.date).toLocaleDateString()}</td>
+                    <td data-label="Title" style={{ fontWeight: 600 }}>{row.title}</td>
+                    <td data-label="Member Name">{row.fullName}</td>
+                    <td data-label="Description" style={{ color: "#475569", fontSize: "0.85rem" }}>{row.description || "-"}</td>
+                    <td data-label="Amount" style={{ fontWeight: 700, color: "#166d2e", textAlign: "right" }}>{formatCurrency(row.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ background: "#f1f5f9", fontWeight: 700, fontSize: "1.05rem", borderTop: "2px solid #cbd5e1" }}>
+                  <td colSpan={4} style={{ textAlign: "right", padding: "14px 16px", color: "#0f172a" }}>
+                    TOTAL AMOUNT:
+                  </td>
+                  <td style={{ textAlign: "right", padding: "14px 16px", color: "#166d2e", fontSize: "1.15rem" }}>
+                    {formatCurrency(total)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
         </div>
       );
@@ -574,7 +751,6 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
     if (resultsMember) {
       const p = resultsMember.profile;
       const filteredDues = resultsMember.dues.filter(d => d.year === trackerYear);
-      // Sort months 1 to 12
       filteredDues.sort((a, b) => a.month - b.month);
 
       const totalDuesPaid = resultsMember.dues.reduce((sum, d) => sum + d.duesPaid, 0);
@@ -710,19 +886,37 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
               <div style={{ textAlign: "right", fontSize: "0.9rem", color: "#475569", marginBottom: "10px" }}>
                 Total Transactions: <strong>{formatCurrency(totalTransactionsAmount)}</strong>
               </div>
-              <div className="report-modal__transactions-list">
-                {resultsMember.transactions.map((row: ApiTransactionRow) => (
-                  <div key={row.id} className="report-modal__transaction-card">
-                    <div className="report-modal__transaction-details">
-                      <span className="report-modal__transaction-title">{row.title}</span>
-                      {row.description && <span style={{ fontSize: "0.82rem", color: "#475569" }}>{row.description}</span>}
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
-                      <span className="report-modal__transaction-amount">{formatCurrency(row.amount)}</span>
-                      <span className="report-modal__transaction-date">{new Date(row.date).toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                ))}
+              <div className="admin-dashboard__table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Title</th>
+                      <th>Description</th>
+                      <th style={{ textAlign: "right" }}>Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resultsMember.transactions.map((row: ApiTransactionRow) => (
+                      <tr key={row.id}>
+                        <td data-label="Date">{new Date(row.date).toLocaleDateString()}</td>
+                        <td data-label="Title" style={{ fontWeight: 600 }}>{row.title}</td>
+                        <td data-label="Description" style={{ color: "#475569", fontSize: "0.85rem" }}>{row.description || "-"}</td>
+                        <td data-label="Amount" style={{ fontWeight: 700, color: "#166d2e", textAlign: "right" }}>{formatCurrency(row.amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ background: "#f1f5f9", fontWeight: 700, fontSize: "1.05rem", borderTop: "2px solid #cbd5e1" }}>
+                      <td colSpan={3} style={{ textAlign: "right", padding: "14px 16px", color: "#0f172a" }}>
+                        TOTAL TRANSACTIONS:
+                      </td>
+                      <td style={{ textAlign: "right", padding: "14px 16px", color: "#166d2e", fontSize: "1.15rem" }}>
+                        {formatCurrency(totalTransactionsAmount)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
             </div>
           )}
@@ -987,7 +1181,61 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
             {(category === "dues" || category === "transactions") && (
               <>
                 <div className="admin-dashboard__modal-section">
-                  <label className="admin-dashboard__modal-label">From Date</label>
+                  <label className="admin-dashboard__modal-label">Transaction Category / Title</label>
+                  <div className="admin-dashboard__modal-input-field" style={{ padding: "0 12px", display: "flex", alignItems: "center", background: "#fff", position: "relative" }}>
+                    <select
+                      value={selectedTxTitle}
+                      onChange={(e) => { setSelectedTxTitle(e.target.value); resetResults(); }}
+                      style={{ border: "none", outline: "none", width: "100%", background: "transparent", cursor: "pointer", font: "inherit", height: "100%", appearance: "none" }}
+                    >
+                      <option value="ALL_REVENUE">Total Income / Revenue (Dues, Raffles, Levies...)</option>
+                      <option value="ALL_EXPENSES">Total Expenses (Outgoings)</option>
+                      <option value="ALL">All Transactions & Financials</option>
+                      <option value="Dues">Dues Only</option>
+                      <option value="Expense">Expenses Only</option>
+                      <option value="Raffle">Raffle</option>
+                      <option value="Levy">Levy</option>
+                      <option value="Insurance">Insurance</option>
+                      <option value="Wrapper">Wrapper</option>
+                      <option value="UPUA 25 Raffle">UPUA 25 Raffle</option>
+                      <option value="Others">Others</option>
+                    </select>
+                    <FiChevronDown style={{ position: "absolute", right: "12px", pointerEvents: "none", color: "#64748b" }} />
+                  </div>
+                </div>
+
+                <div className="admin-dashboard__modal-section">
+                  <label className="admin-dashboard__modal-label">Month</label>
+                  <div className="admin-dashboard__modal-input-field" style={{ padding: "0 12px", display: "flex", alignItems: "center", background: "#fff", position: "relative" }}>
+                    <select
+                      value={selectedMonth}
+                      onChange={(e) => { setSelectedMonth(e.target.value); resetResults(); }}
+                      style={{ border: "none", outline: "none", width: "100%", background: "transparent", cursor: "pointer", font: "inherit", height: "100%", appearance: "none" }}
+                    >
+                      <option value="ALL">All Months</option>
+                      {MONTH_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                    </select>
+                    <FiChevronDown style={{ position: "absolute", right: "12px", pointerEvents: "none", color: "#64748b" }} />
+                  </div>
+                </div>
+
+                <div className="admin-dashboard__modal-section">
+                  <label className="admin-dashboard__modal-label">Year</label>
+                  <div className="admin-dashboard__modal-input-field" style={{ padding: "0 12px", display: "flex", alignItems: "center", background: "#fff", position: "relative" }}>
+                    <select
+                      value={selectedYear}
+                      onChange={(e) => { setSelectedYear(e.target.value); resetResults(); }}
+                      style={{ border: "none", outline: "none", width: "100%", background: "transparent", cursor: "pointer", font: "inherit", height: "100%", appearance: "none" }}
+                    >
+                      <option value="ALL">All Years</option>
+                      {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                    <FiChevronDown style={{ position: "absolute", right: "12px", pointerEvents: "none", color: "#64748b" }} />
+                  </div>
+                </div>
+
+                <div className="admin-dashboard__modal-section">
+                  <label className="admin-dashboard__modal-label">From Date (Optional)</label>
                   <div className="admin-dashboard__modal-input-field" style={{ padding: "0 12px", display: "flex", alignItems: "center", background: "#fff" }}>
                     <input
                       type="date"
@@ -997,8 +1245,9 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
                     />
                   </div>
                 </div>
+
                 <div className="admin-dashboard__modal-section">
-                  <label className="admin-dashboard__modal-label">To Date</label>
+                  <label className="admin-dashboard__modal-label">To Date (Optional)</label>
                   <div className="admin-dashboard__modal-input-field" style={{ padding: "0 12px", display: "flex", alignItems: "center", background: "#fff" }}>
                     <input
                       type="date"

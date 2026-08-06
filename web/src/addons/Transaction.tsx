@@ -20,6 +20,7 @@ import {
 } from "react-icons/fi";
 
 import { apiGet, apiPost, apiPatch, apiDelete, clearToken } from "./api";
+import ReportFilterModal from "./ReportFilterModal";
 import "./admin-page.scss";
 import "./transaction-page.scss";
 
@@ -136,6 +137,7 @@ export default function TransactionPage() {
 
   // year state removed — filter UI disabled in this build
   const [search, setSearch] = useState("");
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [transactionRows, setTransactionRows] = useState<TransactionRow[]>([]);
   const [txLoading, setTxLoading] = useState(true);
   const [txError, setTxError] = useState<string | null>(null);
@@ -795,7 +797,13 @@ export default function TransactionPage() {
               />
             </label>
 
-            <button type="button" className="admin-dashboard__icon-button" aria-label="Filter transactions">
+            <button
+              type="button"
+              className="admin-dashboard__icon-button"
+              aria-label="Filter transactions"
+              onClick={() => setIsReportModalOpen(true)}
+              title="Generate Financial Reports"
+            >
               <FiFilter size={18} />
             </button>
 
@@ -1498,6 +1506,8 @@ export default function TransactionPage() {
           <span>{toast}</span>
         </div>
       )}
+
+      <ReportFilterModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} />
     </div>
   );
 }
