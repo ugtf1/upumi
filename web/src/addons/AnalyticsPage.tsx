@@ -193,6 +193,8 @@ export default function AdminPage() {
   const [activeMembers, setActiveMembers] = useState<number | null>(null);
   const [totalRevenue, setTotalRevenue] = useState<number | null>(null);
   const [pendingPayment, setPendingPayment] = useState<number | null>(null);
+  const [currentMonthDues, setCurrentMonthDues] = useState<number | null>(null);
+  const [paidThisMonthCount, setPaidThisMonthCount] = useState<number | null>(null);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [year, setYear] = useState(2026);
   const [hostingScheduleRows, setHostingScheduleRows] = useState<HostingScheduleApiRow[]>([]);
@@ -273,6 +275,17 @@ export default function AdminPage() {
         const txSum = transactions.reduce((sum, r) => sum + Number(r.amount ?? 0), 0);
         const duesSum = dues.reduce((sum, r) => sum + Number(r.duesPaid ?? 0), 0);
         setTotalRevenue(txSum + duesSum);
+        // Current-month dues collected
+        const monthDues = dues
+          .filter((d) => d.year === currentYear && d.month === currentMonth && Number(d.duesPaid) > 0)
+          .reduce((sum, d) => sum + Number(d.duesPaid ?? 0), 0);
+        setCurrentMonthDues(monthDues);
+        const paidCount = new Set(
+          dues
+            .filter((d) => d.year === currentYear && d.month === currentMonth && Number(d.duesPaid) > 0)
+            .map((d) => d.memberRecordId)
+        ).size;
+        setPaidThisMonthCount(paidCount);
       })
       .catch(() => {});
 
@@ -777,9 +790,19 @@ export default function AdminPage() {
         </section>
 
         <section className="admin-dashboard__financial-grid" id="admin-dashboard-settings">
-          {[0, 1].map((panelIndex) => (
-            <FinancialPanel key={panelIndex} snapshot={financialSnapshot} />
-          ))}
+          <FinancialPanel snapshot={financialSnapshot} />
+          <CurrentMonthPanel
+            monthName={new Date().toLocaleString("default", { month: "long" })}
+            year={new Date().getFullYear()}
+            paidCount={paidThisMonthCount}
+            unpaidCount={pendingPayment !== null && paidThisMonthCount !== null && activeMembers !== null
+              ? Math.max(0, activeMembers - paidThisMonthCount)
+              : null}
+            duesCollected={currentMonthDues}
+            pendingAmount={pendingPayment}
+            businessBalance={financialSnapshot.businessAccount}
+            activeMembers={activeMembers}
+          />
         </section>
 
         <section className="admin-dashboard__schedule">
@@ -1126,6 +1149,91 @@ function FinancialPanel({ snapshot }: { snapshot: FinancialSnapshot }) {
           </div>
         ))}
       </div>
+    </article>
+  );
+}
+
+type CurrentMonthPanelProps = {
+  monthName: string;
+  year: number;
+  paidCount: number | null;
+  unpaidCount: number | null;
+  duesCollected: number | null;
+  pendingAmount: number | null;
+  businessBalance: number;
+  activeMembers: number | null;
+};
+
+function CurrentMonthPanel({
+  monthName, year, paidCount, unpaidCount, duesCollected, pendingAmount, businessBalance, activeMembers,
+}: CurrentMonthPanelProps) {
+  const paidPct = paidCount !== null && activeMembers ? Math.round((paidCount / activeMembers) * 100) : null;
+
+  const stats = [
+    {
+      label: "Dues Collected",
+      value: duesCollected === null ? "—" : formatCurrency(duesCollected),
+      color: "#22c55e",
+      sub: "This month",
+    },
+    {
+      label: "Members Paid",
+      value: paidCount === null ? "—" : `${paidCount}${activeMembers ? ` / ${activeMembers}` : ""}`,
+      color: "#6366f1",
+      sub: paidPct !== null ? `${paidPct}% compliance` : "Active members",
+    },
+    {
+      label: "Unpaid Members",
+      value: unpaidCount === null ? "—" : String(unpaidCount),
+      color: unpaidCount ? "#ef4444" : "#22c55e",
+      sub: pendingAmount !== null ? `${formatCurrency(pendingAmount)} pending` : "Outstanding",
+    },
+    {
+      label: "Business Balance",
+      value: formatCurrency(businessBalance),
+      color: "#f59e0b",
+      sub: "Current snapshot",
+    },
+  ];
+
+  return (
+    <article className="admin-dashboard__panel">
+      <h3 className="admin-dashboard__financial-title">
+        Current Month Overview
+        <span style={{ fontSize: "0.8rem", fontWeight: 400, color: "#6b7c75", marginLeft: "8px" }}>
+          {monthName} {year}
+        </span>
+      </h3>
+
+      <div className="admin-dashboard__finance-cards">
+        {stats.map((s) => (
+          <div key={s.label} className="admin-dashboard__finance-card" style={{ borderTop: `3px solid ${s.color}` }}>
+            <span>{s.label}</span>
+            <strong style={{ color: s.color, fontSize: "1.15rem" }}>{s.value}</strong>
+            <span style={{ fontSize: "0.75rem", color: "#9aafa9", marginTop: "2px" }}>{s.sub}</span>
+          </div>
+        ))}
+      </div>
+
+      {paidPct !== null && (
+        <div className="admin-dashboard__balance-table">
+          <div className="admin-dashboard__balance-head">
+            <span>Dues Compliance</span>
+            <span>{paidPct}%</span>
+          </div>
+          <div style={{ padding: "8px 0" }}>
+            <div style={{
+              height: "8px", background: "#dfe8e3", borderRadius: "99px", overflow: "hidden",
+            }}>
+              <div style={{
+                height: "100%", width: `${paidPct}%`,
+                background: paidPct >= 75 ? "#22c55e" : paidPct >= 50 ? "#f59e0b" : "#ef4444",
+                borderRadius: "99px", transition: "width 0.6s ease",
+              }} />
+            </div>
+          </div>
+        </div>
+      )}
     </article>
   );
 }

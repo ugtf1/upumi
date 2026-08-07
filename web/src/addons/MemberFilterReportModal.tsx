@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { FiChevronDown, FiDownload, FiX } from "react-icons/fi";
+import { FiChevronDown, FiDownload, FiMail, FiPhone, FiUsers, FiUserCheck, FiDollarSign, FiAlertCircle, FiX } from "react-icons/fi";
 import { apiGet, getAllMemberYearlyBalances, type MemberYearlyBalanceApiRow } from "./api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-// Member Filter Report Modal - v1.0.1
+// Member Filter Report Modal - v2.0.0
 
 type RawMember = {
   id: string;
@@ -29,12 +29,15 @@ type MemberReportRow = {
   memberId: string;
   name: string;
   email: string;
+  phone: string;
   status: string;
   goodStanding: string;
   financialGoodStanding: string;
   yearlyBalance: number | null;
   outstanding: string;
+  outstandingRaw: number;
   totalPaid: string;
+  totalPaidRaw: number;
   voter: string;
   joined: string;
 };
@@ -69,6 +72,24 @@ function badgeColor(value: string): string {
   if (v === "yes" || v === "active" || v === "good") return "#22c55e";
   if (v === "no" || v === "inactive" || v === "bad") return "#ef4444";
   return "#64748b";
+}
+
+function BadgePill({ value }: { value: string }) {
+  const color = badgeColor(value);
+  return (
+    <span style={{
+      padding: "2px 10px",
+      borderRadius: "99px",
+      fontSize: "0.72rem",
+      fontWeight: 600,
+      background: `${color}22`,
+      color,
+      display: "inline-block",
+      whiteSpace: "nowrap",
+    }}>
+      {value}
+    </span>
+  );
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -134,17 +155,22 @@ export default function MemberFilterReportModal({ isOpen, onClose, memberSafe = 
         const fgsLabel = labelFor(m.financialGoodStanding);
         const gsLabel = labelFor(m.goodStanding);
         const yearlyBalance = filterBalanceYear !== "ALL" ? (balanceLookup.get(m.id) ?? null) : null;
+        const outstandingRaw = Number(m.outstanding ?? 0);
+        const totalPaidRaw = Number(m.totalPaid ?? 0);
         return {
           id: m.id,
           memberId: m.displayMemberId || m.memberKey || m.id,
           name,
           email: m.email || "-",
+          phone: m.phone || "-",
           status: statusLabel,
           goodStanding: gsLabel,
           financialGoodStanding: fgsLabel,
           yearlyBalance,
-          outstanding: formatCurrency(m.outstanding),
-          totalPaid: formatCurrency(m.totalPaid),
+          outstanding: formatCurrency(outstandingRaw),
+          outstandingRaw,
+          totalPaid: formatCurrency(totalPaidRaw),
+          totalPaidRaw,
           voter: labelFor(m.voter),
           joined: m.joined ? new Date(m.joined).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "-",
         };
@@ -187,10 +213,12 @@ export default function MemberFilterReportModal({ isOpen, onClose, memberSafe = 
 
   function handleExportCSV() {
     if (!reportRows) return;
-    const headers = ["Member ID","Name","Email","Status","Good Standing","Financial Good Standing","Yearly Balance","Total Paid","Outstanding","Voter","Joined"];
+    const headers = ["Member ID", "Name", "Email", "Phone", "Status", "Good Standing", "Financial Good Standing",
+      ...(filterBalanceYear !== "ALL" ? [`Balance (${filterBalanceYear})`] : []),
+      "Total Paid", "Outstanding", "Voter", "Joined"];
     const rows = reportRows.map((r) => [
-      r.memberId, r.name, r.email, r.status, r.goodStanding, r.financialGoodStanding,
-      r.yearlyBalance !== null ? String(r.yearlyBalance) : "-",
+      r.memberId, r.name, r.email, r.phone, r.status, r.goodStanding, r.financialGoodStanding,
+      ...(filterBalanceYear !== "ALL" ? [r.yearlyBalance !== null ? String(r.yearlyBalance) : "-"] : []),
       r.totalPaid, r.outstanding, r.voter, r.joined,
     ]);
     const csv = [headers, ...rows].map((r) => r.map((c) => `"${String(c)}"`).join(",")).join("\n");
@@ -203,11 +231,15 @@ export default function MemberFilterReportModal({ isOpen, onClose, memberSafe = 
     URL.revokeObjectURL(url);
   }
 
+  // Computed stats
   const activeCount = reportRows?.filter((r) => r.status === "Active").length ?? 0;
+  const inactiveCount = reportRows ? reportRows.length - activeCount : 0;
   const goodStandingCount = reportRows?.filter((r) => r.goodStanding.toLowerCase() === "yes").length ?? 0;
   const financialGoodCount = reportRows?.filter((r) => r.financialGoodStanding.toLowerCase() === "yes").length ?? 0;
   const balanceRows = reportRows?.filter((r) => r.yearlyBalance !== null) ?? [];
   const avgBalance = balanceRows.length > 0 ? balanceRows.reduce((s, r) => s + (r.yearlyBalance ?? 0), 0) / balanceRows.length : null;
+  const totalPaidSum = reportRows?.reduce((s, r) => s + r.totalPaidRaw, 0) ?? 0;
+  const totalOutstandingSum = reportRows?.reduce((s, r) => s + r.outstandingRaw, 0) ?? 0;
 
   if (!isOpen) return null;
 
@@ -220,6 +252,15 @@ export default function MemberFilterReportModal({ isOpen, onClose, memberSafe = 
     position: "relative", height: "44px", borderRadius: "8px", border: "1.5px solid #e2e8f0",
   };
 
+  const summaryStats = [
+    { label: "Total Members", value: reportRows?.length ?? 0, icon: FiUsers, color: "#6366f1" },
+    { label: "Active", value: activeCount, icon: FiUserCheck, color: "#22c55e" },
+    { label: "Inactive", value: inactiveCount, icon: FiAlertCircle, color: "#ef4444" },
+    { label: "Good Standing", value: goodStandingCount, icon: FiUserCheck, color: "#3b82f6" },
+    { label: "Financial Good", value: financialGoodCount, icon: FiDollarSign, color: "#f59e0b" },
+    ...(avgBalance !== null ? [{ label: `Avg Balance (${filterBalanceYear})`, value: `$${avgBalance.toFixed(0)}`, icon: FiDollarSign, color: "#a78bfa" }] : []),
+  ];
+
   return (
     <div
       ref={overlayRef}
@@ -230,17 +271,19 @@ export default function MemberFilterReportModal({ isOpen, onClose, memberSafe = 
       <div
         className="admin-dashboard__modal"
         style={{
-          width: "min(96vw, 1080px)", maxHeight: "92vh", display: "flex",
+          width: "min(96vw, 1160px)", maxHeight: "92vh", display: "flex",
           flexDirection: "column", overflowY: "auto",
           background: "linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #0f172a 100%)",
           borderRadius: "16px", color: "#f8fafc", boxShadow: "0 25px 60px rgba(0,0,0,0.5)",
         }}
       >
-        {/* Header */}
+        {/* ── Header ── */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "24px 28px 16px" }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: "1.35rem", fontWeight: 700, color: "#f8fafc" }}>Member Report Filter</h2>
-            <p style={{ margin: "4px 0 0", fontSize: "0.85rem", color: "#94a3b8" }}>Filter members by status, good standing, and yearly balance</p>
+            <h2 style={{ margin: 0, fontSize: "1.35rem", fontWeight: 700, color: "#f8fafc" }}>Member Report</h2>
+            <p style={{ margin: "4px 0 0", fontSize: "0.85rem", color: "#94a3b8" }}>
+              Filter and generate detailed member reports with full profile information
+            </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close modal"
             style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: "8px", padding: "8px", cursor: "pointer", color: "#94a3b8", display: "flex", alignItems: "center" }}>
@@ -248,8 +291,9 @@ export default function MemberFilterReportModal({ isOpen, onClose, memberSafe = 
           </button>
         </div>
 
-        {/* Filters */}
+        {/* ── Filters ── */}
         <div style={{ padding: "0 28px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "16px" }}>
+          {/* Member Status */}
           <div>
             <label style={{ display: "block", marginBottom: "6px", fontSize: "0.8rem", fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em" }}>Member Status</label>
             <div style={fieldWrap}>
@@ -262,6 +306,7 @@ export default function MemberFilterReportModal({ isOpen, onClose, memberSafe = 
             </div>
           </div>
 
+          {/* Good Standing */}
           <div>
             <label style={{ display: "block", marginBottom: "6px", fontSize: "0.8rem", fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em" }}>Good Standing</label>
             <div style={fieldWrap}>
@@ -274,6 +319,7 @@ export default function MemberFilterReportModal({ isOpen, onClose, memberSafe = 
             </div>
           </div>
 
+          {/* Financial Good Standing */}
           <div>
             <label style={{ display: "block", marginBottom: "6px", fontSize: "0.8rem", fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em" }}>Financial Good Standing</label>
             <div style={fieldWrap}>
@@ -286,6 +332,7 @@ export default function MemberFilterReportModal({ isOpen, onClose, memberSafe = 
             </div>
           </div>
 
+          {/* Yearly Balance Year (admin only) */}
           {!memberSafe && (
             <div>
               <label style={{ display: "block", marginBottom: "6px", fontSize: "0.8rem", fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em" }}>Yearly Balance Year</label>
@@ -303,6 +350,7 @@ export default function MemberFilterReportModal({ isOpen, onClose, memberSafe = 
             </div>
           )}
 
+          {/* Balance Min/Max (admin only, when year selected) */}
           {!memberSafe && filterBalanceYear !== "ALL" && (
             <>
               <div>
@@ -323,11 +371,11 @@ export default function MemberFilterReportModal({ isOpen, onClose, memberSafe = 
           )}
         </div>
 
-        {/* Action buttons */}
+        {/* ── Action buttons ── */}
         <div style={{ display: "flex", gap: "12px", padding: "0 28px 20px", flexWrap: "wrap" }}>
           <button type="button" onClick={handleGenerateReport} disabled={loading}
             style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)", border: "none", borderRadius: "8px", padding: "10px 24px", color: "#fff", fontWeight: 600, fontSize: "0.9rem", cursor: "pointer", opacity: loading ? 0.6 : 1 }}>
-            {loading ? "Loading Data..." : "Generate Report"}
+            {loading ? "Loading Data…" : "Generate Report"}
           </button>
           <button type="button" onClick={resetFilters}
             style={{ background: "rgba(255,255,255,0.08)", border: "1.5px solid rgba(255,255,255,0.15)", borderRadius: "8px", padding: "10px 20px", color: "#94a3b8", fontWeight: 500, fontSize: "0.9rem", cursor: "pointer" }}>
@@ -341,104 +389,154 @@ export default function MemberFilterReportModal({ isOpen, onClose, memberSafe = 
           )}
         </div>
 
-        {/* Error */}
+        {/* ── Error ── */}
         {error && (
-          <div style={{ margin: "0 28px 16px", padding: "12px 16px", background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: "8px", color: "#fca5a5", fontSize: "0.85rem" }}>
-            {error}
+          <div style={{ margin: "0 28px 16px", padding: "12px 16px", background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: "8px", color: "#fca5a5", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "8px" }}>
+            <FiAlertCircle size={16} /> {error}
           </div>
         )}
 
-        {/* Summary cards */}
-        {generated && reportRows && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "12px", padding: "0 28px 20px" }}>
-            {[
-              { label: "Total Members", value: reportRows.length, color: "#6366f1" },
-              { label: "Active", value: activeCount, color: "#22c55e" },
-              { label: "Good Standing", value: goodStandingCount, color: "#3b82f6" },
-              { label: "Financial Good Standing", value: financialGoodCount, color: "#f59e0b" },
-              ...(avgBalance !== null ? [{ label: `Avg Balance (${filterBalanceYear})`, value: `$${avgBalance.toFixed(0)}`, color: "#a78bfa" }] : []),
-            ].map((card) => (
-              <div key={card.label} style={{ background: "rgba(255,255,255,0.06)", borderRadius: "10px", padding: "14px 16px", borderLeft: `3px solid ${card.color}` }}>
-                <div style={{ fontSize: "1.4rem", fontWeight: 700, color: "#f8fafc" }}>{card.value}</div>
-                <div style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: "2px" }}>{card.label}</div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Results table */}
+        {/* ── Results ── */}
         {generated && reportRows !== null && (
-          <div style={{ padding: "0 28px 28px", overflowX: "auto" }}>
+          <div style={{ padding: "0 28px 28px" }}>
+
+            {/* Summary banner */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: "12px", marginBottom: "24px" }}>
+              {summaryStats.map((stat) => {
+                const Icon = stat.icon;
+                return (
+                  <div key={stat.label} style={{
+                    background: "rgba(255,255,255,0.06)", borderRadius: "12px", padding: "16px",
+                    borderLeft: `3px solid ${stat.color}`, display: "flex", flexDirection: "column", gap: "6px",
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", color: stat.color }}>
+                      <Icon size={14} />
+                      <span style={{ fontSize: "0.72rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8" }}>{stat.label}</span>
+                    </div>
+                    <div style={{ fontSize: "1.6rem", fontWeight: 800, color: "#f8fafc", lineHeight: 1 }}>{stat.value}</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Financial totals strip */}
+            <div style={{
+              display: "flex", gap: "24px", flexWrap: "wrap", marginBottom: "20px",
+              padding: "12px 18px", background: "rgba(255,255,255,0.04)", borderRadius: "10px",
+              border: "1px solid rgba(255,255,255,0.08)", fontSize: "0.88rem",
+            }}>
+              <span style={{ color: "#94a3b8" }}>
+                Total Paid: <strong style={{ color: "#34d399" }}>{formatCurrency(totalPaidSum)}</strong>
+              </span>
+              <span style={{ color: "#94a3b8" }}>
+                Total Outstanding: <strong style={{ color: "#f87171" }}>{formatCurrency(totalOutstandingSum)}</strong>
+              </span>
+              <span style={{ color: "#94a3b8" }}>
+                Net Balance: <strong style={{ color: totalPaidSum - totalOutstandingSum >= 0 ? "#34d399" : "#f87171" }}>
+                  {formatCurrency(totalPaidSum - totalOutstandingSum)}
+                </strong>
+              </span>
+            </div>
+
+            {/* Results table */}
             {reportRows.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "40px", color: "#64748b", fontSize: "0.95rem" }}>
+              <div style={{ textAlign: "center", padding: "48px", color: "#64748b", fontSize: "0.95rem" }}>
                 No members match the selected filters.
               </div>
             ) : (
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
-                <thead>
-                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-                    {["#","Member ID","Name","Email","Status","Good Standing","Financial Standing",
-                      ...(filterBalanceYear !== "ALL" ? [`Balance (${filterBalanceYear})`] : []),
-                      "Total Paid","Outstanding","Voter","Joined"].map((h) => (
-                      <th key={h} style={{ padding: "10px 12px", textAlign: "left", fontWeight: 600, color: "#94a3b8", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
-                        {h}
-                      </th>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.83rem" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "2px solid rgba(255,255,255,0.12)" }}>
+                      {[
+                        "#", "Member ID", "Name", "Contact", "Status",
+                        "Good Standing", "Financial Standing",
+                        ...(filterBalanceYear !== "ALL" ? [`Balance (${filterBalanceYear})`] : []),
+                        "Total Paid", "Outstanding", "Voter", "Joined",
+                      ].map((h) => (
+                        <th key={h} style={{
+                          padding: "10px 12px", textAlign: "left", fontWeight: 600, color: "#94a3b8",
+                          fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.05em", whiteSpace: "nowrap",
+                        }}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportRows.map((row, idx) => (
+                      <tr
+                        key={row.id}
+                        style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", transition: "background 0.15s" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                      >
+                        <td style={{ padding: "11px 12px", color: "#475569", fontSize: "0.78rem" }}>{idx + 1}</td>
+                        <td style={{ padding: "11px 12px", color: "#a5b4fc", fontWeight: 700, whiteSpace: "nowrap" }}>{row.memberId}</td>
+                        <td style={{ padding: "11px 12px", color: "#f8fafc", fontWeight: 600, whiteSpace: "nowrap" }}>{row.name}</td>
+                        {/* Contact: email + phone stacked */}
+                        <td style={{ padding: "11px 12px" }}>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                            <span style={{ display: "flex", alignItems: "center", gap: "4px", color: "#94a3b8", fontSize: "0.78rem" }}>
+                              <FiMail size={11} /> {row.email}
+                            </span>
+                            {row.phone !== "-" && (
+                              <span style={{ display: "flex", alignItems: "center", gap: "4px", color: "#64748b", fontSize: "0.75rem" }}>
+                                <FiPhone size={11} /> {row.phone}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td style={{ padding: "11px 12px" }}>
+                          <BadgePill value={row.status} />
+                        </td>
+                        <td style={{ padding: "11px 12px" }}>
+                          <BadgePill value={row.goodStanding} />
+                        </td>
+                        <td style={{ padding: "11px 12px" }}>
+                          <BadgePill value={row.financialGoodStanding} />
+                        </td>
+                        {filterBalanceYear !== "ALL" && (
+                          <td style={{ padding: "11px 12px", color: "#a5b4fc", fontWeight: 600 }}>
+                            {row.yearlyBalance !== null ? formatCurrency(row.yearlyBalance) : "-"}
+                          </td>
+                        )}
+                        <td style={{ padding: "11px 12px", color: "#34d399", fontWeight: 600 }}>{row.totalPaid}</td>
+                        <td style={{ padding: "11px 12px", color: row.outstandingRaw > 0 ? "#f87171" : "#94a3b8", fontWeight: row.outstandingRaw > 0 ? 600 : 400 }}>{row.outstanding}</td>
+                        <td style={{ padding: "11px 12px", color: "#94a3b8" }}>
+                          <BadgePill value={row.voter} />
+                        </td>
+                        <td style={{ padding: "11px 12px", color: "#94a3b8", whiteSpace: "nowrap", fontSize: "0.78rem" }}>{row.joined}</td>
+                      </tr>
                     ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {reportRows.map((row, idx) => (
-                    <tr key={row.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", transition: "background 0.15s" }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-                      <td style={{ padding: "10px 12px", color: "#64748b" }}>{idx + 1}</td>
-                      <td style={{ padding: "10px 12px", color: "#a5b4fc", fontWeight: 600 }}>{row.memberId}</td>
-                      <td style={{ padding: "10px 12px", color: "#f8fafc", fontWeight: 500, whiteSpace: "nowrap" }}>{row.name}</td>
-                      <td style={{ padding: "10px 12px", color: "#94a3b8" }}>{row.email}</td>
-                      <td style={{ padding: "10px 12px" }}>
-                        <span style={{ padding: "2px 10px", borderRadius: "99px", fontSize: "0.75rem", fontWeight: 600, background: row.status === "Active" ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)", color: row.status === "Active" ? "#4ade80" : "#f87171" }}>
-                          {row.status}
-                        </span>
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ borderTop: "2px solid rgba(255,255,255,0.15)", background: "rgba(99,102,241,0.1)" }}>
+                      <td colSpan={3} style={{ padding: "13px 12px", fontWeight: 700, color: "#f8fafc", fontSize: "0.85rem" }}>
+                        TOTAL — {reportRows.length} member{reportRows.length !== 1 ? "s" : ""}
                       </td>
-                      <td style={{ padding: "10px 12px" }}>
-                        <span style={{ padding: "2px 10px", borderRadius: "99px", fontSize: "0.75rem", fontWeight: 600, background: `${badgeColor(row.goodStanding)}20`, color: badgeColor(row.goodStanding) }}>
-                          {row.goodStanding}
-                        </span>
+                      <td style={{ padding: "13px 12px" }} />
+                      <td style={{ padding: "13px 12px" }}>
+                        <span style={{ color: "#4ade80", fontWeight: 700, fontSize: "0.82rem" }}>{activeCount} Active</span>
                       </td>
-                      <td style={{ padding: "10px 12px" }}>
-                        <span style={{ padding: "2px 10px", borderRadius: "99px", fontSize: "0.75rem", fontWeight: 600, background: `${badgeColor(row.financialGoodStanding)}20`, color: badgeColor(row.financialGoodStanding) }}>
-                          {row.financialGoodStanding}
-                        </span>
+                      <td style={{ padding: "13px 12px" }}>
+                        <span style={{ color: "#60a5fa", fontWeight: 700, fontSize: "0.82rem" }}>{goodStandingCount} Good</span>
+                      </td>
+                      <td style={{ padding: "13px 12px" }}>
+                        <span style={{ color: "#fbbf24", fontWeight: 700, fontSize: "0.82rem" }}>{financialGoodCount} Fin. Good</span>
                       </td>
                       {filterBalanceYear !== "ALL" && (
-                        <td style={{ padding: "10px 12px", color: "#a5b4fc", fontWeight: 600 }}>
-                          {row.yearlyBalance !== null ? formatCurrency(row.yearlyBalance) : "-"}
+                        <td style={{ padding: "13px 12px", color: "#a5b4fc", fontWeight: 700, fontSize: "0.82rem" }}>
+                          {avgBalance !== null ? `Avg: $${avgBalance.toFixed(0)}` : "-"}
                         </td>
                       )}
-                      <td style={{ padding: "10px 12px", color: "#34d399" }}>{row.totalPaid}</td>
-                      <td style={{ padding: "10px 12px", color: "#f87171" }}>{row.outstanding}</td>
-                      <td style={{ padding: "10px 12px", color: "#94a3b8" }}>{row.voter}</td>
-                      <td style={{ padding: "10px 12px", color: "#94a3b8", whiteSpace: "nowrap" }}>{row.joined}</td>
+                      <td style={{ padding: "13px 12px", color: "#34d399", fontWeight: 700 }}>{formatCurrency(totalPaidSum)}</td>
+                      <td style={{ padding: "13px 12px", color: "#f87171", fontWeight: 700 }}>{formatCurrency(totalOutstandingSum)}</td>
+                      <td colSpan={2} style={{ padding: "13px 12px" }} />
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr style={{ borderTop: "2px solid rgba(255,255,255,0.12)", background: "rgba(99,102,241,0.08)" }}>
-                    <td colSpan={4} style={{ padding: "12px", fontWeight: 700, color: "#f8fafc", fontSize: "0.85rem" }}>
-                      TOTAL — {reportRows.length} member{reportRows.length !== 1 ? "s" : ""}
-                    </td>
-                    <td style={{ padding: "12px" }}><span style={{ color: "#4ade80", fontWeight: 600 }}>{activeCount} Active</span></td>
-                    <td style={{ padding: "12px" }}><span style={{ color: "#3b82f6", fontWeight: 600 }}>{goodStandingCount} Good</span></td>
-                    <td style={{ padding: "12px" }}><span style={{ color: "#f59e0b", fontWeight: 600 }}>{financialGoodCount} Fin. Good</span></td>
-                    {filterBalanceYear !== "ALL" && (
-                      <td style={{ padding: "12px", color: "#a5b4fc", fontWeight: 700 }}>
-                        {avgBalance !== null ? `Avg: $${avgBalance.toFixed(0)}` : "-"}
-                      </td>
-                    )}
-                    <td colSpan={4} style={{ padding: "12px" }} />
-                  </tr>
-                </tfoot>
-              </table>
+                  </tfoot>
+                </table>
+              </div>
             )}
           </div>
         )}
