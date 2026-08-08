@@ -33,6 +33,7 @@ import {
 
 import { clearToken, getLedgerSummary, getAnalyticsSummary, getMonthlyReport, getHostingSchedule, getMemberProfile, getMemberSafeMemberList, getAllTransactionsReadOnly, getAllDuesReadOnly, getAllExpensesReadOnly, getMemberMeetings, MemberMeeting } from "./api";
 import ReportFilterModal from "./ReportFilterModal";
+import CurrentMonthOverviewPanel from "./CurrentMonthOverviewPanel";
 import memberImage from "./upu-logo.svg";
 import "./admin-page.scss";
 import "./member-dashboard.scss";
@@ -152,8 +153,6 @@ type MemberProfileData = {
   const [liveActiveCount, setLiveActiveCount] = useState<number | null>(null);
   const [totalRevenue, setTotalRevenue] = useState<number | null>(null);
   const [pendingPayment, setPendingPayment] = useState<number | null>(null);
-  const [currentMonthDues, setCurrentMonthDues] = useState<number | null>(null);
-  const [paidThisMonthCount, setPaidThisMonthCount] = useState<number | null>(null);
   const [liveIncomeYTD, setLiveIncomeYTD] = useState<number | null>(null);
   const [liveExpenseYTD, setLiveExpenseYTD] = useState<number | null>(null);
   const [liveFundraiserAccount, setLiveFundraiserAccount] = useState<number | null>(null);
@@ -280,18 +279,6 @@ type MemberProfileData = {
         setLiveIncomeYTD(totalIncome);
         setLiveExpenseYTD(totalExpense);
         setLiveFundraiserAccount(fundraiserSum);
-
-        // Current-month dues collected
-        const monthDues = dues
-          .filter((d) => d.year === currentYearLocal && d.month === currentMonthLocal && Number(d.duesPaid) > 0)
-          .reduce((sum, d) => sum + Number(d.duesPaid ?? 0), 0);
-        setCurrentMonthDues(monthDues);
-        const paidCount = new Set(
-          dues
-            .filter((d) => d.year === currentYearLocal && d.month === currentMonthLocal && Number(d.duesPaid) > 0)
-            .map((d) => d.memberRecordId)
-        ).size;
-        setPaidThisMonthCount(paidCount);
       })
       .catch(() => {});
 
@@ -685,17 +672,11 @@ type MemberProfileData = {
           id="member-dashboard-financials"
         >
           <FinancialPanel snapshot={financialSnapshot} />
-          <CurrentMonthPanel
+          <CurrentMonthOverviewPanel
             monthName={new Date().toLocaleString("default", { month: "long" })}
             year={new Date().getFullYear()}
-            paidCount={paidThisMonthCount}
-            unpaidCount={pendingPayment !== null && paidThisMonthCount !== null && liveActiveCount !== null
-              ? Math.max(0, liveActiveCount - paidThisMonthCount)
-              : null}
-            duesCollected={currentMonthDues}
-            pendingAmount={pendingPayment}
-            businessBalance={financialSnapshot.businessAccount}
-            activeMembers={liveActiveCount}
+            month={new Date().getMonth() + 1}
+            memberSafe={true}
           />
         </section>
 
@@ -896,89 +877,4 @@ function FinancialPanel({ snapshot }: { snapshot: FinancialSnapshot }) {
   );
 }
 
-type CurrentMonthPanelProps = {
-  monthName: string;
-  year: number;
-  paidCount: number | null;
-  unpaidCount: number | null;
-  duesCollected: number | null;
-  pendingAmount: number | null;
-  businessBalance: number;
-  activeMembers: number | null;
-};
 
-function CurrentMonthPanel({
-  monthName, year, paidCount, unpaidCount, duesCollected, pendingAmount, businessBalance, activeMembers,
-}: CurrentMonthPanelProps) {
-  const paidPct = paidCount !== null && activeMembers ? Math.round((paidCount / activeMembers) * 100) : null;
-
-  const stats = [
-    {
-      label: "Dues Collected",
-      value: duesCollected === null ? "—" : formatCurrency(duesCollected),
-      color: "#1aa892",
-      sub: "This month",
-    },
-    {
-      label: "Members Paid",
-      value: paidCount === null ? "—" : `${paidCount}${activeMembers ? ` / ${activeMembers}` : ""}`,
-      color: "#6366f1",
-      sub: paidPct !== null ? `${paidPct}% compliance` : "Active members",
-    },
-    {
-      label: "Unpaid Members",
-      value: unpaidCount === null ? "—" : String(unpaidCount),
-      color: unpaidCount ? "#ef4444" : "#22c55e",
-      sub: pendingAmount !== null ? `${formatCurrency(pendingAmount)} pending` : "Outstanding",
-    },
-    {
-      label: "Business Balance",
-      value: formatCurrency(businessBalance),
-      color: "#f59e0b",
-      sub: "Current snapshot",
-    },
-  ];
-
-  return (
-    <article className="admin-dashboard__panel member-dashboard__panel">
-      <h3 className="admin-dashboard__financial-title">
-        Current Month Overview
-        <span style={{ fontSize: "0.8rem", fontWeight: 400, color: "#9aa59f", marginLeft: "8px" }}>
-          {monthName} {year}
-        </span>
-      </h3>
-
-      <div className="admin-dashboard__finance-cards member-dashboard__finance-cards">
-        {stats.map((s) => (
-          <div key={s.label} className="admin-dashboard__finance-card member-dashboard__finance-card"
-            style={{ borderTop: `3px solid ${s.color}` }}>
-            <span className="member-dashboard__finance-label">
-              <FiDollarSign size={12} />
-              {s.label}
-            </span>
-            <strong style={{ color: s.color }}>{s.value}</strong>
-            <span style={{ fontSize: "0.75rem", color: "#9aa59f", marginTop: "2px" }}>{s.sub}</span>
-          </div>
-        ))}
-      </div>
-
-      {paidPct !== null && (
-        <div className="admin-dashboard__balance-table">
-          <div className="admin-dashboard__balance-head">
-            <span>Dues Compliance</span>
-            <span>{paidPct}%</span>
-          </div>
-          <div style={{ padding: "8px 0" }}>
-            <div style={{ height: "8px", background: "#dfe8e3", borderRadius: "99px", overflow: "hidden" }}>
-              <div style={{
-                height: "100%", width: `${paidPct}%`,
-                background: paidPct >= 75 ? "#1aa892" : paidPct >= 50 ? "#f59e0b" : "#ef4444",
-                borderRadius: "99px", transition: "width 0.6s ease",
-              }} />
-            </div>
-          </div>
-        </div>
-      )}
-    </article>
-  );
-}
