@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   FiCalendar,
   FiEye,
   FiX,
+  FiChevronDown,
 } from "react-icons/fi";
 import { apiGet } from "./api";
 
@@ -66,6 +67,24 @@ type Props = {
   memberSafe?: boolean;
 };
 
+const MONTH_OPTIONS = [
+  { value: 1, label: "January" },
+  { value: 2, label: "February" },
+  { value: 3, label: "March" },
+  { value: 4, label: "April" },
+  { value: 5, label: "May" },
+  { value: 6, label: "June" },
+  { value: 7, label: "July" },
+  { value: 8, label: "August" },
+  { value: 9, label: "September" },
+  { value: 10, label: "October" },
+  { value: 11, label: "November" },
+  { value: 12, label: "December" },
+];
+
+const CURRENT_CALENDAR_YEAR = new Date().getFullYear();
+const YEAR_OPTIONS = Array.from({ length: CURRENT_CALENDAR_YEAR - 2018 + 2 }, (_, i) => 2018 + i).reverse();
+
 function formatCurrency(amount: number | string | null | undefined): string {
   const numeric = Number(amount ?? 0);
   if (Number.isNaN(numeric)) return "$0";
@@ -77,14 +96,23 @@ export default function CurrentMonthOverviewPanel({ monthName, year, month, memb
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"dues" | "wrapper" | "levy" | "others" | "attendance">("dues");
 
-  // Raw data arrays
-  const [members, setMembers] = useState<MemberRow[]>([]);
-  const [monthDues, setMonthDues] = useState<DueRow[]>([]);
-  const [monthTransactions, setMonthTransactions] = useState<TransactionRow[]>([]);
-  const [monthExpenses, setMonthExpenses] = useState<ExpenseRow[]>([]);
-  const [monthAttendance, setMonthAttendance] = useState<AttendanceRow | null>(null);
+  // Modal Month & Year filter state (defaults to current month & year passed in props)
+  const [selectedMonth, setSelectedMonth] = useState<number>(month);
+  const [selectedYear, setSelectedYear] = useState<number>(year);
 
-  // Fetch current month database records
+  useEffect(() => {
+    setSelectedMonth(month);
+    setSelectedYear(year);
+  }, [month, year]);
+
+  // Raw database data arrays
+  const [members, setMembers] = useState<MemberRow[]>([]);
+  const [allDues, setAllDues] = useState<DueRow[]>([]);
+  const [allTransactions, setAllTransactions] = useState<TransactionRow[]>([]);
+  const [allExpenses, setAllExpenses] = useState<ExpenseRow[]>([]);
+  const [allAttendance, setAllAttendance] = useState<AttendanceRow[]>([]);
+
+  // Fetch current database records
   useEffect(() => {
     let active = true;
 
@@ -104,76 +132,97 @@ export default function CurrentMonthOverviewPanel({ monthName, year, month, memb
       .then(([membersList, duesList, txList, expList, attList]) => {
         if (!active) return;
         setMembers(membersList);
-
-        // Filter dues for current year & month
-        const curDues = duesList.filter(
-          (d) => d.year === year && d.month === month && Number(d.duesPaid ?? 0) > 0
-        );
-        setMonthDues(curDues);
-
-        // Filter transactions for current month/year
-        const curTx = txList.filter((t) => {
-          if (!t.date) return false;
-          const d = new Date(t.date);
-          return d.getFullYear() === year && d.getMonth() + 1 === month;
-        });
-        setMonthTransactions(curTx);
-
-        // Filter expenses for current month/year
-        const curExp = expList.filter((e) => {
-          if (!e.date) return false;
-          const d = new Date(e.date);
-          return d.getFullYear() === year && d.getMonth() + 1 === month;
-        });
-        setMonthExpenses(curExp);
-
-        // Attendance for current month/year
-        const curAtt = attList.find((a) => a.year === year && a.month === month) ?? null;
-        setMonthAttendance(curAtt);
+        setAllDues(duesList);
+        setAllTransactions(txList);
+        setAllExpenses(expList);
+        setAllAttendance(attList);
       });
 
     return () => {
       active = false;
     };
-  }, [year, month, memberSafe]);
+  }, [memberSafe]);
 
-  // ── Computations for Revenue, Expenses & Categories ──
+  // ── Panel Overview Computations (Strictly Current Month) ──
+  const curDues = useMemo(() => {
+    return allDues.filter((d) => d.year === year && d.month === month && Number(d.duesPaid ?? 0) > 0);
+  }, [allDues, year, month]);
 
-  // Dues total
-  const duesTotal = monthDues.reduce((sum, d) => sum + Number(d.duesPaid ?? 0), 0);
+  const curTx = useMemo(() => {
+    return allTransactions.filter((t) => {
+      if (!t.date) return false;
+      const d = new Date(t.date);
+      return d.getFullYear() === year && d.getMonth() + 1 === month;
+    });
+  }, [allTransactions, year, month]);
 
-  // Split transactions by category
-  const wrapperTx = monthTransactions.filter((t) => (t.title || "").toLowerCase().includes("wrapper"));
-  const wrapperTotal = wrapperTx.reduce((sum, t) => sum + Number(t.amount ?? 0), 0);
+  const curExp = useMemo(() => {
+    return allExpenses.filter((e) => {
+      if (!e.date) return false;
+      const d = new Date(e.date);
+      return d.getFullYear() === year && d.getMonth() + 1 === month;
+    });
+  }, [allExpenses, year, month]);
 
-  const levyTx = monthTransactions.filter((t) => (t.title || "").toLowerCase().includes("levy"));
-  const levyTotal = levyTx.reduce((sum, t) => sum + Number(t.amount ?? 0), 0);
+  const curDuesTotal = curDues.reduce((sum, d) => sum + Number(d.duesPaid ?? 0), 0);
 
-  // Other revenue transactions (excluding wrapper, levy, and expenses)
-  const otherRevenueTx = monthTransactions.filter((t) => {
+  const curWrapperTx = curTx.filter((t) => (t.title || "").toLowerCase().includes("wrapper"));
+  const curWrapperTotal = curWrapperTx.reduce((sum, t) => sum + Number(t.amount ?? 0), 0);
+
+  const curLevyTx = curTx.filter((t) => (t.title || "").toLowerCase().includes("levy"));
+  const curLevyTotal = curLevyTx.reduce((sum, t) => sum + Number(t.amount ?? 0), 0);
+
+  const curOtherTx = curTx.filter((t) => {
     const title = (t.title || "").toLowerCase();
     const isExp = title.includes("expense") || Number(t.amount ?? 0) < 0;
-    const isWrapper = title.includes("wrapper");
-    const isLevy = title.includes("levy");
-    return !isExp && !isWrapper && !isLevy;
+    return !isExp && !title.includes("wrapper") && !title.includes("levy");
   });
-  const otherRevenueTotal = otherRevenueTx.reduce((sum, t) => sum + Number(t.amount ?? 0), 0);
+  const curOtherTotal = curOtherTx.reduce((sum, t) => sum + Number(t.amount ?? 0), 0);
 
-  // Expense transactions from transactions table
-  const txExpenseTotal = monthTransactions
+  const curTxExpTotal = curTx
     .filter((t) => (t.title || "").toLowerCase().includes("expense") || Number(t.amount ?? 0) < 0)
     .reduce((sum, t) => sum + Math.abs(Number(t.amount ?? 0)), 0);
 
-  // Direct expenses from expenses table
-  const directExpenseTotal = monthExpenses.reduce((sum, e) => sum + Number(e.amount ?? 0), 0);
+  const curDirectExpTotal = curExp.reduce((sum, e) => sum + Number(e.amount ?? 0), 0);
 
-  // Final Card Figures
-  const totalRevenueMonth = duesTotal + wrapperTotal + levyTotal + otherRevenueTotal;
-  const totalExpensesMonth = directExpenseTotal + txExpenseTotal;
-  const businessBalanceMonth = totalRevenueMonth - totalExpensesMonth;
+  const panelRevenue = curDuesTotal + curWrapperTotal + curLevyTotal + curOtherTotal;
+  const panelExpenses = curDirectExpTotal + curTxExpTotal;
+  const panelBalance = panelRevenue - panelExpenses;
 
-  // Attendance lists calculation
-  const usersInList = String(monthAttendance?.usersIn ?? "")
+  // ── Modal Filtered Computations (Selected Month & Year) ──
+  const modalDues = useMemo(() => {
+    return allDues.filter((d) => d.year === selectedYear && d.month === selectedMonth && Number(d.duesPaid ?? 0) > 0);
+  }, [allDues, selectedYear, selectedMonth]);
+
+  const modalTx = useMemo(() => {
+    return allTransactions.filter((t) => {
+      if (!t.date) return false;
+      const d = new Date(t.date);
+      return d.getFullYear() === selectedYear && d.getMonth() + 1 === selectedMonth;
+    });
+  }, [allTransactions, selectedYear, selectedMonth]);
+
+  const modalAtt = useMemo(() => {
+    return allAttendance.find((a) => a.year === selectedYear && a.month === selectedMonth) ?? null;
+  }, [allAttendance, selectedYear, selectedMonth]);
+
+  const modalDuesTotal = modalDues.reduce((sum, d) => sum + Number(d.duesPaid ?? 0), 0);
+
+  const modalWrapperTx = modalTx.filter((t) => (t.title || "").toLowerCase().includes("wrapper"));
+  const modalWrapperTotal = modalWrapperTx.reduce((sum, t) => sum + Number(t.amount ?? 0), 0);
+
+  const modalLevyTx = modalTx.filter((t) => (t.title || "").toLowerCase().includes("levy"));
+  const modalLevyTotal = modalLevyTx.reduce((sum, t) => sum + Number(t.amount ?? 0), 0);
+
+  const modalOtherTx = modalTx.filter((t) => {
+    const title = (t.title || "").toLowerCase();
+    const isExp = title.includes("expense") || Number(t.amount ?? 0) < 0;
+    return !isExp && !title.includes("wrapper") && !title.includes("levy");
+  });
+  const modalOtherTotal = modalOtherTx.reduce((sum, t) => sum + Number(t.amount ?? 0), 0);
+
+  // Attendance lists for modal
+  const usersInList = String(modalAtt?.usersIn ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
@@ -200,6 +249,8 @@ export default function CurrentMonthOverviewPanel({ monthName, year, month, memb
     return fallbackName || "Member";
   };
 
+  const selectedMonthName = MONTH_OPTIONS.find((m) => m.value === selectedMonth)?.label ?? String(selectedMonth);
+
   return (
     <article className="admin-dashboard__panel" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {/* Header */}
@@ -217,22 +268,22 @@ export default function CurrentMonthOverviewPanel({ monthName, year, month, memb
         {/* Card 1: Dues / Total Revenue */}
         <div className="admin-dashboard__finance-card" style={{ borderTop: "3px solid #22c55e", padding: "12px 14px" }}>
           <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase" }}>Dues & Revenue</span>
-          <strong style={{ color: "#166d2e", fontSize: "1.2rem", marginTop: "4px" }}>{formatCurrency(totalRevenueMonth)}</strong>
+          <strong style={{ color: "#166d2e", fontSize: "1.2rem", marginTop: "4px" }}>{formatCurrency(panelRevenue)}</strong>
           <span style={{ fontSize: "0.72rem", color: "#94a3b8", marginTop: "2px" }}>Sum of current month</span>
         </div>
 
         {/* Card 2: Monthly Expenses */}
         <div className="admin-dashboard__finance-card" style={{ borderTop: "3px solid #ef4444", padding: "12px 14px" }}>
           <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase" }}>Monthly Expenses</span>
-          <strong style={{ color: "#dc2626", fontSize: "1.2rem", marginTop: "4px" }}>{formatCurrency(totalExpensesMonth)}</strong>
+          <strong style={{ color: "#dc2626", fontSize: "1.2rem", marginTop: "4px" }}>{formatCurrency(panelExpenses)}</strong>
           <span style={{ fontSize: "0.72rem", color: "#94a3b8", marginTop: "2px" }}>Expenses recorded</span>
         </div>
 
         {/* Card 3: Business Balance */}
         <div className="admin-dashboard__finance-card" style={{ borderTop: "3px solid #f59e0b", padding: "12px 14px" }}>
           <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase" }}>Business Balance</span>
-          <strong style={{ color: businessBalanceMonth >= 0 ? "#166d2e" : "#dc2626", fontSize: "1.2rem", marginTop: "4px" }}>
-            {formatCurrency(businessBalanceMonth)}
+          <strong style={{ color: panelBalance >= 0 ? "#166d2e" : "#dc2626", fontSize: "1.2rem", marginTop: "4px" }}>
+            {formatCurrency(panelBalance)}
           </strong>
           <span style={{ fontSize: "0.72rem", color: "#94a3b8", marginTop: "2px" }}>Net month balance</span>
         </div>
@@ -267,25 +318,25 @@ export default function CurrentMonthOverviewPanel({ monthName, year, month, memb
         {/* Snapshot Rows */}
         <div style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "0.82rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", color: "#475569" }}>
-            <span>Monthly Dues ({monthDues.length} payments)</span>
-            <strong style={{ color: "#166d2e" }}>{formatCurrency(duesTotal)}</strong>
+            <span>Monthly Dues ({curDues.length} payments)</span>
+            <strong style={{ color: "#166d2e" }}>{formatCurrency(curDuesTotal)}</strong>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", color: "#475569" }}>
-            <span>Wrappers & Levies ({wrapperTx.length + levyTx.length} entries)</span>
-            <strong style={{ color: "#166d2e" }}>{formatCurrency(wrapperTotal + levyTotal)}</strong>
+            <span>Wrappers & Levies ({curWrapperTx.length + curLevyTx.length} entries)</span>
+            <strong style={{ color: "#166d2e" }}>{formatCurrency(curWrapperTotal + curLevyTotal)}</strong>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", color: "#475569" }}>
-            <span>Other Income ({otherRevenueTx.length} entries)</span>
-            <strong style={{ color: "#166d2e" }}>{formatCurrency(otherRevenueTotal)}</strong>
+            <span>Other Income ({curOtherTx.length} entries)</span>
+            <strong style={{ color: "#166d2e" }}>{formatCurrency(curOtherTotal)}</strong>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", color: "#475569" }}>
-            <span>Expenses ({monthExpenses.length + monthTransactions.filter(t => (t.title||"").toLowerCase().includes("expense")).length} entries)</span>
-            <strong style={{ color: "#dc2626" }}>{formatCurrency(totalExpensesMonth)}</strong>
+            <span>Expenses ({curExp.length + curTx.filter(t => (t.title||"").toLowerCase().includes("expense")).length} entries)</span>
+            <strong style={{ color: "#dc2626" }}>{formatCurrency(panelExpenses)}</strong>
           </div>
         </div>
       </div>
 
-      {/* ── Wide Modal: Current Month Full Activities ── */}
+      {/* ── Wide Modal: Activities Table with Month & Year Switcher ── */}
       {isModalOpen && (
         <div className="admin-dashboard__modal" role="dialog" aria-modal="true">
           <div className="report-modal__backdrop" onClick={() => setIsModalOpen(false)} />
@@ -313,14 +364,93 @@ export default function CurrentMonthOverviewPanel({ monthName, year, month, memb
               <FiX size={20} />
             </button>
 
-            {/* Modal Title */}
-            <h2
-              className="admin-dashboard__modal-title"
-              style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "1.35rem", marginBottom: "20px", color: "#0f172a" }}
-            >
-              <FiCalendar size={24} style={{ color: "#166d2e" }} />
-              Current Month Activities — {monthName} {year}
-            </h2>
+            {/* Modal Title & Month/Year Switcher Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "20px", paddingRight: "40px" }}>
+              <h2
+                className="admin-dashboard__modal-title"
+                style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "1.35rem", margin: 0, color: "#0f172a" }}
+              >
+                <FiCalendar size={24} style={{ color: "#166d2e" }} />
+                Monthly Activities — {selectedMonthName} {selectedYear}
+              </h2>
+
+              {/* Month & Year Switcher Controls */}
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                  <select
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                    style={{
+                      padding: "6px 28px 6px 12px",
+                      borderRadius: "8px",
+                      border: "1px solid #cbd5e1",
+                      background: "#ffffff",
+                      fontWeight: 600,
+                      color: "#0f172a",
+                      fontSize: "0.88rem",
+                      cursor: "pointer",
+                      outline: "none",
+                      appearance: "none",
+                    }}
+                  >
+                    {MONTH_OPTIONS.map((m) => (
+                      <option key={m.value} value={m.value}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                  <FiChevronDown style={{ position: "absolute", right: "8px", pointerEvents: "none", color: "#64748b" }} />
+                </div>
+
+                <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                  <select
+                    value={selectedYear}
+                    onChange={(e) => setSelectedYear(Number(e.target.value))}
+                    style={{
+                      padding: "6px 28px 6px 12px",
+                      borderRadius: "8px",
+                      border: "1px solid #cbd5e1",
+                      background: "#ffffff",
+                      fontWeight: 600,
+                      color: "#0f172a",
+                      fontSize: "0.88rem",
+                      cursor: "pointer",
+                      outline: "none",
+                      appearance: "none",
+                    }}
+                  >
+                    {YEAR_OPTIONS.map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                  <FiChevronDown style={{ position: "absolute", right: "8px", pointerEvents: "none", color: "#64748b" }} />
+                </div>
+
+                {(selectedMonth !== month || selectedYear !== year) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedMonth(month);
+                      setSelectedYear(year);
+                    }}
+                    style={{
+                      background: "#f1f5f9",
+                      border: "1px solid #cbd5e1",
+                      borderRadius: "8px",
+                      padding: "6px 10px",
+                      fontSize: "0.78rem",
+                      fontWeight: 600,
+                      color: "#166d2e",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Reset Current
+                  </button>
+                )}
+              </div>
+            </div>
 
             {/* Sub-Header Tabs */}
             <div className="report-modal__tabs" style={{ gridTemplateColumns: "repeat(5, 1fr)", marginBottom: "20px" }}>
@@ -329,28 +459,28 @@ export default function CurrentMonthOverviewPanel({ monthName, year, month, memb
                 className={`report-modal__tab ${activeTab === "dues" ? "report-modal__tab--active" : ""}`}
                 onClick={() => setActiveTab("dues")}
               >
-                Monthly Dues ({monthDues.length})
+                Monthly Dues ({modalDues.length})
               </button>
               <button
                 type="button"
                 className={`report-modal__tab ${activeTab === "wrapper" ? "report-modal__tab--active" : ""}`}
                 onClick={() => setActiveTab("wrapper")}
               >
-                Wrappers ({wrapperTx.length})
+                Wrappers ({modalWrapperTx.length})
               </button>
               <button
                 type="button"
                 className={`report-modal__tab ${activeTab === "levy" ? "report-modal__tab--active" : ""}`}
                 onClick={() => setActiveTab("levy")}
               >
-                Levies ({levyTx.length})
+                Levies ({modalLevyTx.length})
               </button>
               <button
                 type="button"
                 className={`report-modal__tab ${activeTab === "others" ? "report-modal__tab--active" : ""}`}
                 onClick={() => setActiveTab("others")}
               >
-                Other Transactions ({otherRevenueTx.length})
+                Other Transactions ({modalOtherTx.length})
               </button>
               <button
                 type="button"
@@ -364,8 +494,8 @@ export default function CurrentMonthOverviewPanel({ monthName, year, month, memb
             {/* Tab 1: Monthly Dues Table */}
             {activeTab === "dues" && (
               <div>
-                {monthDues.length === 0 ? (
-                  <div className="report-modal__empty-text">No dues payments recorded for {monthName} {year}.</div>
+                {modalDues.length === 0 ? (
+                  <div className="report-modal__empty-text">No dues payments recorded for {selectedMonthName} {selectedYear}.</div>
                 ) : (
                   <div className="admin-dashboard__table-container">
                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -378,13 +508,13 @@ export default function CurrentMonthOverviewPanel({ monthName, year, month, memb
                         </tr>
                       </thead>
                       <tbody>
-                        {monthDues.map((d) => {
+                        {modalDues.map((d) => {
                           const mName = [d.member?.firstName, d.member?.lastName].filter(Boolean).join(" ") ||
                             getMemberName(d.memberRecordId, d.member?.email);
                           return (
                             <tr key={d.id}>
                               <td style={{ fontWeight: 600, color: "#1e293b" }}>{mName}</td>
-                              <td>{monthName} {d.year}</td>
+                              <td>{selectedMonthName} {d.year}</td>
                               <td>{d.createdAt ? new Date(d.createdAt).toLocaleDateString() : `${d.year}-${d.month}-01`}</td>
                               <td style={{ textAlign: "right", fontWeight: 700, color: "#166d2e" }}>{formatCurrency(d.duesPaid)}</td>
                             </tr>
@@ -397,7 +527,7 @@ export default function CurrentMonthOverviewPanel({ monthName, year, month, memb
                             TOTAL DUES COLLECTED:
                           </td>
                           <td style={{ textAlign: "right", padding: "14px 16px", color: "#166d2e", fontSize: "1.15rem" }}>
-                            {formatCurrency(duesTotal)}
+                            {formatCurrency(modalDuesTotal)}
                           </td>
                         </tr>
                       </tfoot>
@@ -410,8 +540,8 @@ export default function CurrentMonthOverviewPanel({ monthName, year, month, memb
             {/* Tab 2: Wrapper Payments Table */}
             {activeTab === "wrapper" && (
               <div>
-                {wrapperTx.length === 0 ? (
-                  <div className="report-modal__empty-text">No wrapper payments recorded for {monthName} {year}.</div>
+                {modalWrapperTx.length === 0 ? (
+                  <div className="report-modal__empty-text">No wrapper payments recorded for {selectedMonthName} {selectedYear}.</div>
                 ) : (
                   <div className="admin-dashboard__table-container">
                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -425,7 +555,7 @@ export default function CurrentMonthOverviewPanel({ monthName, year, month, memb
                         </tr>
                       </thead>
                       <tbody>
-                        {wrapperTx.map((t) => (
+                        {modalWrapperTx.map((t) => (
                           <tr key={t.id}>
                             <td style={{ fontWeight: 600, color: "#1e293b" }}>{getMemberName(t.userId, t.fullName)}</td>
                             <td style={{ fontWeight: 600 }}>{t.title || "Wrapper"}</td>
@@ -441,7 +571,7 @@ export default function CurrentMonthOverviewPanel({ monthName, year, month, memb
                             TOTAL WRAPPER PAYMENTS:
                           </td>
                           <td style={{ textAlign: "right", padding: "14px 16px", color: "#166d2e", fontSize: "1.15rem" }}>
-                            {formatCurrency(wrapperTotal)}
+                            {formatCurrency(modalWrapperTotal)}
                           </td>
                         </tr>
                       </tfoot>
@@ -454,8 +584,8 @@ export default function CurrentMonthOverviewPanel({ monthName, year, month, memb
             {/* Tab 3: Levy Payments Table */}
             {activeTab === "levy" && (
               <div>
-                {levyTx.length === 0 ? (
-                  <div className="report-modal__empty-text">No levy payments recorded for {monthName} {year}.</div>
+                {modalLevyTx.length === 0 ? (
+                  <div className="report-modal__empty-text">No levy payments recorded for {selectedMonthName} {selectedYear}.</div>
                 ) : (
                   <div className="admin-dashboard__table-container">
                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -469,7 +599,7 @@ export default function CurrentMonthOverviewPanel({ monthName, year, month, memb
                         </tr>
                       </thead>
                       <tbody>
-                        {levyTx.map((t) => (
+                        {modalLevyTx.map((t) => (
                           <tr key={t.id}>
                             <td style={{ fontWeight: 600, color: "#1e293b" }}>{getMemberName(t.userId, t.fullName)}</td>
                             <td style={{ fontWeight: 600 }}>{t.title || "Levy"}</td>
@@ -485,7 +615,7 @@ export default function CurrentMonthOverviewPanel({ monthName, year, month, memb
                             TOTAL LEVY PAYMENTS:
                           </td>
                           <td style={{ textAlign: "right", padding: "14px 16px", color: "#166d2e", fontSize: "1.15rem" }}>
-                            {formatCurrency(levyTotal)}
+                            {formatCurrency(modalLevyTotal)}
                           </td>
                         </tr>
                       </tfoot>
@@ -498,8 +628,8 @@ export default function CurrentMonthOverviewPanel({ monthName, year, month, memb
             {/* Tab 4: Other Transactions Table */}
             {activeTab === "others" && (
               <div>
-                {otherRevenueTx.length === 0 ? (
-                  <div className="report-modal__empty-text">No other transaction entries for {monthName} {year}.</div>
+                {modalOtherTx.length === 0 ? (
+                  <div className="report-modal__empty-text">No other transaction entries for {selectedMonthName} {selectedYear}.</div>
                 ) : (
                   <div className="admin-dashboard__table-container">
                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -513,7 +643,7 @@ export default function CurrentMonthOverviewPanel({ monthName, year, month, memb
                         </tr>
                       </thead>
                       <tbody>
-                        {otherRevenueTx.map((t) => (
+                        {modalOtherTx.map((t) => (
                           <tr key={t.id}>
                             <td style={{ fontWeight: 600, color: "#1e293b" }}>{getMemberName(t.userId, t.fullName)}</td>
                             <td style={{ fontWeight: 600 }}>{t.title || "Transaction"}</td>
@@ -529,7 +659,7 @@ export default function CurrentMonthOverviewPanel({ monthName, year, month, memb
                             TOTAL OTHER TRANSACTIONS:
                           </td>
                           <td style={{ textAlign: "right", padding: "14px 16px", color: "#166d2e", fontSize: "1.15rem" }}>
-                            {formatCurrency(otherRevenueTotal)}
+                            {formatCurrency(modalOtherTotal)}
                           </td>
                         </tr>
                       </tfoot>
@@ -565,7 +695,7 @@ export default function CurrentMonthOverviewPanel({ monthName, year, month, memb
                   <div className="report-modal__attendance-list-block report-modal__attendance-list-block--present">
                     <div className="report-modal__attendance-list-header">✅ Present ({presentMembers.length})</div>
                     {presentMembers.length === 0 ? (
-                      <div style={{ color: "#94a3b8", fontSize: "0.85rem" }}>No present members recorded.</div>
+                      <div style={{ color: "#94a3b8", fontSize: "0.85rem" }}>No present members recorded for {selectedMonthName} {selectedYear}.</div>
                     ) : (
                       presentMembers.map((m) => (
                         <div key={m.id} className="report-modal__attendance-member-item">
