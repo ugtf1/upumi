@@ -31,7 +31,7 @@ import {
   YAxis,
 } from "recharts";
 
-import { clearToken, getLedgerSummary, getAnalyticsSummary, getMonthlyReport, getHostingSchedule, getMemberProfile, getMemberSafeMemberList, getAllTransactionsReadOnly, getAllDuesReadOnly, getMemberMeetings, MemberMeeting } from "./api";
+import { clearToken, getLedgerSummary, getAnalyticsSummary, getMonthlyReport, getHostingSchedule, getMemberProfile, getMemberSafeMemberList, getAllTransactionsReadOnly, getAllDuesReadOnly, getAllExpensesReadOnly, getMemberMeetings, MemberMeeting } from "./api";
 import ReportFilterModal from "./ReportFilterModal";
 import memberImage from "./upu-logo.svg";
 import "./admin-page.scss";
@@ -154,6 +154,9 @@ type MemberProfileData = {
   const [pendingPayment, setPendingPayment] = useState<number | null>(null);
   const [currentMonthDues, setCurrentMonthDues] = useState<number | null>(null);
   const [paidThisMonthCount, setPaidThisMonthCount] = useState<number | null>(null);
+  const [liveIncomeYTD, setLiveIncomeYTD] = useState<number | null>(null);
+  const [liveExpenseYTD, setLiveExpenseYTD] = useState<number | null>(null);
+  const [liveFundraiserAccount, setLiveFundraiserAccount] = useState<number | null>(null);
   const [scheduleYear, setScheduleYear] = useState(new Date().getFullYear());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -234,18 +237,50 @@ type MemberProfileData = {
       })
       .catch(() => {});
 
-    // 2. Total Revenue = sum of all transactions + all monthly dues paid (same as admin)
+    // 2. Compute Income YTD, Expense YTD, Business Account & Fundraiser Account from live database records
     Promise.all([
-      getAllTransactionsReadOnly(),
-      getAllDuesReadOnly(),
+      getAllTransactionsReadOnly().catch(() => []),
+      getAllDuesReadOnly().catch(() => []),
+      getAllExpensesReadOnly().catch(() => []),
     ])
-      .then(([txRows, dueRows]) => {
+      .then(([txRows, dueRows, expRows]) => {
         if (!active) return;
-        const transactions = txRows as { id: string; amount: string | number }[];
+        const transactions = txRows as { id: string; amount: string | number; title?: string }[];
         const dues = dueRows as { id: string; memberRecordId?: string; year?: number; month?: number; duesPaid: string | number }[];
-        const txSum = transactions.reduce((sum, r) => sum + Number(r.amount ?? 0), 0);
+        const expenses = expRows as { id: string; amount: string | number; title?: string }[];
+
         const duesSum = dues.reduce((sum, r) => sum + Number(r.duesPaid ?? 0), 0);
-        setTotalRevenue(txSum + duesSum);
+
+        let txIncomeSum = 0;
+        let txExpenseSum = 0;
+        let fundraiserSum = 0;
+
+        for (const t of transactions) {
+          const amt = Number(t.amount ?? 0);
+          const titleClean = (t.title || "").toLowerCase();
+          const isExp = titleClean.includes("expense") || amt < 0;
+
+          if (isExp) {
+            txExpenseSum += Math.abs(amt);
+          } else {
+            txIncomeSum += amt;
+          }
+
+          if (titleClean.includes("fundraiser") || titleClean.includes("raffle")) {
+            fundraiserSum += Math.abs(amt);
+          }
+        }
+
+        const directExpensesSum = expenses.reduce((sum, e) => sum + Number(e.amount ?? 0), 0);
+
+        const totalIncome = duesSum + txIncomeSum;
+        const totalExpense = txExpenseSum + directExpensesSum;
+
+        setTotalRevenue(totalIncome);
+        setLiveIncomeYTD(totalIncome);
+        setLiveExpenseYTD(totalExpense);
+        setLiveFundraiserAccount(fundraiserSum);
+
         // Current-month dues collected
         const monthDues = dues
           .filter((d) => d.year === currentYearLocal && d.month === currentMonthLocal && Number(d.duesPaid) > 0)
@@ -321,49 +356,37 @@ type MemberProfileData = {
 
   // Build financial snapshot from live data
   const financialSnapshot = useMemo<FinancialSnapshot>(() => {
-    if (!ledgerData) {
-      return {
-        income: 0,
-        expense: 0,
-        businessAccount: 0,
-        fundraiserAccount: 0,
-        balances: [],
-      };
-    }
-
-    const income = ledgerData.ytd?.income ?? 0;
-    const expense = ledgerData.ytd?.expense ?? 0;
-    const balances = ledgerData.accountBalances ?? [];
+    const income = liveIncomeYTD ?? (ledgerData?.ytd?.income ?? 0);
+    const expense = liveExpenseYTD ?? (ledgerData?.ytd?.expense ?? 0);
+    const businessAccount = income - expense;
+    const fundraiserAccount = liveFundraiserAccount !== null && liveFundraiserAccount > 0
+      ? liveFundraiserAccount
+      : (ledgerData?.accountBalances?.find((b) => b.title?.toLowerCase().includes("fundraiser"))?.amount ?? 0);
 
     return {
       income,
       expense,
-      businessAccount: balances.find((b) => b.title?.includes("Business"))?.amount ?? 0,
-      fundraiserAccount: balances.find((b) => b.title?.includes("Fundraiser"))?.amount ?? 0,
-      balances: balances.map((b) => ({ label: b.title ?? "", amount: b.amount ?? 0 })),
+      businessAccount,
+      fundraiserAccount,
+      balances: [
+        { label: "Business", amount: businessAccount },
+        { label: "Fundraiser", amount: fundraiserAccount },
+      ],
     };
-  }, [ledgerData]);
+  }, [ledgerData, liveIncomeYTD, liveExpenseYTD, liveFundraiserAccount]);
 
   // Build YTD visual data from live data
   const ytdVisualData = useMemo(() => {
-    if (!ledgerData) {
-      return [
-        { name: "Income YTD", value: 0, color: "#249b69" },
-        { name: "Expense YTD", value: 0, color: "#145a3d" },
-        { name: "Net", value: 0, color: "#76d08b" },
-      ];
-    }
-
-    const income = ledgerData.ytd?.income ?? 0;
-    const expense = ledgerData.ytd?.expense ?? 0;
-    const net = income - expense;
+    const income = financialSnapshot.income;
+    const expense = financialSnapshot.expense;
+    const net = financialSnapshot.businessAccount;
 
     return [
       { name: "Income YTD", value: Math.abs(income), color: "#249b69" },
       { name: "Expense YTD", value: Math.abs(expense), color: "#145a3d" },
       { name: "Net", value: Math.max(0, net), color: "#76d08b" },
     ];
-  }, [ledgerData]);
+  }, [financialSnapshot]);
 
   // Build monthly visual data from live data
   const monthlyVisualData = useMemo(() => {

@@ -113,6 +113,14 @@ type AdminMemberResponse = {
 type TransactionApiRow = {
   id: string;
   amount: string | number;
+  title?: string;
+};
+
+type ExpenseApiRow = {
+  id: string;
+  amount: string | number;
+  title?: string;
+  reason?: string;
 };
 
 type MonthlyDueApiRow = {
@@ -195,6 +203,9 @@ export default function AdminPage() {
   const [pendingPayment, setPendingPayment] = useState<number | null>(null);
   const [currentMonthDues, setCurrentMonthDues] = useState<number | null>(null);
   const [paidThisMonthCount, setPaidThisMonthCount] = useState<number | null>(null);
+  const [liveIncomeYTD, setLiveIncomeYTD] = useState<number | null>(null);
+  const [liveExpenseYTD, setLiveExpenseYTD] = useState<number | null>(null);
+  const [liveFundraiserAccount, setLiveFundraiserAccount] = useState<number | null>(null);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [year, setYear] = useState(2026);
   const [hostingScheduleRows, setHostingScheduleRows] = useState<HostingScheduleApiRow[]>([]);
@@ -265,16 +276,46 @@ export default function AdminPage() {
       })
       .catch(() => {});
 
-    // 2. Total Revenue = sum of all transactions + all monthly dues paid
+    // 2. Compute Income YTD, Expense YTD, Business Account & Fundraiser Account from live database records
     Promise.all([
-      apiGet<TransactionApiRow[]>("/admin/database/transactions"),
-      apiGet<MonthlyDueApiRow[]>("/admin/database/dues"),
+      apiGet<TransactionApiRow[]>("/admin/database/transactions").catch(() => []),
+      apiGet<MonthlyDueApiRow[]>("/admin/database/dues").catch(() => []),
+      apiGet<ExpenseApiRow[]>("/admin/database/expenses").catch(() => []),
     ])
-      .then(([transactions, dues]) => {
+      .then(([transactions, dues, expenses]) => {
         if (!active) return;
-        const txSum = transactions.reduce((sum, r) => sum + Number(r.amount ?? 0), 0);
         const duesSum = dues.reduce((sum, r) => sum + Number(r.duesPaid ?? 0), 0);
-        setTotalRevenue(txSum + duesSum);
+
+        let txIncomeSum = 0;
+        let txExpenseSum = 0;
+        let fundraiserSum = 0;
+
+        for (const t of transactions) {
+          const amt = Number(t.amount ?? 0);
+          const titleClean = (t.title || "").toLowerCase();
+          const isExp = titleClean.includes("expense") || amt < 0;
+
+          if (isExp) {
+            txExpenseSum += Math.abs(amt);
+          } else {
+            txIncomeSum += amt;
+          }
+
+          if (titleClean.includes("fundraiser") || titleClean.includes("raffle")) {
+            fundraiserSum += Math.abs(amt);
+          }
+        }
+
+        const directExpensesSum = expenses.reduce((sum, e) => sum + Number(e.amount ?? 0), 0);
+
+        const totalIncome = duesSum + txIncomeSum;
+        const totalExpense = txExpenseSum + directExpensesSum;
+
+        setTotalRevenue(totalIncome);
+        setLiveIncomeYTD(totalIncome);
+        setLiveExpenseYTD(totalExpense);
+        setLiveFundraiserAccount(fundraiserSum);
+
         // Current-month dues collected
         const monthDues = dues
           .filter((d) => d.year === currentYear && d.month === currentMonth && Number(d.duesPaid) > 0)
@@ -446,18 +487,16 @@ export default function AdminPage() {
   }, [memberOptions, scheduleMemberSearch]);
 
   const financialSnapshot = useMemo<FinancialSnapshot>(() => {
-    const income = Math.abs(Number(ledgerSummary?.ytd?.income ?? FALLBACK_FINANCIALS.income));
-    const expense = Math.abs(Number(ledgerSummary?.ytd?.expense ?? FALLBACK_FINANCIALS.expense));
-    const businessAccount = getAccountAmount(
-      ledgerSummary?.accountBalances,
-      "business",
-      FALLBACK_FINANCIALS.businessAccount
-    );
-    const fundraiserAccount = getAccountAmount(
-      ledgerSummary?.accountBalances,
-      "fundraiser",
-      FALLBACK_FINANCIALS.fundraiserAccount
-    );
+    const income = liveIncomeYTD ?? Math.abs(Number(ledgerSummary?.ytd?.income ?? FALLBACK_FINANCIALS.income));
+    const expense = liveExpenseYTD ?? Math.abs(Number(ledgerSummary?.ytd?.expense ?? FALLBACK_FINANCIALS.expense));
+    const businessAccount = income - expense;
+    const fundraiserAccount = liveFundraiserAccount !== null && liveFundraiserAccount > 0
+      ? liveFundraiserAccount
+      : getAccountAmount(
+          ledgerSummary?.accountBalances,
+          "fundraiser",
+          FALLBACK_FINANCIALS.fundraiserAccount
+        );
 
     return {
       income,
@@ -467,23 +506,15 @@ export default function AdminPage() {
       balances: [
         {
           label: "Business",
-          amount: getAccountAmount(
-            ledgerSummary?.accountBalances,
-            "business",
-            FALLBACK_FINANCIALS.balances[0].amount
-          ),
+          amount: businessAccount,
         },
         {
           label: "Fundraiser",
-          amount: getAccountAmount(
-            ledgerSummary?.accountBalances,
-            "fundraiser",
-            FALLBACK_FINANCIALS.balances[1].amount
-          ),
+          amount: fundraiserAccount,
         },
       ],
     };
-  }, [ledgerSummary]);
+  }, [ledgerSummary, liveIncomeYTD, liveExpenseYTD, liveFundraiserAccount]);
 
   const adminDisplayName = "Admin";
   const adminEmail = "Admin.Ono@gmail.com";
@@ -751,14 +782,14 @@ export default function AdminPage() {
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={YTD_VISUAL_DATA}
+                      data={ytdVisualData}
                       dataKey="value"
                       nameKey="name"
                       innerRadius={0}
                       outerRadius={110}
                       paddingAngle={2}
                     >
-                      {YTD_VISUAL_DATA.map((entry) => (
+                      {ytdVisualData.map((entry) => (
                         <Cell key={entry.name} fill={entry.color} />
                       ))}
                     </Pie>
@@ -772,9 +803,9 @@ export default function AdminPage() {
               </div>
 
               <div className="admin-dashboard__legend">
-                {YTD_VISUAL_DATA.map((entry) => {
-                  const total = YTD_VISUAL_DATA.reduce((sum, item) => sum + item.value, 0);
-                  const percent = ((entry.value / total) * 100).toFixed(1);
+                {ytdVisualData.map((entry) => {
+                  const total = ytdVisualData.reduce((sum, item) => sum + item.value, 0);
+                  const percent = total > 0 ? ((entry.value / total) * 100).toFixed(1) : "0.0";
                   return (
                     <div key={entry.name} className="admin-dashboard__legend-item">
                       <span className="admin-dashboard__legend-swatch" style={{ backgroundColor: entry.color }} />
