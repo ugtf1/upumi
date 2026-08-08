@@ -1,16 +1,8 @@
 import React, { useEffect, useState } from "react";
 import {
   FiCalendar,
-  FiCheckCircle,
-  FiCreditCard,
-  FiDollarSign,
   FiEye,
-  FiSearch,
-  FiUsers,
   FiX,
-  FiAlertCircle,
-  FiTrendingUp,
-  FiTrendingDown,
 } from "react-icons/fi";
 import { apiGet } from "./api";
 
@@ -84,7 +76,6 @@ function formatCurrency(amount: number | string | null | undefined): string {
 export default function CurrentMonthOverviewPanel({ monthName, year, month, memberSafe = false }: Props) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"dues" | "wrapper" | "levy" | "others" | "attendance">("dues");
-  const [loading, setLoading] = useState(true);
 
   // Raw data arrays
   const [members, setMembers] = useState<MemberRow[]>([]);
@@ -96,7 +87,6 @@ export default function CurrentMonthOverviewPanel({ monthName, year, month, memb
   // Fetch current month database records
   useEffect(() => {
     let active = true;
-    setLoading(true);
 
     const membersEndpoint = memberSafe ? "/me/members" : "/admin/members";
     const duesEndpoint = memberSafe ? "/members/database/dues" : "/admin/database/dues";
@@ -140,9 +130,6 @@ export default function CurrentMonthOverviewPanel({ monthName, year, month, memb
         // Attendance for current month/year
         const curAtt = attList.find((a) => a.year === year && a.month === month) ?? null;
         setMonthAttendance(curAtt);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
       });
 
     return () => {
