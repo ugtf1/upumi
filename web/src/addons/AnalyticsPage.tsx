@@ -62,12 +62,7 @@ const MONTHLY_VISUAL_DATA = [
   { month: "May", value: 83 },
 ];
 
-const YTD_VISUAL_DATA = [
-  { name: "Expense YTD", value: 900, color: "#24a06b" },
-  { name: "Income YTD", value: 2039, color: "#145a3d" },
-  { name: "Net", value: 1139, color: "#79d28d" },
-  { name: "FundRaiser Acct", value: 67, color: "#ff3b30" },
-];
+
 
 const FALLBACK_FINANCIALS: FinancialSnapshot = {
   income: 2039,

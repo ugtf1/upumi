@@ -62,12 +62,7 @@ const MONTHLY_VISUAL_DATA = [
   { month: "May", value: 83 },
 ];
 
-const YTD_VISUAL_DATA = [
-  { name: "Expense YTD", value: 900, color: "#24a06b" },
-  { name: "Income YTD", value: 2039, color: "#145a3d" },
-  { name: "Net", value: 1139, color: "#79d28d" },
-  { name: "FundRaiser Acct", value: 67, color: "#ff3b30" },
-];
+
 
 const FALLBACK_FINANCIALS: FinancialSnapshot = {
   income: 2039,
@@ -515,6 +510,13 @@ export default function AdminPage() {
       ],
     };
   }, [ledgerSummary, liveIncomeYTD, liveExpenseYTD, liveFundraiserAccount]);
+
+  const ytdVisualData = useMemo(() => [
+    { name: "Expense YTD", value: financialSnapshot.expense, color: "#24a06b" },
+    { name: "Income YTD", value: financialSnapshot.income, color: "#145a3d" },
+    { name: "Net (Business)", value: Math.max(0, financialSnapshot.businessAccount), color: "#79d28d" },
+    { name: "FundRaiser Acct", value: financialSnapshot.fundraiserAccount, color: "#ff3b30" },
+  ], [financialSnapshot]);
 
   const adminDisplayName = "Admin";
   const adminEmail = "Admin.Ono@gmail.com";
