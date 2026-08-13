@@ -5,8 +5,6 @@ import {
   FiChevronDown,
   FiDownload,
   FiAlertCircle,
-  FiMail,
-  FiPhone,
   FiUsers,
 } from "react-icons/fi";
 import { apiGet, getAllMemberYearlyBalances, type MemberYearlyBalanceApiRow } from "./api";
@@ -202,16 +200,14 @@ export default function MemberFilterReportModal({ isOpen, onClose, memberSafe = 
   function handleExportCSV() {
     if (!reportRows) return;
     const headers = [
-      "Member ID", "Name", "Email", "Phone", "Status",
-      "Good Standing", "Financial Good Standing",
+      "Name", "Status", "Financial Good Standing",
       ...(filterBalanceYear !== "ALL" ? [`Balance (${filterBalanceYear})`] : []),
-      "Total Paid", "Outstanding", "Voter", "Joined",
+      "Voter",
     ];
     const csvRows = reportRows.map((r) => [
-      r.memberId, r.name, r.email, r.phone, r.status,
-      r.goodStanding, r.financialGoodStanding,
+      r.name, r.status, r.financialGoodStanding,
       ...(filterBalanceYear !== "ALL" ? [r.yearlyBalance !== null ? String(r.yearlyBalance) : "-"] : []),
-      r.totalPaid, r.outstanding, r.voter, r.joined,
+      r.voter,
     ]);
     const csv = [headers, ...csvRows]
       .map((row) => row.map((c) => `"${String(c)}"`).join(","))
@@ -234,8 +230,6 @@ export default function MemberFilterReportModal({ isOpen, onClose, memberSafe = 
   const avgBalance = balanceRows.length > 0
     ? balanceRows.reduce((s, r) => s + (r.yearlyBalance ?? 0), 0) / balanceRows.length
     : null;
-  const totalPaidSum = reportRows?.reduce((s, r) => s + r.totalPaidRaw, 0) ?? 0;
-  const totalOutstandingSum = reportRows?.reduce((s, r) => s + r.outstandingRaw, 0) ?? 0;
 
   // ── Shared input style (matches ReportFilterModal) ─────────────────────────
 
@@ -548,16 +542,6 @@ export default function MemberFilterReportModal({ isOpen, onClose, memberSafe = 
             Found <strong>{reportRows.length}</strong> member{reportRows.length !== 1 ? "s" : ""}
           </span>
           <div style={{ display: "flex", gap: "16px", fontSize: "1rem", flexWrap: "wrap" }}>
-            {totalPaidSum > 0 && (
-              <span style={{ color: "#1e293b" }}>
-                Total Paid: <strong style={{ color: "#166d2e" }}>{formatCurrency(totalPaidSum)}</strong>
-              </span>
-            )}
-            {totalOutstandingSum > 0 && (
-              <span style={{ color: "#1e293b" }}>
-                Total Outstanding: <strong style={{ color: "#dc2626" }}>{formatCurrency(totalOutstandingSum)}</strong>
-              </span>
-            )}
           </div>
         </div>
 
@@ -567,19 +551,13 @@ export default function MemberFilterReportModal({ isOpen, onClose, memberSafe = 
             <thead>
               <tr>
                 <th style={{ textAlign: "left" }}>#</th>
-                <th style={{ textAlign: "left" }}>Member ID</th>
                 <th style={{ textAlign: "left" }}>Name</th>
-                <th style={{ textAlign: "left" }}>Contact</th>
                 <th style={{ textAlign: "left" }}>Status</th>
-                <th style={{ textAlign: "left" }}>Good Standing</th>
                 <th style={{ textAlign: "left" }}>Financial Standing</th>
                 {filterBalanceYear !== "ALL" && (
                   <th style={{ textAlign: "right" }}>Balance ({filterBalanceYear})</th>
                 )}
-                <th style={{ textAlign: "right" }}>Total Paid</th>
-                <th style={{ textAlign: "right" }}>Outstanding</th>
                 <th style={{ textAlign: "left" }}>Voter</th>
-                <th style={{ textAlign: "left" }}>Joined</th>
               </tr>
             </thead>
 
@@ -588,26 +566,8 @@ export default function MemberFilterReportModal({ isOpen, onClose, memberSafe = 
                 <tr key={row.id}>
                   <td data-label="#" style={{ color: "#94a3b8", fontSize: "0.8rem" }}>{idx + 1}</td>
 
-                  <td data-label="Member ID" style={{ fontWeight: 700, color: "#166d2e", whiteSpace: "nowrap" }}>
-                    {row.memberId}
-                  </td>
-
                   <td data-label="Name" style={{ fontWeight: 600, color: "#1e293b", whiteSpace: "nowrap" }}>
                     {row.name}
-                  </td>
-
-                  {/* Contact: email + phone stacked */}
-                  <td data-label="Contact">
-                    <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                      <span style={{ display: "flex", alignItems: "center", gap: "4px", color: "#475569", fontSize: "0.82rem" }}>
-                        <FiMail size={11} /> {row.email}
-                      </span>
-                      {row.phone !== "-" && (
-                        <span style={{ display: "flex", alignItems: "center", gap: "4px", color: "#64748b", fontSize: "0.78rem" }}>
-                          <FiPhone size={11} /> {row.phone}
-                        </span>
-                      )}
-                    </div>
                   </td>
 
                   {/* Status pill */}
@@ -617,16 +577,6 @@ export default function MemberFilterReportModal({ isOpen, onClose, memberSafe = 
                       style={{ fontSize: "0.78rem", padding: "3px 8px" }}
                     >
                       {row.status}
-                    </span>
-                  </td>
-
-                  {/* Good Standing pill */}
-                  <td data-label="Good Standing">
-                    <span
-                      className={`admin-dashboard__status-pill ${row.goodStanding === "Yes" ? "is-good" : "is-bad"}`}
-                      style={{ fontSize: "0.78rem", padding: "3px 8px" }}
-                    >
-                      {row.goodStanding}
                     </span>
                   </td>
 
@@ -646,14 +596,6 @@ export default function MemberFilterReportModal({ isOpen, onClose, memberSafe = 
                     </td>
                   )}
 
-                  <td data-label="Total Paid" style={{ textAlign: "right", fontWeight: 700, color: "#166d2e" }}>
-                    {row.totalPaid}
-                  </td>
-
-                  <td data-label="Outstanding" style={{ textAlign: "right", fontWeight: row.outstandingRaw > 0 ? 700 : 400, color: row.outstandingRaw > 0 ? "#dc2626" : "#64748b" }}>
-                    {row.outstanding}
-                  </td>
-
                   {/* Voter pill */}
                   <td data-label="Voter">
                     <span
@@ -662,10 +604,6 @@ export default function MemberFilterReportModal({ isOpen, onClose, memberSafe = 
                     >
                       {row.voter}
                     </span>
-                  </td>
-
-                  <td data-label="Joined" style={{ color: "#475569", fontSize: "0.82rem", whiteSpace: "nowrap" }}>
-                    {row.joined}
                   </td>
                 </tr>
               ))}
@@ -680,17 +618,9 @@ export default function MemberFilterReportModal({ isOpen, onClose, memberSafe = 
                   </span>
                 </td>
                 <td style={{ padding: "14px 16px", color: "#475569", fontSize: "0.85rem" }}>
-                  {activeCount} active · {goodStandingCount} good standing
+                  {activeCount} active
                 </td>
-                <td colSpan={filterBalanceYear !== "ALL" ? 4 : 4} />
-                {filterBalanceYear !== "ALL" && <td />}
-                <td style={{ textAlign: "right", padding: "14px 16px", color: "#166d2e", fontSize: "1.1rem" }}>
-                  {formatCurrency(totalPaidSum)}
-                </td>
-                <td style={{ textAlign: "right", padding: "14px 16px", color: totalOutstandingSum > 0 ? "#dc2626" : "#64748b", fontSize: "1.1rem" }}>
-                  {formatCurrency(totalOutstandingSum)}
-                </td>
-                <td colSpan={2} />
+                <td colSpan={filterBalanceYear !== "ALL" ? 3 : 2} />
               </tr>
             </tfoot>
           </table>
