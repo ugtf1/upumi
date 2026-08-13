@@ -141,6 +141,20 @@ type UnifiedReportRow = {
   isExpense: boolean;
 };
 
+type DuesReportRow = {
+  id: string;
+  memberRecordId?: string;
+  memberUserId?: string;
+  memberName: string;
+  periodLabel: string;
+  month: number;
+  year: number;
+  duesPaid: number;
+  datePaid: string;
+  outstandingAsOfCurrentMonth: number;
+  hostingMonth: string;
+};
+
 export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModalProps) {
   const [category, setCategory] = useState<ReportCategory>("transactions");
 
@@ -168,7 +182,7 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
 
   // Result state
   const [resultsUnified, setResultsUnified] = useState<UnifiedReportRow[] | null>(null);
-  const [resultsDues, setResultsDues] = useState<ApiMonthlyDue[] | null>(null);
+  const [resultsDuesCustom, setResultsDuesCustom] = useState<DuesReportRow[] | null>(null);
   const [resultsTransactions, setResultsTransactions] = useState<ApiTransactionRow[] | null>(null);
   const [resultsHosting, setResultsHosting] = useState<HostingScheduleApiRow[] | null>(null);
   const [resultsMember, setResultsMember] = useState<MemberReportData | null>(null);
@@ -213,7 +227,7 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
 
   function resetResults() {
     setResultsUnified(null);
-    setResultsDues(null);
+    setResultsDuesCustom(null);
     setResultsTransactions(null);
     setResultsHosting(null);
     setResultsMember(null);
@@ -227,25 +241,154 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
 
     try {
       if (category === "dues") {
-        const duesRows = await getAllDuesReadOnly().catch(() => []) as ApiMonthlyDue[];
-        let filtered = duesRows.filter(r => Number(r.duesPaid || 0) > 0);
+        const [duesRows, txRows, hostingRows] = await Promise.all([
+          getAllDuesReadOnly().catch(() => []) as Promise<ApiMonthlyDue[]>,
+          getAllTransactionsReadOnly().catch(() => []) as Promise<ApiTransactionRow[]>,
+          getHostingSchedule().catch(() => []) as Promise<HostingScheduleApiRow[]>,
+        ]);
+
+        const currentYearNum = new Date().getFullYear();
+        const currentMonthNum = new Date().getMonth() + 1;
+
+        // Map total dues paid by member in current year (across all sources)
+        const currentYearDuesMap = new Map<string, number>();
+
+        for (const d of duesRows) {
+          if (d.year === currentYearNum && Number(d.duesPaid || 0) > 0) {
+            const amt = Number(d.duesPaid || 0);
+            if (d.memberRecordId) {
+              currentYearDuesMap.set(d.memberRecordId, (currentYearDuesMap.get(d.memberRecordId) ?? 0) + amt);
+            }
+            const normName = [d.member?.firstName, d.member?.lastName].filter(Boolean).join(" ").toLowerCase().trim();
+            if (normName) {
+              currentYearDuesMap.set(normName, (currentYearDuesMap.get(normName) ?? 0) + amt);
+            }
+          }
+        }
+
+        for (const t of txRows) {
+          if (t.title?.toLowerCase().includes("due") && t.date) {
+            const d = new Date(t.date);
+            if (d.getFullYear() === currentYearNum) {
+              const amt = Number(t.amount || 0);
+              if (t.userId) {
+                currentYearDuesMap.set(t.userId, (currentYearDuesMap.get(t.userId) ?? 0) + amt);
+              }
+              const normName = (t.fullName || "").toLowerCase().trim();
+              if (normName) {
+                currentYearDuesMap.set(normName, (currentYearDuesMap.get(normName) ?? 0) + amt);
+              }
+            }
+          }
+        }
+
+        const getHostingForMember = (name: string, targetYear: number) => {
+          if (!name) return "-";
+          const norm = name.toLowerCase().trim();
+          const match = hostingRows.find((h) => {
+            const yOk = !targetYear || h.year === targetYear || h.year === currentYearNum;
+            const nOk = (h.hostMember || "").toLowerCase().includes(norm);
+            return yOk && nOk;
+          });
+          return match ? `${SHORT_MONTH_NAMES[match.month - 1] || match.month} ${match.year}` : "-";
+        };
+
+        const duesList: DuesReportRow[] = [];
+
+        // 1. Process MonthlyDue rows
+        for (const d of duesRows) {
+          const amt = Number(d.duesPaid || 0);
+          if (amt <= 0) continue;
+          const memberName = [d.member?.firstName, d.member?.lastName].filter(Boolean).join(" ") || d.member?.email || "Member";
+          const normName = memberName.toLowerCase().trim();
+
+          const totalPaidYear = (d.memberRecordId ? currentYearDuesMap.get(d.memberRecordId) : null) ?? (currentYearDuesMap.get(normName) ?? amt);
+          const outstanding = Math.max(0, (currentMonthNum * 20) - totalPaidYear);
+          const hosting = getHostingForMember(memberName, d.year);
+          const monthName = SHORT_MONTH_NAMES[d.month - 1] || String(d.month);
+
+          duesList.push({
+            id: `due-${d.id}`,
+            memberRecordId: d.memberRecordId,
+            memberName,
+            periodLabel: `${monthName} ${d.year}`,
+            month: d.month,
+            year: d.year,
+            duesPaid: amt,
+            datePaid: d.createdAt ? new Date(d.createdAt).toLocaleDateString() : "-",
+            outstandingAsOfCurrentMonth: outstanding,
+            hostingMonth: hosting,
+          });
+        }
+
+        // 2. Process Transaction rows with title "Dues"
+        for (const t of txRows) {
+          if (!t.title?.toLowerCase().includes("due")) continue;
+          const amt = Number(t.amount || 0);
+          if (amt <= 0) continue;
+          const dObj = t.date ? new Date(t.date) : new Date();
+          const yr = dObj.getFullYear();
+          const mo = dObj.getMonth() + 1;
+          const memberName = t.fullName || "Member";
+          const normName = memberName.toLowerCase().trim();
+
+          const duplicate = duesList.some((r) => r.year === yr && r.month === mo && r.duesPaid === amt && r.memberName.toLowerCase().trim() === normName);
+          if (duplicate) continue;
+
+          const totalPaidYear = (t.userId ? currentYearDuesMap.get(t.userId) : null) ?? (currentYearDuesMap.get(normName) ?? amt);
+          const outstanding = Math.max(0, (currentMonthNum * 20) - totalPaidYear);
+          const hosting = getHostingForMember(memberName, yr);
+          const monthName = SHORT_MONTH_NAMES[mo - 1] || String(mo);
+
+          duesList.push({
+            id: `tx-${t.id}`,
+            memberUserId: t.userId ?? undefined,
+            memberName,
+            periodLabel: `${monthName} ${yr}`,
+            month: mo,
+            year: yr,
+            duesPaid: amt,
+            datePaid: t.date ? new Date(t.date).toLocaleDateString() : "-",
+            outstandingAsOfCurrentMonth: outstanding,
+            hostingMonth: hosting,
+          });
+        }
+
+        // Apply filters
+        let filtered = duesList;
+
+        if (selectedYear !== "ALL") {
+          const targetYr = Number(selectedYear);
+          filtered = filtered.filter((r) => r.year === targetYr);
+        }
+
+        if (selectedMonth !== "ALL") {
+          const targetMo = Number(selectedMonth);
+          filtered = filtered.filter((r) => r.month === targetMo);
+        }
 
         if (startDate && endDate) {
           const start = new Date(startDate).getTime();
           const end = new Date(endDate).setHours(23, 59, 59, 999);
           if (start > end) throw new Error("Start date cannot be after end date.");
-          filtered = filtered.filter(r => {
-            if (!r.createdAt) return false;
-            const t = new Date(r.createdAt).getTime();
+          filtered = filtered.filter((r) => {
+            if (!r.datePaid || r.datePaid === "-") return true;
+            const t = new Date(r.datePaid).getTime();
             return t >= start && t <= end;
           });
         }
 
         if (selectedMember) {
-          filtered = filtered.filter(r => r.memberRecordId === selectedMember.id);
+          const nameToMatch = `${selectedMember.firstName} ${selectedMember.lastName}`.toLowerCase().trim();
+          filtered = filtered.filter((r) =>
+            (r.memberRecordId && r.memberRecordId === selectedMember.id) ||
+            (r.memberUserId && r.memberUserId === selectedMember.userId) ||
+            r.memberName.toLowerCase().includes(nameToMatch)
+          );
         }
 
-        setResultsDues(filtered);
+        filtered.sort((a, b) => b.year - a.year || b.month - a.month);
+        setResultsDuesCustom(filtered);
 
       } else if (category === "transactions") {
         const [duesRows, txRows] = await Promise.all([
@@ -635,52 +778,56 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
       );
     }
 
-    if (resultsDues) {
-      if (resultsDues.length === 0) {
+    if (resultsDuesCustom) {
+      if (resultsDuesCustom.length === 0) {
         return <div className="report-modal__empty-text">No dues payments found for this period.</div>;
       }
 
-      const total = resultsDues.reduce((sum, r) => sum + Number(r.duesPaid || 0), 0);
+      const totalDuesPaid = resultsDuesCustom.reduce((sum, r) => sum + r.duesPaid, 0);
+      const totalOutstanding = resultsDuesCustom.reduce((sum, r) => sum + r.outstandingAsOfCurrentMonth, 0);
 
       return (
         <div style={{ marginTop: "1rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "8px", marginBottom: "1.25rem", paddingInline: "4px" }}>
-            <span style={{ fontSize: "0.95rem", color: "#475569" }}>Found <strong>{resultsDues.length}</strong> records</span>
-            <span style={{ fontSize: "1.05rem", color: "#1e293b" }}>Total Dues: <strong style={{ color: "#166d2e" }}>{formatCurrency(total)}</strong></span>
+            <span style={{ fontSize: "0.95rem", color: "#475569" }}>Found <strong>{resultsDuesCustom.length}</strong> record{resultsDuesCustom.length !== 1 ? "s" : ""}</span>
+            <span style={{ fontSize: "1.05rem", color: "#1e293b" }}>Total Dues Paid: <strong style={{ color: "#166d2e" }}>{formatCurrency(totalDuesPaid)}</strong></span>
           </div>
 
           <div className="admin-dashboard__table-container">
             <table>
               <thead>
                 <tr>
-                  <th>Member Name</th>
-                  <th>For Period</th>
-                  <th>Date Paid</th>
-                  <th style={{ textAlign: "right" }}>Amount</th>
+                  <th style={{ textAlign: "left" }}>Member Name</th>
+                  <th style={{ textAlign: "right" }}>Dues Paid</th>
+                  <th style={{ textAlign: "right" }}>Outstanding (as of Current Month)</th>
+                  <th style={{ textAlign: "left" }}>Hosting Month</th>
                 </tr>
               </thead>
               <tbody>
-                {resultsDues.map((row: ApiMonthlyDue) => {
-                  const name = [row.member?.firstName, row.member?.lastName].filter(Boolean).join(" ") || row.member?.email || "Unknown Member";
-                  const monthName = SHORT_MONTH_NAMES[row.month - 1] || String(row.month);
-                  return (
-                    <tr key={row.id}>
-                      <td data-label="Member Name" style={{ fontWeight: 600, color: "#1e293b" }}>{name}</td>
-                      <td data-label="For Period">{monthName} {row.year}</td>
-                      <td data-label="Date Paid">{new Date(row.createdAt).toLocaleDateString()}</td>
-                      <td data-label="Amount" style={{ fontWeight: 700, color: "#166d2e", textAlign: "right" }}>{formatCurrency(row.duesPaid)}</td>
-                    </tr>
-                  );
-                })}
+                {resultsDuesCustom.map((row: DuesReportRow) => (
+                  <tr key={row.id}>
+                    <td data-label="Member Name" style={{ fontWeight: 600, color: "#1e293b" }}>
+                      {row.memberName}
+                      <span style={{ display: "block", fontSize: "0.78rem", color: "#64748b", fontWeight: 400 }}>{row.periodLabel}</span>
+                    </td>
+                    <td data-label="Dues Paid" style={{ fontWeight: 700, color: "#166d2e", textAlign: "right" }}>{formatCurrency(row.duesPaid)}</td>
+                    <td data-label="Outstanding" style={{ fontWeight: row.outstandingAsOfCurrentMonth > 0 ? 700 : 400, color: row.outstandingAsOfCurrentMonth > 0 ? "#dc2626" : "#64748b", textAlign: "right" }}>{formatCurrency(row.outstandingAsOfCurrentMonth)}</td>
+                    <td data-label="Hosting Month" style={{ color: "#475569" }}>{row.hostingMonth}</td>
+                  </tr>
+                ))}
               </tbody>
               <tfoot>
                 <tr style={{ background: "#f1f5f9", fontWeight: 700, fontSize: "1.05rem", borderTop: "2px solid #cbd5e1" }}>
-                  <td colSpan={3} style={{ textAlign: "right", padding: "14px 16px", color: "#0f172a" }}>
-                    TOTAL DUES:
+                  <td style={{ textAlign: "left", padding: "14px 16px", color: "#0f172a" }}>
+                    TOTAL ({resultsDuesCustom.length} records)
                   </td>
                   <td style={{ textAlign: "right", padding: "14px 16px", color: "#166d2e", fontSize: "1.15rem" }}>
-                    {formatCurrency(total)}
+                    {formatCurrency(totalDuesPaid)}
                   </td>
+                  <td style={{ textAlign: "right", padding: "14px 16px", color: totalOutstanding > 0 ? "#dc2626" : "#64748b", fontSize: "1.15rem" }}>
+                    {formatCurrency(totalOutstanding)}
+                  </td>
+                  <td />
                 </tr>
               </tfoot>
             </table>
