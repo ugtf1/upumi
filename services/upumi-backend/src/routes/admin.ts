@@ -81,6 +81,19 @@ function rawMoney(raw: Record<string, any>, keys: string[]): number | null {
   return null;
 }
 
+function computeFinancialGoodStanding(prevYearBalance: number | null | undefined, fallbackValue?: string | null): string {
+  if (prevYearBalance !== null && prevYearBalance !== undefined && Number.isFinite(Number(prevYearBalance))) {
+    return Number(prevYearBalance) < 240 ? "Yes" : "No";
+  }
+  if (fallbackValue) {
+    const v = String(fallbackValue).trim().toLowerCase();
+    if (v === "yes" || v === "good" || v === "active" || v === "true" || v === "1") return "Yes";
+    if (v === "no" || v === "bad" || v === "inactive" || v === "false" || v === "0") return "No";
+    return String(fallbackValue);
+  }
+  return "Yes";
+}
+
 function mapMemberRecord(row: any) {
   const raw = parseRawJson(row.rawJson);
   return {
@@ -182,7 +195,26 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       },
     });
 
-    return [...rows.map(mapMemberRecord), ...userOnlyRows.map(mapUserAsMember)].sort((a, b) => {
+    const prevYear = new Date().getFullYear() - 1;
+    const yearlyBalances = await prismaAny.memberYearlyBalance.findMany({
+      where: { year: prevYear },
+      select: { memberRecordId: true, balance: true },
+    }).catch(() => []);
+
+    const prevYearBalanceMap = new Map<string, number>();
+    for (const b of yearlyBalances) {
+      if (b.memberRecordId) prevYearBalanceMap.set(b.memberRecordId, Number(b.balance));
+    }
+
+    return [...rows.map((row) => {
+      const mapped = mapMemberRecord(row);
+      const raw = parseRawJson(row.rawJson);
+      const prevBal = prevYearBalanceMap.get(row.id) ?? rawMoney(raw, [`${prevYear} balance`, `${prevYear} Balance`, 'Balance']);
+      return {
+        ...mapped,
+        financialGoodStanding: computeFinancialGoodStanding(prevBal, mapped.financialGoodStanding),
+      };
+    }), ...userOnlyRows.map(mapUserAsMember)].sort((a, b) => {
       const aName = `${a.lastName ?? ''} ${a.firstName ?? ''}`.trim();
       const bName = `${b.lastName ?? ''} ${b.firstName ?? ''}`.trim();
       return aName.localeCompare(bName);
@@ -276,6 +308,14 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const computedPct = totalMeetings > 0 ? String(Math.round((presentCount / totalMeetings) * 100)) : (strCell(row.attendancePct) ?? '0');
 
     const raw = parseRawJson(row.rawJson);
+    const prevYear = new Date().getFullYear() - 1;
+    const prevBalRow = await prismaAny.memberYearlyBalance.findFirst({
+      where: { memberRecordId: row.id, year: prevYear },
+      select: { balance: true },
+    }).catch(() => null);
+    const prevBal = prevBalRow ? Number(prevBalRow.balance) : rawMoney(raw, [`${prevYear} balance`, `${prevYear} Balance`, 'Balance']);
+    const finGoodStanding = computeFinancialGoodStanding(prevBal, strCell(row.financialGoodStanding) ?? strCell(raw['Financial GoodStanding']));
+
     return {
       id: row.id,
       memberKey: row.memberKey,
@@ -293,7 +333,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       totalMeetings: totalMeetings,
       voter: strCell(row.voter) ?? strCell(row.user?.voteRole) ?? strCell(raw.Voter),
       goodStanding: strCell(row.goodStanding) ?? strCell(raw.GoodStanding),
-      financialGoodStanding: strCell(row.financialGoodStanding) ?? strCell(raw['Financial GoodStanding']),
+      financialGoodStanding: finGoodStanding,
       monthlyDuesAmount: decimalToNumber(row.user?.monthlyDues) ?? rawMoney(raw, ['Monthly Dues', 'monthlyDues']),
       totalPaid: decimalToNumber(row.user?.totalPaid) ?? rawMoney(raw, ['Total', '2026 dues paid', '2025 dues paid']),
       outstanding: decimalToNumber(row.user?.outstanding) ?? rawMoney(raw, ['Balance', '2026 balance', '2025 balance']),

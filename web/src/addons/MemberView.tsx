@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { IconType } from "react-icons";
 import {
@@ -532,6 +532,22 @@ export default function MemberViewPage() {
     setRecentMemberTxRows(combined);
   }, [rawTransactions, rawDues, memberUserId, memberRaw]);
 
+
+  const computedFinancialGoodStanding = useMemo(() => {
+    const prevYear = new Date().getFullYear() - 1;
+    const prevBalRec = mybBalances.find((b) => b.year === prevYear);
+    if (prevBalRec && prevBalRec.balance !== null && prevBalRec.balance !== undefined && Number.isFinite(Number(prevBalRec.balance))) {
+      return Number(prevBalRec.balance) < 240 ? "Yes" : "No";
+    }
+    const val = memberRaw?.financialGoodStanding;
+    if (val) {
+      const v = String(val).trim().toLowerCase();
+      if (v === "yes" || v === "good" || v === "active" || v === "true" || v === "1") return "Yes";
+      if (v === "no" || v === "bad" || v === "inactive" || v === "false" || v === "0") return "No";
+      return String(val);
+    }
+    return "Yes";
+  }, [mybBalances, memberRaw]);
 
   useEffect(() => {
     if (!isEditMemberModalOpen && !isAddTransactionModalOpen) return undefined;
@@ -1172,7 +1188,7 @@ export default function MemberViewPage() {
               </div>
               <div className="member-view-page__info-item">
                 <span className="member-view-page__info-label">Financial Standing</span>
-                <span className="member-view-page__info-value">{memberRaw.financialGoodStanding || "—"}</span>
+                <span className="member-view-page__info-value">{computedFinancialGoodStanding}</span>
               </div>
               <div className="member-view-page__info-item">
                 <span className="member-view-page__info-label">Good Standing</span>

@@ -376,6 +376,22 @@ export default function MemberAccount() {
     { label: "Logout", icon: FiLogOut, tone: "danger", action: () => { clearToken(); navigate("/login"); } },
   ];
 
+  const computedFinancialGoodStanding = useMemo(() => {
+    const prevYear = new Date().getFullYear() - 1;
+    const prevBalRec = mybBalances.find((b) => b.year === prevYear);
+    if (prevBalRec && prevBalRec.balance !== null && prevBalRec.balance !== undefined && Number.isFinite(Number(prevBalRec.balance))) {
+      return Number(prevBalRec.balance) < 240 ? "Yes" : "No";
+    }
+    const val = memberProfile?.member?.financialGoodStanding;
+    if (val) {
+      const v = String(val).trim().toLowerCase();
+      if (v === "yes" || v === "good" || v === "active" || v === "true" || v === "1") return "Yes";
+      if (v === "no" || v === "bad" || v === "inactive" || v === "false" || v === "0") return "No";
+      return String(val);
+    }
+    return "Yes";
+  }, [mybBalances, memberProfile]);
+
   return (
     <div className="member-account">
       <aside className="member-account__sidebar">
@@ -522,12 +538,10 @@ export default function MemberAccount() {
                     <span className="member-account__profile-info-value">{memberProfile.member.goodStanding}</span>
                   </div>
                 )}
-                {memberProfile.member.financialGoodStanding && (
-                  <div className="member-account__profile-info-item">
-                    <span className="member-account__profile-info-label">Financial Standing</span>
-                    <span className="member-account__profile-info-value">{memberProfile.member.financialGoodStanding}</span>
-                  </div>
-                )}
+                <div className="member-account__profile-info-item">
+                  <span className="member-account__profile-info-label">Financial Standing</span>
+                  <span className="member-account__profile-info-value">{computedFinancialGoodStanding}</span>
+                </div>
                 {memberProfile.member.insurance && (
                   <div className="member-account__profile-info-item">
                     <span className="member-account__profile-info-label">Insurance</span>

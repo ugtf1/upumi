@@ -235,6 +235,19 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
       return value as Record<string, any>;
     }
 
+    function computeFinancialGoodStanding(prevYearBalance: number | null | undefined, fallbackValue?: string | null): string {
+      if (prevYearBalance !== null && prevYearBalance !== undefined && Number.isFinite(Number(prevYearBalance))) {
+        return Number(prevYearBalance) < 240 ? "Yes" : "No";
+      }
+      if (fallbackValue) {
+        const v = String(fallbackValue).trim().toLowerCase();
+        if (v === "yes" || v === "good" || v === "active" || v === "true" || v === "1") return "Yes";
+        if (v === "no" || v === "bad" || v === "inactive" || v === "false" || v === "0") return "No";
+        return String(fallbackValue);
+      }
+      return "Yes";
+    }
+
     function mapMemberRecord(row: any) {
       const raw = parseRawJson(row.rawJson);
       return {
@@ -278,7 +291,26 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
       };
     }
 
-    return [...rows.map(mapMemberRecord), ...userOnlyRows.map(mapUserAsMember)].sort((a, b) => {
+    const prevYear = new Date().getFullYear() - 1;
+    const yearlyBalances = await prismaAny.memberYearlyBalance.findMany({
+      where: { year: prevYear },
+      select: { memberRecordId: true, balance: true },
+    }).catch(() => []);
+
+    const prevYearBalanceMap = new Map<string, number>();
+    for (const b of yearlyBalances) {
+      if (b.memberRecordId) prevYearBalanceMap.set(b.memberRecordId, Number(b.balance));
+    }
+
+    return [...rows.map((row) => {
+      const mapped = mapMemberRecord(row);
+      const raw = parseRawJson(row.rawJson);
+      const prevBal = prevYearBalanceMap.get(row.id);
+      return {
+        ...mapped,
+        financialGoodStanding: computeFinancialGoodStanding(prevBal, mapped.financialGoodStanding),
+      };
+    }), ...userOnlyRows.map(mapUserAsMember)].sort((a, b) => {
       const aName = `${a.lastName ?? ''} ${a.firstName ?? ''}`.trim();
       const bName = `${b.lastName ?? ''} ${b.firstName ?? ''}`.trim();
       return aName.localeCompare(bName);

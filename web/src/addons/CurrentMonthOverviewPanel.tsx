@@ -7,7 +7,6 @@ import {
 } from "react-icons/fi";
 import { apiGet } from "./api";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
 
 type MemberRow = {
   id: string;
