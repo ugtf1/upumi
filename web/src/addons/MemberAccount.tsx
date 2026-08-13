@@ -295,14 +295,18 @@ export default function MemberAccount() {
       ];
     }
     const dues = memberProfile.monthlyDues || [];
-    // Sum every dues entry across all sources:
-    // allTxRows already merges MonthlyDue records (isDue=true) AND Dues-titled
-    // transactions from the transaction page, all filtered strictly to this member.
+    const currentBalance = dues.length > 0 ? dues[dues.length - 1].duesPaid ?? 0 : 0;
+
     const unifiedTotalPaid = allTxRows
       .filter((r) => r.isDue)
       .reduce((sum, r) => sum + r.rawAmount, 0);
-    const currentBalance = dues.length > 0 ? dues[dues.length - 1].duesPaid ?? 0 : 0;
-    const outstanding = Math.max(0, (dues.length * 20) - unifiedTotalPaid);
+
+    const currentYearNum = new Date().getFullYear();
+    const currentMonthNum = new Date().getMonth() + 1;
+    const duesPaidThisYear = allTxRows
+      .filter((r) => r.isDue && r.rawDate && new Date(r.rawDate).getFullYear() === currentYearNum)
+      .reduce((sum, r) => sum + r.rawAmount, 0);
+    const outstanding = Math.max(0, (currentMonthNum * 20) - duesPaidThisYear);
 
     const count = memberProfile.member.attendanceCount ?? 0;
     const totalM = memberProfile.member.totalMeetings ?? 0;
@@ -650,6 +654,13 @@ export default function MemberAccount() {
                   const isPresentInDb = memberAttendanceMap.get(key) === true;
                   const profileDue = memberProfile?.monthlyDues?.find((d) => d.year === attendanceYear && d.month === mNum);
                   const isPresent = isPresentInDb || profileDue?.present === true;
+
+                  const profileDueAmt = Number(profileDue?.duesPaid ?? 0);
+                  const txDuesAmt = allTxRows
+                    .filter((r) => r.isDue && r.rawDate && new Date(r.rawDate).getFullYear() === attendanceYear && (new Date(r.rawDate).getMonth() + 1) === mNum)
+                    .reduce((sum, r) => sum + r.rawAmount, 0);
+                  const monthDuesPaid = Math.max(profileDueAmt, txDuesAmt);
+
                   return (
                     <div key={mShort} style={{ padding: "10px 6px", borderRadius: "10px", textAlign: "center", border: isPresent ? "1px solid #a7f3d0" : "1px solid #e2e8f0", backgroundColor: isPresent ? "#ecfdf5" : "#f8fafc" }}>
                       <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#64748b" }}>{mShort}</div>
@@ -659,6 +670,9 @@ export default function MemberAccount() {
                       <span style={{ fontSize: "0.7rem", fontWeight: 600, color: isPresent ? "#047857" : "#64748b" }}>
                         {isPresent ? "Present" : "Absent"}
                       </span>
+                      {monthDuesPaid > 0 && (
+                        <div style={{ fontSize: "0.68rem", color: "#0284c7", marginTop: "2px" }}>${monthDuesPaid.toLocaleString()}</div>
+                      )}
                     </div>
                   );
                 })}

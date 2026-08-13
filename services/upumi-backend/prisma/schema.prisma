@@ -33,7 +33,6 @@ model User {
   updatedAt DateTime @updatedAt
 
   memberRecord      MemberRecord?
-  dues              Due[]
   transactions      Transaction[]
   memberFinanceRows MemberFinance[]
 }
@@ -78,21 +77,6 @@ model HostingSchedule {
 
   @@unique([year, month])
   @@map("hostingSchedule")
-}
-
-model Due {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  year      Int
-  month     Int
-  amount    Decimal  @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-  @@unique([userId, year, month])
-  @@map("dues")
 }
 
 model Collection {

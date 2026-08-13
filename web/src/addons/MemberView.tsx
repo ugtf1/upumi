@@ -974,11 +974,22 @@ export default function MemberViewPage() {
     .filter((row) => row.isDue)
     .reduce((sum, row) => sum + (row.rawAmount ?? 0), 0);
 
+  const currentYearNum = new Date().getFullYear();
+  const currentMonthNum = new Date().getMonth() + 1;
+  const duesPaidThisYear = recentMemberTxRows
+    .filter((row) => row.isDue && row.rawDate && new Date(row.rawDate).getFullYear() === currentYearNum)
+    .reduce((sum, row) => sum + (row.rawAmount ?? 0), 0);
+  const computedOutstanding = Math.max(0, (currentMonthNum * 20) - duesPaidThisYear);
+
+  const monthlyDuesDisplay = memberProfile.monthlyDues && memberProfile.monthlyDues !== "$0" && memberProfile.monthlyDues !== "0"
+    ? memberProfile.monthlyDues
+    : "$20";
+
   const summaryCards: SummaryCard[] = [
-    { label: "Monthly Dues", value: memberProfile.monthlyDues },
+    { label: "Monthly Dues", value: monthlyDuesDisplay },
     { label: "Total Paid", value: `$${totalPaidFromAllSources.toLocaleString()}`, tone: "success" },
     { label: "Attendance", value: memberProfile.attendance || "0 Meetings", tone: "success" },
-    { label: "Outstanding", value: memberProfile.outstanding, tone: "danger" },
+    { label: "Outstanding", value: `$${computedOutstanding.toLocaleString()}`, tone: "danger" },
   ];
 
   return (
@@ -1206,6 +1217,20 @@ export default function MemberViewPage() {
                 // Also check due record's 'present' flag as fallback
                 const due = rawDues.find(d => d.year === attendanceYear && d.month === mNum);
                 const isPresent = isPresentInDb || due?.present === true;
+
+                // Calculate month dues paid combining rawDues and transaction dues
+                const dueAmt = Number(due?.duesPaid ?? 0);
+                const txDuesAmt = rawTransactions
+                  .filter((tx) => {
+                    if (tx.title !== "Dues" && !tx.title?.toLowerCase().includes("due")) return false;
+                    if (viewerUserId && tx.userId && tx.userId !== viewerUserId) return false;
+                    if (!tx.date) return false;
+                    const d = new Date(tx.date);
+                    return d.getFullYear() === attendanceYear && (d.getMonth() + 1) === mNum;
+                  })
+                  .reduce((sum, tx) => sum + Number(tx.amount ?? 0), 0);
+                const monthDuesPaid = Math.max(dueAmt, txDuesAmt);
+
                 return (
                   <div
                     key={m.value}
@@ -1225,8 +1250,8 @@ export default function MemberViewPage() {
                     <span style={{ fontSize: "0.7rem", fontWeight: 600, color: isPresent ? "#047857" : "#64748b" }}>
                       {isPresent ? "Present" : "Absent"}
                     </span>
-                    {due && due.duesPaid > 0 && (
-                      <div style={{ fontSize: "0.68rem", color: "#0284c7", marginTop: "2px" }}>${Number(due.duesPaid).toLocaleString()}</div>
+                    {monthDuesPaid > 0 && (
+                      <div style={{ fontSize: "0.68rem", color: "#0284c7", marginTop: "2px" }}>${monthDuesPaid.toLocaleString()}</div>
                     )}
                   </div>
                 );
