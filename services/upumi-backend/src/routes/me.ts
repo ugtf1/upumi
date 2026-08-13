@@ -237,7 +237,7 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
 
     function computeFinancialGoodStanding(prevYearBalance: number | null | undefined, fallbackValue?: string | null): string {
       if (prevYearBalance !== null && prevYearBalance !== undefined && Number.isFinite(Number(prevYearBalance))) {
-        return Number(prevYearBalance) < 240 ? "Yes" : "No";
+        return Number(prevYearBalance) <= -240 ? "No" : "Yes";
       }
       if (fallbackValue) {
         const v = String(fallbackValue).trim().toLowerCase();

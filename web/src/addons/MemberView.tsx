@@ -537,7 +537,7 @@ export default function MemberViewPage() {
     const prevYear = new Date().getFullYear() - 1;
     const prevBalRec = mybBalances.find((b) => b.year === prevYear);
     if (prevBalRec && prevBalRec.balance !== null && prevBalRec.balance !== undefined && Number.isFinite(Number(prevBalRec.balance))) {
-      return Number(prevBalRec.balance) < 240 ? "Yes" : "No";
+      return Number(prevBalRec.balance) <= -240 ? "No" : "Yes";
     }
     const val = memberRaw?.financialGoodStanding;
     if (val) {
