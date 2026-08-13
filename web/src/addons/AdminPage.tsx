@@ -17,6 +17,7 @@ import {
   FiChevronUp,
   FiTrash2,
   FiMic,
+  FiEdit2,
 } from "react-icons/fi";
 import {
   CartesianGrid,
@@ -51,6 +52,7 @@ type FinancialSnapshot = {
   income: number;
   expense: number;
   businessAccount: number;
+  isManualBusinessAccount?: boolean;
   fundraiserAccount: number;
   balances: { label: string; amount: number }[];
 };
@@ -468,10 +470,23 @@ export default function AdminPage() {
     return memberOptions.filter((member) => member.name.toLowerCase().includes(query));
   }, [memberOptions, scheduleMemberSearch]);
 
+  const [businessAccountOverride, setBusinessAccountOverride] = useState<number | null>(() => {
+    const saved = localStorage.getItem(`upumi_business_account_override_${year}`);
+    return saved !== null && !isNaN(Number(saved)) ? Number(saved) : null;
+  });
+  const [isBusinessModalOpen, setIsBusinessModalOpen] = useState(false);
+  const [businessModalValue, setBusinessModalValue] = useState("");
+
+  useEffect(() => {
+    const saved = localStorage.getItem(`upumi_business_account_override_${year}`);
+    setBusinessAccountOverride(saved !== null && !isNaN(Number(saved)) ? Number(saved) : null);
+  }, [year]);
+
   const financialSnapshot = useMemo<FinancialSnapshot>(() => {
     const income = liveIncomeYTD ?? Math.abs(Number(ledgerSummary?.ytd?.income ?? FALLBACK_FINANCIALS.income));
     const expense = liveExpenseYTD ?? Math.abs(Number(ledgerSummary?.ytd?.expense ?? FALLBACK_FINANCIALS.expense));
-    const businessAccount = income - expense;
+    const calculatedBusinessAccount = income - expense;
+    const businessAccount = businessAccountOverride !== null ? businessAccountOverride : calculatedBusinessAccount;
     const fundraiserAccount = liveFundraiserAccount !== null && liveFundraiserAccount > 0
       ? liveFundraiserAccount
       : getAccountAmount(
@@ -484,6 +499,7 @@ export default function AdminPage() {
       income,
       expense,
       businessAccount,
+      isManualBusinessAccount: businessAccountOverride !== null,
       fundraiserAccount,
       balances: [
         {
@@ -496,7 +512,7 @@ export default function AdminPage() {
         },
       ],
     };
-  }, [ledgerSummary, liveIncomeYTD, liveExpenseYTD, liveFundraiserAccount]);
+  }, [ledgerSummary, liveIncomeYTD, liveExpenseYTD, liveFundraiserAccount, businessAccountOverride]);
 
   const ytdVisualData = useMemo(() => [
     { name: "Expense YTD", value: financialSnapshot.expense, color: "#24a06b" },
@@ -810,7 +826,18 @@ export default function AdminPage() {
         </section>
 
         <section className="admin-dashboard__financial-grid" id="admin-dashboard-settings">
-          <FinancialPanel snapshot={financialSnapshot} />
+          <FinancialPanel
+            snapshot={financialSnapshot}
+            onEditBusinessAccount={() => {
+              setBusinessModalValue(String(financialSnapshot.businessAccount));
+              setIsBusinessModalOpen(true);
+            }}
+            onResetBusinessAccount={() => {
+              localStorage.removeItem(`upumi_business_account_override_${year}`);
+              setBusinessAccountOverride(null);
+              setToast("Reset Business Account to calculated figure.");
+            }}
+          />
           <CurrentMonthOverviewPanel
             monthName={new Date().toLocaleString("default", { month: "long" })}
             year={new Date().getFullYear()}
@@ -1122,18 +1149,102 @@ export default function AdminPage() {
         </div>
       )}
 
+      {/* Edit Business Account Modal */}
+      {isBusinessModalOpen && (
+        <div className="admin-dashboard__modal-overlay" role="dialog" aria-modal="true">
+          <div className="admin-dashboard__modal admin-dashboard__modal--compact">
+            <div className="admin-dashboard__modal-header">
+              <h3>Edit Business Account Value ({year})</h3>
+              <button
+                type="button"
+                className="admin-dashboard__modal-close"
+                onClick={() => setIsBusinessModalOpen(false)}
+              >
+                <FiX size={18} />
+              </button>
+            </div>
+            <div className="admin-dashboard__modal-body" style={{ padding: "1.25rem" }}>
+              <p style={{ fontSize: "0.85rem", color: "#64748b", marginBottom: "1rem" }}>
+                Enter a custom manual amount for the Business Account. Leave empty or click Reset to use the calculated figure (Income YTD − Expenses YTD).
+              </p>
+              <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 600, color: "#1e293b", marginBottom: "0.5rem" }}>
+                Business Account Amount ($)
+              </label>
+              <input
+                type="number"
+                step="any"
+                className="admin-dashboard__modal-input"
+                placeholder="e.g. 35687"
+                value={businessModalValue}
+                onChange={(e) => setBusinessModalValue(e.target.value)}
+                style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: "1rem" }}
+              />
+            </div>
+            <div className="admin-dashboard__modal-footer" style={{ display: "flex", justifyContent: "flex-end", gap: "8px", padding: "1rem 1.25rem", borderTop: "1px solid #e2e8f0" }}>
+              {businessAccountOverride !== null && (
+                <button
+                  type="button"
+                  style={{ background: "#fff1f2", color: "#e11d48", border: "1px solid #fecdd3", padding: "8px 14px", borderRadius: 6, fontWeight: 600, cursor: "pointer" }}
+                  onClick={() => {
+                    localStorage.removeItem(`upumi_business_account_override_${year}`);
+                    setBusinessAccountOverride(null);
+                    setIsBusinessModalOpen(false);
+                    setToast("Reset Business Account to calculated figure.");
+                  }}
+                >
+                  Reset to Calculated
+                </button>
+              )}
+              <button
+                type="button"
+                style={{ background: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1", padding: "8px 14px", borderRadius: 6, fontWeight: 600, cursor: "pointer" }}
+                onClick={() => setIsBusinessModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                style={{ background: "#166d2e", color: "#ffffff", border: "none", padding: "8px 16px", borderRadius: 6, fontWeight: 600, cursor: "pointer" }}
+                onClick={() => {
+                  const num = parseFloat(businessModalValue);
+                  if (!isNaN(num)) {
+                    localStorage.setItem(`upumi_business_account_override_${year}`, String(num));
+                    setBusinessAccountOverride(num);
+                    setToast(`Business Account set to $${num.toLocaleString()}`);
+                  } else {
+                    localStorage.removeItem(`upumi_business_account_override_${year}`);
+                    setBusinessAccountOverride(null);
+                  }
+                  setIsBusinessModalOpen(false);
+                }}
+              >
+                Save Value
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <MeetingRecorder onMeetingSaved={fetchMeetingsList} />
       <ReportFilterModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} />
     </div>
   );
 }
 
-function FinancialPanel({ snapshot }: { snapshot: FinancialSnapshot }) {
+function FinancialPanel({
+  snapshot,
+  onEditBusinessAccount,
+  onResetBusinessAccount,
+}: {
+  snapshot: FinancialSnapshot;
+  onEditBusinessAccount?: () => void;
+  onResetBusinessAccount?: () => void;
+}) {
   const cards = [
-    { label: "Income YTD", value: formatCurrency(snapshot.income) },
-    { label: "Expenses YTD", value: formatCurrency(snapshot.expense) },
-    { label: "Business Account", value: formatCurrency(snapshot.businessAccount) },
-    { label: "Fundraiser Account", value: formatCurrency(snapshot.fundraiserAccount) },
+    { label: "Income YTD", value: formatCurrency(snapshot.income), isBusiness: false },
+    { label: "Expenses YTD", value: formatCurrency(snapshot.expense), isBusiness: false },
+    { label: "Business Account", value: formatCurrency(snapshot.businessAccount), isBusiness: true },
+    { label: "Fundraiser Account", value: formatCurrency(snapshot.fundraiserAccount), isBusiness: false },
   ];
 
   return (
@@ -1143,8 +1254,56 @@ function FinancialPanel({ snapshot }: { snapshot: FinancialSnapshot }) {
       <div className="admin-dashboard__finance-cards">
         {cards.map((card) => (
           <div key={card.label} className="admin-dashboard__finance-card">
-            <span>{card.label}</span>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>{card.label}</span>
+              {card.isBusiness && snapshot.isManualBusinessAccount && (
+                <span style={{ fontSize: "0.7rem", background: "#fef9c3", color: "#854d0e", padding: "1px 6px", borderRadius: 4, fontWeight: 600 }}>
+                  Manual
+                </span>
+              )}
+            </div>
             <strong>{card.value}</strong>
+            {card.isBusiness && onEditBusinessAccount && (
+              <div style={{ marginTop: 6, display: "flex", gap: 6, alignItems: "center" }}>
+                <button
+                  type="button"
+                  onClick={onEditBusinessAccount}
+                  style={{
+                    background: "#f1f5f9",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: 4,
+                    padding: "3px 8px",
+                    fontSize: "0.75rem",
+                    cursor: "pointer",
+                    fontWeight: 600,
+                    color: "#1e293b",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                >
+                  <FiEdit2 size={12} /> Edit
+                </button>
+                {snapshot.isManualBusinessAccount && onResetBusinessAccount && (
+                  <button
+                    type="button"
+                    onClick={onResetBusinessAccount}
+                    style={{
+                      background: "#fff1f2",
+                      border: "1px solid #fecdd3",
+                      borderRadius: 4,
+                      padding: "3px 8px",
+                      fontSize: "0.75rem",
+                      cursor: "pointer",
+                      fontWeight: 600,
+                      color: "#e11d48",
+                    }}
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         ))}
       </div>
