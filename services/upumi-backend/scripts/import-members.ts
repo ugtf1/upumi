@@ -4,8 +4,8 @@ import path from 'node:path';
 import { prisma } from '../src/services/prisma.js';
 import { importWorkbookCsv } from '../src/services/workbookImport.js';
 
-const CSV_PATH = process.env.CSV_PATH ?? './data/Q4_2025_UPUMI_Workbook-Member_Status.csv';
-const YEAR = Number(process.env.DUES_YEAR ?? 2025);
+const CSV_PATH = process.env.CSV_PATH ?? './Member_Status.csv';
+const YEAR = Number(process.env.DUES_YEAR ?? 2026);
 
 async function main() {
   const abs = path.resolve(CSV_PATH);
