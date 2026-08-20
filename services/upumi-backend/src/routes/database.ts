@@ -215,6 +215,9 @@ async function listRows(table: TableName) {
   };
 
   if (table === 'dues') {
+    args.where = {
+      duesPaid: { gt: 0 },
+    };
     args.include = {
       member: {
         select: {
@@ -222,6 +225,14 @@ async function listRows(table: TableName) {
           lastName: true,
           email: true,
           phone: true,
+          user: {
+            select: {
+              fName: true,
+              lName: true,
+              email: true,
+              phone: true,
+            },
+          },
         },
       },
     };

@@ -62,6 +62,12 @@ type ApiMonthlyDue = {
     lastName: string | null;
     email: string | null;
     phone: string | null;
+    user?: {
+      fName: string | null;
+      lName: string | null;
+      email: string | null;
+      phone: string | null;
+    } | null;
   };
 };
 
@@ -259,7 +265,9 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
             if (d.memberRecordId) {
               currentYearDuesMap.set(d.memberRecordId, (currentYearDuesMap.get(d.memberRecordId) ?? 0) + amt);
             }
-            const normName = [d.member?.firstName, d.member?.lastName].filter(Boolean).join(" ").toLowerCase().trim();
+            const mrFirst = d.member?.firstName || d.member?.user?.fName || "";
+            const mrLast = d.member?.lastName || d.member?.user?.lName || "";
+            const normName = [mrFirst, mrLast].filter(Boolean).join(" ").toLowerCase().trim();
             if (normName) {
               currentYearDuesMap.set(normName, (currentYearDuesMap.get(normName) ?? 0) + amt);
             }
@@ -299,7 +307,13 @@ export default function ReportFilterModal({ isOpen, onClose }: ReportFilterModal
         for (const d of duesRows) {
           const amt = Number(d.duesPaid || 0);
           if (amt <= 0) continue;
-          const memberName = [d.member?.firstName, d.member?.lastName].filter(Boolean).join(" ") || d.member?.email || "Member";
+
+          // Resolve best available name: MemberRecord fields first, then linked User, then email
+          const mrFirst = d.member?.firstName || d.member?.user?.fName || "";
+          const mrLast = d.member?.lastName || d.member?.user?.lName || "";
+          const memberName = [mrFirst, mrLast].filter(Boolean).join(" ") ||
+            d.member?.email || d.member?.user?.email ||
+            d.member?.phone || d.member?.user?.phone || "Member";
           const normName = memberName.toLowerCase().trim();
 
           const totalPaidYear = (d.memberRecordId ? currentYearDuesMap.get(d.memberRecordId) : null) ?? (currentYearDuesMap.get(normName) ?? amt);
