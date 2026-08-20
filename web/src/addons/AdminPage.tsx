@@ -57,13 +57,6 @@ type FinancialSnapshot = {
   balances: { label: string; amount: number }[];
 };
 
-const MONTHLY_VISUAL_DATA = [
-  { month: "Jan", value: 262 },
-  { month: "Feb", value: 498 },
-  { month: "Mar", value: 355 },
-  { month: "Apr", value: 33 },
-  { month: "May", value: 83 },
-];
 
 
 
@@ -112,6 +105,7 @@ type TransactionApiRow = {
   id: string;
   amount: string | number;
   title?: string;
+  date?: string;
 };
 
 type ExpenseApiRow = {
@@ -202,6 +196,7 @@ export default function AdminPage() {
   const [liveIncomeYTD, setLiveIncomeYTD] = useState<number | null>(null);
   const [liveExpenseYTD, setLiveExpenseYTD] = useState<number | null>(null);
   const [liveFundraiserAccount, setLiveFundraiserAccount] = useState<number | null>(null);
+  const [rawTransactions, setRawTransactions] = useState<TransactionApiRow[]>([]);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [year, setYear] = useState(2026);
   const [hostingScheduleRows, setHostingScheduleRows] = useState<HostingScheduleApiRow[]>([]);
@@ -311,6 +306,7 @@ export default function AdminPage() {
         setLiveIncomeYTD(totalIncome);
         setLiveExpenseYTD(totalExpense);
         setLiveFundraiserAccount(fundraiserSum);
+        setRawTransactions(transactions);
       })
       .catch(() => {});
 
@@ -520,6 +516,33 @@ export default function AdminPage() {
     { name: "Net (Business)", value: Math.max(0, financialSnapshot.businessAccount), color: "#79d28d" },
     { name: "FundRaiser Acct", value: financialSnapshot.fundraiserAccount, color: "#ff3b30" },
   ], [financialSnapshot]);
+
+  const monthlyVisualData = useMemo(() => {
+    const monthlySums = Array(12).fill(0);
+    const MONTH_NAMES_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+    rawTransactions.forEach((t) => {
+      if (!t.date) return;
+      const d = new Date(t.date);
+      if (d.getFullYear() === year) {
+        const m = d.getMonth();
+        if (m >= 0 && m < 12) {
+          const amt = Number(t.amount ?? 0);
+          const titleClean = (t.title || "").toLowerCase();
+          const isExp = titleClean.includes("expense") || amt < 0;
+          
+          // Subtract absolute value for expenses, add absolute value for income
+          const netAmt = isExp ? -Math.abs(amt) : Math.abs(amt);
+          monthlySums[m] += netAmt;
+        }
+      }
+    });
+
+    return MONTH_NAMES_SHORT.map((name, index) => ({
+      month: name,
+      value: monthlySums[index],
+    }));
+  }, [rawTransactions, year]);
 
   const adminDisplayName = "Admin";
   const adminEmail = "Admin.Ono@gmail.com";
@@ -757,7 +780,7 @@ export default function AdminPage() {
             </div>
             <div className="admin-dashboard__chart-wrap">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={MONTHLY_VISUAL_DATA} margin={{ top: 16, right: 12, left: 0, bottom: 0 }}>
+                <LineChart data={monthlyVisualData} margin={{ top: 16, right: 12, left: 0, bottom: 0 }}>
                   <CartesianGrid stroke="#dfe8e3" strokeDasharray="4 4" vertical={false} />
                   <XAxis dataKey="month" tickLine={false} axisLine={false} stroke="#7f8d86" />
                   <YAxis tickLine={false} axisLine={false} stroke="#7f8d86" />
