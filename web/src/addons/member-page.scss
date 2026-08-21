@@ -440,6 +440,35 @@
   line-height: 1;
 }
 
+.member-page__financial-standing-sub {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid #eef2f0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+
+  span {
+    color: #797979;
+    font-size: 0.66rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  strong {
+    font-size: 0.8rem;
+    font-weight: 800;
+    line-height: 1;
+
+    &.is-yes {
+      color: #145a3d;
+    }
+    &.is-no {
+      color: #d9534f;
+    }
+  }
+}
+
 .member-page__more-button {
   width: 32px;
   height: 40px;

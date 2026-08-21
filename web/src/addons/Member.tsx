@@ -43,6 +43,7 @@ type MemberListItem = {
   attendancePercent: number;
   voteRole: string;
   voteStatus: string;
+  financialGoodStanding: string;
 };
 
 type AttendanceRow = {
@@ -82,6 +83,8 @@ type ApiMember = {
   joined?: string | null;
   attendancePct?: string | null;
   voter?: string | null;
+  financialGoodStanding?: string | null;
+  goodStanding?: string | null;
 };
 
 function mapApiMember(m: ApiMember): MemberListItem {
@@ -90,6 +93,9 @@ function mapApiMember(m: ApiMember): MemberListItem {
   const attendancePercent = Number.isNaN(pctRaw) ? 0 : Math.min(100, pctRaw);
   const presentMonths = Math.round(attendancePercent / 10);
   const voteRole = String(m.voter ?? "").trim().toUpperCase() === "YES" ? "Yes" : "No";
+  const rawFin = String(m.financialGoodStanding ?? m.goodStanding ?? "Yes").trim().toUpperCase();
+  const financialGoodStanding = rawFin === "NO" ? "No" : "Yes";
+
   return {
     id: m.id,
     name,
@@ -101,6 +107,7 @@ function mapApiMember(m: ApiMember): MemberListItem {
     attendancePercent,
     voteRole,
     voteStatus: voteRole === "Yes" ? "Participated" : "Nil",
+    financialGoodStanding,
   };
 }
 
@@ -527,6 +534,12 @@ export default function MemberPage() {
                       <strong>{member.voteRole}</strong>
                     </div>
                     <small>{member.voteStatus}</small>
+                    <div className="member-page__financial-standing-sub">
+                      <span>Financial Standing</span>
+                      <strong className={member.financialGoodStanding === "Yes" ? "is-yes" : "is-no"}>
+                        {member.financialGoodStanding}
+                      </strong>
+                    </div>
                   </div>
 
                   <div
