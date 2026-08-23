@@ -211,6 +211,84 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       select: { memberRecordId: true, balance: true },
     }).catch(() => []);
 
+    const hostingSchedules = await prisma.hostingSchedule.findMany({
+      select: { year: true, month: true, hostMember: true },
+    }).catch(() => []);
+
+    const allTransactions = await prisma.transaction.findMany({
+      select: { userId: true, fullName: true, title: true, amount: true },
+    }).catch(() => []);
+
+    const MONTH_ABBRS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+    function formatHostingDate(rawHosting?: string | null, fullName?: string): string {
+      if (fullName && hostingSchedules.length > 0) {
+        const lowerName = fullName.toLowerCase().trim();
+        const sched = hostingSchedules.find((h) => {
+          const lowerHost = (h.hostMember || '').toLowerCase().trim();
+          return lowerHost && (lowerHost.includes(lowerName) || lowerName.includes(lowerHost));
+        });
+        if (sched && sched.year && sched.month) {
+          const mStr = MONTH_ABBRS[sched.month - 1] || 'Jan';
+          const yStr = String(sched.year).slice(-1);
+          return `(${mStr}, ${yStr})`;
+        }
+      }
+
+      if (!rawHosting || rawHosting === '-' || rawHosting === 'None') return 'None';
+      if (rawHosting.startsWith('(') && rawHosting.endsWith(')')) return rawHosting;
+
+      const d = new Date(rawHosting);
+      if (!Number.isNaN(d.getTime())) {
+        const mStr = MONTH_ABBRS[d.getMonth()];
+        const yStr = String(d.getFullYear()).slice(-1);
+        return `(${mStr}, ${yStr})`;
+      }
+      return rawHosting;
+    }
+
+    function calculateMemberTxTotals(userId: string | null | undefined, fullName: string, fallback: { crntPaid: number; raffleUpumi: number; raffleUpua: number }) {
+      const lowerName = fullName.toLowerCase().trim();
+      const userTxs = allTransactions.filter((t) => {
+        if (userId && t.userId === userId) return true;
+        if (t.fullName && lowerName && t.fullName.toLowerCase().trim() === lowerName) return true;
+        return false;
+      });
+
+      let duesSum = 0;
+      let hasDuesTxs = false;
+
+      let raffleUpumiSum = 0;
+      let hasRaffleUpumiTxs = false;
+
+      let raffleUpuaSum = 0;
+      let hasRaffleUpuaTxs = false;
+
+      for (const t of userTxs) {
+        const amt = Number(t.amount ?? 0);
+        const title = (t.title || '').toLowerCase().trim();
+
+        if (title.includes('due')) {
+          duesSum += amt;
+          hasDuesTxs = true;
+        }
+
+        if (title.includes('upua') && title.includes('raffle')) {
+          raffleUpuaSum += amt;
+          hasRaffleUpuaTxs = true;
+        } else if (title.includes('raffle')) {
+          raffleUpumiSum += amt;
+          hasRaffleUpumiTxs = true;
+        }
+      }
+
+      return {
+        crntPaid: hasDuesTxs ? duesSum : fallback.crntPaid,
+        raffleUpumi: hasRaffleUpumiTxs ? raffleUpumiSum : fallback.raffleUpumi,
+        raffleUpua: hasRaffleUpuaTxs ? raffleUpuaSum : fallback.raffleUpua,
+      };
+    }
+
     const prevYearBalanceMap = new Map<string, number>();
     for (const b of yearlyBalances) {
       if (b.memberRecordId) prevYearBalanceMap.set(b.memberRecordId, Number(b.balance));
@@ -220,11 +298,38 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       const mapped = mapMemberRecord(row);
       const raw = parseRawJson(row.rawJson);
       const prevBal = prevYearBalanceMap.get(row.id) ?? rawMoney(raw, [`${prevYear} balance`, `${prevYear} Balance`, 'Balance']);
+      const fullName = `${mapped.firstName ?? ''} ${mapped.lastName ?? ''}`.trim();
+      const txTotals = calculateMemberTxTotals(mapped.userId, fullName, {
+        crntPaid: mapped.crntPaid,
+        raffleUpumi: mapped.raffleUpumi,
+        raffleUpua: mapped.raffleUpua,
+      });
+
       return {
         ...mapped,
+        hosting: formatHostingDate(mapped.hosting, fullName),
+        crntPaid: txTotals.crntPaid,
+        raffleUpumi: txTotals.raffleUpumi,
+        raffleUpua: txTotals.raffleUpua,
         financialGoodStanding: computeFinancialGoodStanding(prevBal, mapped.financialGoodStanding),
       };
-    }), ...userOnlyRows.map(mapUserAsMember)].sort((a, b) => {
+    }), ...userOnlyRows.map((userRow: any) => {
+      const mapped = mapUserAsMember(userRow);
+      const fullName = `${mapped.firstName ?? ''} ${mapped.lastName ?? ''}`.trim();
+      const txTotals = calculateMemberTxTotals(mapped.userId, fullName, {
+        crntPaid: mapped.crntPaid,
+        raffleUpumi: mapped.raffleUpumi,
+        raffleUpua: mapped.raffleUpua,
+      });
+
+      return {
+        ...mapped,
+        hosting: formatHostingDate(mapped.hosting, fullName),
+        crntPaid: txTotals.crntPaid,
+        raffleUpumi: txTotals.raffleUpumi,
+        raffleUpua: txTotals.raffleUpua,
+      };
+    })].sort((a, b) => {
       const aName = `${a.lastName ?? ''} ${a.firstName ?? ''}`.trim();
       const bName = `${b.lastName ?? ''} ${b.firstName ?? ''}`.trim();
       return aName.localeCompare(bName);
