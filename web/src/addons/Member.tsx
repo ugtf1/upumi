@@ -36,14 +36,19 @@ type MemberListItem = {
   id: string;
   name: string;
   memberId: string;
+  hosting: string;
   email: string;
   joined: string;
+  balance: number;
   phone: string;
   attendance: string;
   attendancePercent: number;
   voteRole: string;
+  crntPaid: number;
   voteStatus: string;
   financialGoodStanding: string;
+  raffleUpumi: number;
+  raffleUpua: number;
 };
 
 type AttendanceRow = {
@@ -81,11 +86,30 @@ type ApiMember = {
   email?: string | null;
   phone?: string | null;
   joined?: string | null;
+  hosting?: string | null;
+  balance?: number | null;
+  crntPaid?: number | null;
+  raffleUpumi?: number | null;
+  raffleUpua?: number | null;
   attendancePct?: string | null;
   voter?: string | null;
   financialGoodStanding?: string | null;
   goodStanding?: string | null;
 };
+
+function formatHostingDisplay(rawHosting?: string | null): string {
+  if (!rawHosting || rawHosting === "-" || rawHosting === "None") return "None";
+  const d = new Date(rawHosting);
+  if (!Number.isNaN(d.getTime()) && rawHosting.includes("-")) {
+    return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+  }
+  return rawHosting;
+}
+
+function formatCurrency(amount: number): string {
+  const sign = amount < 0 ? "-" : "";
+  return `${sign}$${Math.abs(amount).toLocaleString()}`;
+}
 
 function mapApiMember(m: ApiMember): MemberListItem {
   const name = [m.firstName, m.lastName].filter(Boolean).join(" ").trim() || m.email || "Unnamed";
@@ -100,14 +124,19 @@ function mapApiMember(m: ApiMember): MemberListItem {
     id: m.id,
     name,
     memberId: m.displayMemberId || m.memberKey || m.id,
+    hosting: formatHostingDisplay(m.hosting),
     email: m.email || "-",
     joined: m.joined ? new Date(m.joined).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "-",
+    balance: Number(m.balance ?? 0),
     phone: m.phone || "-",
     attendance: `${presentMonths}/12 Months`,
     attendancePercent,
     voteRole,
+    crntPaid: Number(m.crntPaid ?? 0),
     voteStatus: voteRole === "Yes" ? "Participated" : "Nil",
     financialGoodStanding,
+    raffleUpumi: Number(m.raffleUpumi ?? 0),
+    raffleUpua: Number(m.raffleUpua ?? 0),
   };
 }
 
@@ -307,11 +336,16 @@ export default function MemberPage() {
       [
         member.name,
         member.memberId,
+        member.hosting,
         member.email,
         member.joined,
+        String(member.balance),
         member.phone,
         member.attendance,
         member.voteRole,
+        String(member.crntPaid),
+        String(member.raffleUpumi),
+        String(member.raffleUpua),
         member.voteStatus,
       ]
         .join(" ")
@@ -462,12 +496,12 @@ export default function MemberPage() {
                   <article className="member-page__row" key={member.id}>
                   <div className="member-page__identity">
                     <strong>{member.name}</strong>
-                    <span>Member ID - {member.memberId}</span>
+                    <span>Hosting - {member.hosting}</span>
                   </div>
 
                   <div className="member-page__email">
                     <strong>{member.email}</strong>
-                    <span>Joined {member.joined}</span>
+                    <span>Balance - {formatCurrency(member.balance)}</span>
                   </div>
 
                   <a className="member-page__phone" href={`tel:${member.phone.replace(/\s+/g, "")}`}>
@@ -526,19 +560,30 @@ export default function MemberPage() {
                   })()}
 
                   <div className="member-page__vote-card">
-                    <span>Vote Role</span>
+                    <span>Crnt. Paid</span>
                     <div className="member-page__vote-line">
-                      <span className="member-page__check member-page__check--yellow">
+                      <span className="member-page__check member-page__check--green">
                         <FiCheck size={15} />
                       </span>
-                      <strong>{member.voteRole}</strong>
+                      <strong>{formatCurrency(member.crntPaid)}</strong>
                     </div>
-                    <small>{member.voteStatus}</small>
                     <div className="member-page__financial-standing-sub">
                       <span>Financial Standing</span>
                       <strong className={member.financialGoodStanding === "Yes" ? "is-yes" : "is-no"}>
                         {member.financialGoodStanding}
                       </strong>
+                    </div>
+                  </div>
+
+                  <div className="member-page__raffle-card">
+                    <span>Raffle Tix</span>
+                    <div className="member-page__raffle-line">
+                      <small>UPUMI:</small>
+                      <strong>{formatCurrency(member.raffleUpumi)}</strong>
+                    </div>
+                    <div className="member-page__raffle-line">
+                      <small>UPUA:</small>
+                      <strong>{formatCurrency(member.raffleUpua)}</strong>
                     </div>
                   </div>
 

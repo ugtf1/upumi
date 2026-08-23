@@ -283,10 +283,10 @@
 .member-page__row {
   min-height: 112px;
   display: grid;
-  grid-template-columns: minmax(150px, 180px) minmax(220px, 250px) minmax(170px, 190px) 176px 98px 36px;
+  grid-template-columns: minmax(140px, 170px) minmax(190px, 230px) minmax(115px, 130px) 176px 115px 125px 36px;
   align-items: center;
-  column-gap: 30px;
-  padding: 17px 27px 17px 30px;
+  column-gap: 20px;
+  padding: 17px 20px 17px 24px;
   border-radius: 4px;
   background: #fff;
 }
@@ -340,11 +340,44 @@
 }
 
 .member-page__attendance-title,
-.member-page__vote-card > span {
+.member-page__vote-card > span,
+.member-page__raffle-card > span {
   color: #12683a;
   font-size: 0.72rem;
   font-weight: 700;
   line-height: 1.1;
+}
+
+.member-page__raffle-card {
+  width: 125px;
+  min-height: 71px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #f4f7f5;
+  border: 1px solid rgba(20, 57, 40, 0.08);
+}
+
+.member-page__raffle-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+
+  small {
+    color: #666;
+    font-size: 0.72rem;
+    font-weight: 600;
+  }
+
+  strong {
+    color: #1a1a1a;
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
 }
 
 .member-page__attendance-line,

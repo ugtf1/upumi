@@ -227,6 +227,22 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
       return text || null;
     }
 
+    function rawMoney(raw: Record<string, any>, keys: string[]): number | null {
+      for (const key of keys) {
+        const value = raw[key];
+        if (value === null || value === undefined || value === '') continue;
+        const numeric = Number(String(value).replace(/[^0-9.-]/g, ''));
+        if (Number.isFinite(numeric)) return numeric;
+      }
+      return null;
+    }
+
+    function decimalToNumber(value: unknown): number | null {
+      if (value === null || value === undefined) return null;
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? numeric : null;
+    }
+
     function parseRawJson(value: unknown): Record<string, any> {
       if (!value) return {};
       if (typeof value === 'string') {
@@ -259,6 +275,11 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
         firstName: strCell(row.firstName) ?? strCell(row.user?.fName) ?? strCell(raw.First),
         lastName: strCell(row.lastName) ?? strCell(row.user?.lName) ?? strCell(raw.Last),
         joined: strCell(row.joined) ?? strCell(raw.Joined) ?? row.user?.dateJoined ?? null,
+        hosting: strCell(raw.Hosting) ?? strCell(raw.hosting) ?? null,
+        balance: rawMoney(raw, ['2026 balance', '2025 balance', '2024 balance', 'balance', 'Balance']) ?? 0,
+        crntPaid: rawMoney(raw, ['2026 dues paid', '2025 dues paid', '2024 dues paid', 'dues paid', 'Dues Paid']) ?? decimalToNumber(row.user?.totalPaid) ?? 0,
+        raffleUpumi: rawMoney(raw, ['Raffle tix UPUMI fundraiser', 'Raffle tix UPUMI', 'Raffle UPUMI']) ?? 0,
+        raffleUpua: rawMoney(raw, ['Raffle tix UPUA convention', 'upua 25 raffle', 'Raffle UPUA']) ?? 0,
         phone: strCell(row.phone) ?? strCell(row.user?.phone) ?? strCell(raw.Phone),
         email: strCell(row.email) ?? strCell(row.user?.email) ?? strCell(raw.Email),
         goodStanding: strCell(row.goodStanding) ?? strCell(raw.GoodStanding),
@@ -280,6 +301,11 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
         firstName: strCell(user.fName),
         lastName: strCell(user.lName),
         joined: user.dateJoined ?? user.createdAt ?? null,
+        hosting: null,
+        balance: 0,
+        crntPaid: decimalToNumber(user.totalPaid) ?? 0,
+        raffleUpumi: 0,
+        raffleUpua: 0,
         phone: strCell(user.phone),
         email: strCell(user.email),
         goodStanding: null,
