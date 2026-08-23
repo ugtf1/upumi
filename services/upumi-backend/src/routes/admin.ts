@@ -270,13 +270,61 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
       if (!user) return reply.code(404).send({ message: 'Member not found' });
 
+      const linkedRecord = await prisma.memberRecord.findFirst({
+        where: { userId },
+        include: { monthlyDues: true },
+      }).catch(() => null);
+
+      const userFullName = `${user.fName ?? ''} ${user.lName ?? ''}`.trim().toLowerCase();
+      const userCandidateIds = [
+        user.id,
+        `user.${user.id}`,
+        linkedRecord?.id,
+        linkedRecord?.memberKey,
+      ].filter(Boolean).map((s: any) => String(s).toLowerCase());
+
+      const attendanceRowsForUser = await prismaAny.attendance.findMany({
+        select: { year: true, month: true, usersIn: true }
+      }).catch(() => []);
+
+      const userAttendanceMap = new Map<string, boolean>();
+      let userPresentCount = 0;
+
+      for (const att of attendanceRowsForUser) {
+        const usersInList = String(att.usersIn ?? '').split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean);
+        const isPresent =
+          userCandidateIds.some((cid) => usersInList.includes(cid)) ||
+          (userFullName.length > 0 && usersInList.some((u: string) => u.includes(userFullName) || userFullName.includes(u)));
+
+        userAttendanceMap.set(`${att.year}-${att.month}`, isPresent);
+        if (isPresent) userPresentCount++;
+      }
+
+      const userTotalMeetings = attendanceRowsForUser.length;
+      const userComputedPct = userTotalMeetings > 0 ? String(Math.round((userPresentCount / userTotalMeetings) * 100)) : (linkedRecord?.attendancePct ?? '0');
+
       return {
         ...mapUserAsMember(user),
         address: strCell(user.address),
         monthlyDuesAmount: decimalToNumber(user.monthlyDues) ?? 0,
         totalPaid: decimalToNumber(user.totalPaid) ?? 0,
         outstanding: decimalToNumber(user.outstanding) ?? 0,
-        monthlyDues: [],
+        attendancePct: userComputedPct,
+        attendanceCount: userPresentCount,
+        totalMeetings: userTotalMeetings,
+        memberKey: linkedRecord?.memberKey ?? `user.${user.id}`,
+        monthlyDues: (linkedRecord?.monthlyDues ?? []).map((due: any) => {
+          const attKey = `${due.year}-${due.month}`;
+          const presentInTable = userAttendanceMap.get(attKey) ?? false;
+          return {
+            id: due.id,
+            year: due.year,
+            month: due.month,
+            present: due.present === true || presentInTable,
+            duesPaid: decimalToNumber(due.duesPaid) ?? 0,
+            createdAt: due.createdAt,
+          };
+        }),
         rawJson: {},
       };
     }
@@ -288,14 +336,18 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const attendanceMap = new Map<string, boolean>();
     let presentCount = 0;
     const memberName = `${row.firstName ?? ''} ${row.lastName ?? ''}`.trim().toLowerCase();
+    const candidateIds = [
+      row.id,
+      row.memberKey,
+      row.userId,
+      row.userId ? `user.${row.userId}` : null,
+      row.id ? `user.${row.id}` : null,
+    ].filter(Boolean).map((s: any) => String(s).toLowerCase());
 
     for (const att of attendanceRows) {
       const usersInList = String(att.usersIn ?? '').split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean);
       const isPresent =
-        (row.userId && usersInList.includes(row.userId.toLowerCase())) ||
-        usersInList.includes(row.id.toLowerCase()) ||
-        usersInList.includes(row.memberKey.toLowerCase()) ||
-        (row.userId && usersInList.includes(`user.${row.userId.toLowerCase()}`)) ||
+        candidateIds.some((cid) => usersInList.includes(cid)) ||
         (memberName.length > 0 && usersInList.some((u: string) => u.includes(memberName) || memberName.includes(u)));
 
       attendanceMap.set(`${att.year}-${att.month}`, isPresent);
@@ -1100,14 +1152,65 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       create: { year: Body.year, month: Body.month, usersIn },
     });
 
+    // Also sync MonthlyDue table present flag if memberRecordId is available
+    if (memberRecordId) {
+      await prismaAny.monthlyDue.upsert({
+        where: {
+          memberRecordId_year_month: {
+            memberRecordId,
+            year: Body.year,
+            month: Body.month,
+          },
+        },
+        update: {
+          present: Body.status === 'present',
+        },
+        create: {
+          memberRecordId,
+          year: Body.year,
+          month: Body.month,
+          present: Body.status === 'present',
+          duesPaid: 0,
+        },
+      }).catch(() => null);
+    }
+
     // Recompute this member's attendancePct across ALL attendance records
     // and write it back to MemberRecord so GET /members is always current.
     if (memberRecordId) {
+      const candidateSet = new Set<string>();
+      if (stableId) candidateSet.add(stableId.toLowerCase());
+      if (memberRecordId) candidateSet.add(memberRecordId.toLowerCase());
+      if (id) candidateSet.add(id.toLowerCase());
+
+      const rec = await prisma.memberRecord.findUnique({
+        where: { id: memberRecordId },
+        select: { userId: true, memberKey: true, firstName: true, lastName: true },
+      }).catch(() => null);
+
+      if (rec) {
+        if (rec.userId) {
+          candidateSet.add(rec.userId.toLowerCase());
+          candidateSet.add(`user.${rec.userId.toLowerCase()}`);
+        }
+        if (rec.memberKey) candidateSet.add(rec.memberKey.toLowerCase());
+        const fullName = `${rec.firstName ?? ''} ${rec.lastName ?? ''}`.trim().toLowerCase();
+        if (fullName) candidateSet.add(fullName);
+      }
+
       const allAttendance = await prismaAny.attendance.findMany({ select: { usersIn: true } });
-      const presentCount = allAttendance.filter((a: any) =>
-        a.usersIn.split(',').map((s: string) => s.trim()).filter(Boolean).includes(stableId)
-      ).length;
-      const pct = presentCount * 10;
+      const totalMeetings = allAttendance.length;
+      let presentCount = 0;
+
+      for (const a of allAttendance) {
+        const usersInList = String(a.usersIn ?? '').split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean);
+        const isPresent = Array.from(candidateSet).some((cid) =>
+          usersInList.some((u: string) => u === cid || u.includes(cid) || cid.includes(u))
+        );
+        if (isPresent) presentCount++;
+      }
+
+      const pct = totalMeetings > 0 ? Math.round((presentCount / totalMeetings) * 100) : 0;
       await prisma.memberRecord.update({
         where: { id: memberRecordId },
         data: { attendancePct: String(pct) },

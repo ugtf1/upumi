@@ -123,7 +123,7 @@ const MONTH_OPTIONS = [
   { value: 11, label: "November" }, { value: 12, label: "December" },
 ];
 const CURRENT_YEAR = new Date().getFullYear();
-const YEAR_OPTIONS = [CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1];
+const YEAR_OPTIONS = Array.from({ length: CURRENT_YEAR + 1 - 2018 + 1 }, (_, i) => CURRENT_YEAR + 1 - i);
 const MONTH_NAMES = MONTH_OPTIONS.map((m) => m.label);
 
 const TRANSACTION_TITLE_OPTIONS = [
@@ -795,6 +795,24 @@ export default function MemberViewPage() {
         status: attendanceForm.status,
       });
 
+      // Re-fetch attendance rows & member profile to update UI live
+      const [updatedAtt, updatedMember] = await Promise.all([
+        apiGet<AttendanceApiRow[]>("/admin/database/attendance").catch(() => null),
+        apiGet<ApiMemberDetail>(`/admin/members/${memberId}`).catch(() => null),
+      ]);
+
+      if (updatedAtt) setLiveAttendanceRows(updatedAtt);
+      if (updatedMember) {
+        setMemberRaw(updatedMember);
+        setRawDues(updatedMember.monthlyDues ?? []);
+        setMemberProfile((prev) => ({
+          ...prev,
+          attendance: updatedMember.attendanceCount != null && updatedMember.totalMeetings != null
+            ? `${updatedMember.attendanceCount} / ${updatedMember.totalMeetings} Meetings (${updatedMember.attendancePct || 0}%)`
+            : updatedMember.attendancePct ? `${updatedMember.attendancePct}%` : "-",
+        }));
+      }
+
       setIsRecordAttendanceModalOpen(false);
       setToast(
         attendanceForm.status === "present"
@@ -1220,14 +1238,26 @@ export default function MemberViewPage() {
                 // Check live attendance rows from the database (same method as MemberAccount)
                 const liveRow = liveAttendanceRows.find(att => att.year === attendanceYear && att.month === mNum);
                 const viewerUserId = memberRaw.userId ?? memberRaw.user?.id ?? null;
+                const memberRecordId = memberRaw.id ?? null;
                 const memberKey = memberRaw.memberKey ?? null;
+                const displayMemberId = memberRaw.displayMemberId ?? null;
                 const memberFirstLast = [memberRaw.firstName, memberRaw.lastName].filter(Boolean).join(" ").toLowerCase().trim();
+
+                const candidateIdentifiers = [
+                  memberRecordId,
+                  memberId,
+                  viewerUserId,
+                  viewerUserId ? `user.${viewerUserId}` : null,
+                  memberRecordId ? `user.${memberRecordId}` : null,
+                  memberKey,
+                  displayMemberId,
+                ].filter(Boolean).map((s) => String(s).toLowerCase());
+
                 let isPresentInDb = false;
                 if (liveRow) {
                   const usersInList = String(liveRow.usersIn ?? "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
                   isPresentInDb =
-                    (viewerUserId != null && usersInList.includes(viewerUserId.toLowerCase())) ||
-                    (memberKey != null && usersInList.includes(memberKey.toLowerCase())) ||
+                    candidateIdentifiers.some(cid => usersInList.includes(cid)) ||
                     (memberFirstLast.length > 0 && usersInList.some(u => u.includes(memberFirstLast) || memberFirstLast.includes(u)));
                 }
                 // Also check due record's 'present' flag as fallback
