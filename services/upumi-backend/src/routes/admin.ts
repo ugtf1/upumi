@@ -524,6 +524,40 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
+  // Balance: sum of current-year Dues transactions for a member (admin)
+  app.get('/members/:id/balance', { preHandler: requireRole('ADMIN') }, async (req: any, reply) => {
+    const rawId = String(req.params?.id ?? '');
+
+    // Resolve userId: the id param may be a memberRecord id, a 'user.xxx' key, or a direct userId
+    let userId: string = rawId;
+    if (rawId.startsWith('user.')) {
+      userId = rawId.slice('user.'.length);
+    } else {
+      // Try to look up the memberRecord to get its linked userId
+      const record = await prisma.memberRecord.findUnique({
+        where: { id: rawId },
+        select: { userId: true },
+      }).catch(() => null);
+      if (record?.userId) userId = record.userId;
+    }
+
+    const currentYear = new Date().getFullYear();
+    const startOfYear = new Date(`${currentYear}-01-01T00:00:00.000Z`);
+    const endOfYear   = new Date(`${currentYear}-12-31T23:59:59.999Z`);
+
+    const result = await prisma.transaction.aggregate({
+      where: {
+        userId,
+        title: 'Dues',
+        date: { gte: startOfYear, lte: endOfYear },
+      },
+      _sum: { amount: true },
+    });
+
+    const balance = Number(result._sum.amount ?? 0);
+    return { userId, year: currentYear, balance };
+  });
+
   // Import / re-import workbook CSV (admin)
   app.post('/import-members', { preHandler: requireRole('ADMIN') }, async (req, reply) => {
     const body = ImportSchema.parse(req.body);
