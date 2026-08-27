@@ -524,38 +524,82 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
-  // Balance: sum of current-year Dues transactions for a member (admin)
+  // Balance: crnt. paid - outstanding - previous year balance (admin)
   app.get('/members/:id/balance', { preHandler: requireRole('ADMIN') }, async (req: any, reply) => {
     const rawId = String(req.params?.id ?? '');
 
-    // Resolve userId: the id param may be a memberRecord id, a 'user.xxx' key, or a direct userId
-    let userId: string = rawId;
-    if (rawId.startsWith('user.')) {
-      userId = rawId.slice('user.'.length);
-    } else {
-      // Try to look up the memberRecord to get its linked userId
-      const record = await prisma.memberRecord.findUnique({
-        where: { id: rawId },
-        select: { userId: true },
-      }).catch(() => null);
-      if (record?.userId) userId = record.userId;
+    let record = await prisma.memberRecord.findFirst({
+      where: {
+        OR: [
+          { id: rawId },
+          { memberKey: rawId },
+          { userId: rawId.startsWith('user.') ? rawId.slice('user.'.length) : rawId },
+        ],
+      },
+      include: { user: true },
+    }).catch(() => null);
+
+    let user = record?.user ?? null;
+    let userId = record?.userId ?? (rawId.startsWith('user.') ? rawId.slice('user.'.length) : rawId);
+
+    if (!user && userId) {
+      user = await prisma.user.findUnique({ where: { id: userId } }).catch(() => null);
     }
 
     const currentYear = new Date().getFullYear();
-    const startOfYear = new Date(`${currentYear}-01-01T00:00:00.000Z`);
-    const endOfYear   = new Date(`${currentYear}-12-31T23:59:59.999Z`);
+    const prevYear = currentYear - 1;
 
-    const result = await prisma.transaction.aggregate({
+    // 1. Calculate crntPaid from transactions (or fallback)
+    const allUserTxs = await prisma.transaction.findMany({
       where: {
-        userId,
-        title: 'Dues',
-        date: { gte: startOfYear, lte: endOfYear },
+        OR: [
+          { userId: userId },
+          ...(record ? [{ fullName: `${record.firstName ?? ''} ${record.lastName ?? ''}`.trim() }] : []),
+          ...(user ? [{ fullName: `${user.fName ?? ''} ${user.lName ?? ''}`.trim() }] : []),
+        ],
       },
-      _sum: { amount: true },
-    });
+    }).catch(() => []);
 
-    const balance = Number(result._sum.amount ?? 0);
-    return { userId, year: currentYear, balance };
+    const duesTxs = allUserTxs.filter((t) => (t.title || '').toLowerCase().includes('due'));
+    const raw = record ? parseRawJson(record.rawJson) : {};
+
+    let crntPaid = 0;
+    if (duesTxs.length > 0) {
+      crntPaid = duesTxs.reduce((sum, t) => sum + Number(t.amount ?? 0), 0);
+    } else if (record) {
+      crntPaid = rawMoney(raw, ['2026 dues paid', '2025 dues paid', '2024 dues paid', 'dues paid', 'Dues Paid']) ?? decimalToNumber(record.user?.totalPaid) ?? 0;
+    } else if (user) {
+      crntPaid = decimalToNumber(user.totalPaid) ?? 0;
+    }
+
+    // 2. Outstanding
+    let outstanding = 0;
+    if (record) {
+      outstanding = decimalToNumber(record.user?.outstanding) ?? rawMoney(raw, ['Balance', '2026 balance', '2025 balance', 'outstanding']) ?? 0;
+    } else if (user) {
+      outstanding = decimalToNumber(user.outstanding) ?? 0;
+    }
+
+    // 3. Previous year balance
+    let prevYearBalance = 0;
+    if (record) {
+      const prevBalRow = await prismaAny.memberYearlyBalance.findFirst({
+        where: { memberRecordId: record.id, year: prevYear },
+        select: { balance: true },
+      }).catch(() => null);
+      prevYearBalance = prevBalRow ? Number(prevBalRow.balance) : (rawMoney(raw, [`${prevYear} balance`, `${prevYear} Balance`, 'Balance']) ?? 0);
+    }
+
+    const balance = crntPaid - outstanding - prevYearBalance;
+
+    return {
+      userId,
+      memberId: rawId,
+      crntPaid,
+      outstanding,
+      prevYearBalance,
+      balance,
+    };
   });
 
   // Import / re-import workbook CSV (admin)
