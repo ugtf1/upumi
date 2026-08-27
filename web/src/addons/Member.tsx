@@ -186,9 +186,31 @@ export default function MemberPage() {
   useEffect(() => {
     let active = true;
     apiGet<ApiMember[]>("/admin/members")
-      .then((rows) => { if (active) setMembers(rows.map(mapApiMember)); })
-      .catch(() => {})
-      .finally(() => { if (active) setMembersLoading(false); });
+      .then(async (rows) => {
+        if (!active) return;
+        const mapped = rows.map(mapApiMember);
+        setMembers(mapped);
+        setMembersLoading(false);
+
+        // Fetch live balance (sum of current-year Dues transactions) for each member in parallel
+        const balanceResults = await Promise.allSettled(
+          mapped.map((m) =>
+            apiGet<{ userId: string; year: number; balance: number }>(`/admin/members/${m.id}/balance`)
+          )
+        );
+
+        if (!active) return;
+        setMembers((prev) =>
+          prev.map((m, i) => {
+            const result = balanceResults[i];
+            if (result.status === "fulfilled") {
+              return { ...m, balance: Number(result.value.balance ?? 0) };
+            }
+            return m;
+          })
+        );
+      })
+      .catch(() => { if (active) setMembersLoading(false); });
     return () => { active = false; };
   }, []);
 
