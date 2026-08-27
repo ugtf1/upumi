@@ -1499,4 +1499,36 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
     return user;
   });
+
+  // ── One-shot import rollback ─────────────────────────────────────────────
+  // Deletes Dues transactions and clears MemberRecord.userId links created
+  // during the failed CSV import attempt on 2026-08-27 (17:30–19:00 UTC).
+  app.post('/revert-import-changes', { preHandler: [requireRole('ADMIN')] }, async (_req, reply) => {
+    const IMPORT_FROM = new Date('2026-08-27T17:30:00Z');
+    const IMPORT_TO   = new Date('2026-08-27T19:00:00Z');
+
+    // 1. Delete any Dues transactions inserted during the import window
+    const deletedDues = await prisma.transaction.deleteMany({
+      where: {
+        title: 'Dues',
+        createdAt: { gte: IMPORT_FROM, lte: IMPORT_TO },
+      },
+    });
+
+    // 2. Clear MemberRecord.userId links that were set during the import window
+    //    (updatedAt falls within the window and userId is non-null)
+    const clearedLinks = await prisma.memberRecord.updateMany({
+      where: {
+        updatedAt: { gte: IMPORT_FROM, lte: IMPORT_TO },
+        userId: { not: null },
+      },
+      data: { userId: null },
+    });
+
+    return reply.send({
+      ok: true,
+      deletedDuesTransactions: deletedDues.count,
+      clearedMemberRecordLinks: clearedLinks.count,
+    });
+  });
 };
