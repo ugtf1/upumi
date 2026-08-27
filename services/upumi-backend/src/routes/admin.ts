@@ -590,7 +590,13 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       prevYearBalance = prevBalRow ? Number(prevBalRow.balance) : (rawMoney(raw, [`${prevYear} balance`, `${prevYear} Balance`, 'Balance']) ?? 0);
     }
 
-    const balance = crntPaid - outstanding - prevYearBalance;
+    // Formula:
+    //   prevYearBalance already carries its sign:
+    //     negative  → member owes that amount  → subtract it  (adding a negative)
+    //     positive  → member has excess         → add it
+    //   Both cases: balance = crntPaid - outstanding + prevYearBalance
+    //   e.g. crntPaid=120, outstanding=40, prevYearBalance=-240 → 120-40+(-240) = -160
+    const balance = crntPaid - outstanding + prevYearBalance;
 
     return {
       userId,
