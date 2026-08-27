@@ -230,19 +230,18 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         });
         if (sched && sched.year && sched.month) {
           const mStr = MONTH_ABBRS[sched.month - 1] || 'Jan';
-          const yStr = String(sched.year).slice(-1);
-          return `(${mStr}, ${yStr})`;
+          return `${mStr}, ${sched.year}`;
         }
       }
 
       if (!rawHosting || rawHosting === '-' || rawHosting === 'None') return 'None';
-      if (rawHosting.startsWith('(') && rawHosting.endsWith(')')) return rawHosting;
+      // Already formatted (contains comma but no dash)
+      if (rawHosting.includes(',') && !rawHosting.includes('-')) return rawHosting;
 
       const d = new Date(rawHosting);
       if (!Number.isNaN(d.getTime())) {
         const mStr = MONTH_ABBRS[d.getMonth()];
-        const yStr = String(d.getFullYear()).slice(-1);
-        return `(${mStr}, ${yStr})`;
+        return `${mStr}, ${d.getFullYear()}`;
       }
       return rawHosting;
     }

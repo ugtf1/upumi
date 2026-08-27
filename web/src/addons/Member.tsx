@@ -99,13 +99,13 @@ type ApiMember = {
 
 function formatHostingDisplay(rawHosting?: string | null): string {
   if (!rawHosting || rawHosting === "-" || rawHosting === "None") return "None";
-  if (rawHosting.startsWith("(") && rawHosting.endsWith(")")) return rawHosting;
+  // Already formatted (pass-through from backend)
+  if (rawHosting.includes(",") && !rawHosting.includes("-")) return rawHosting;
   const d = new Date(rawHosting);
   if (!Number.isNaN(d.getTime()) && rawHosting.includes("-")) {
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const mStr = monthNames[d.getMonth()];
-    const yStr = String(d.getFullYear()).slice(-1);
-    return `(${mStr}, ${yStr})`;
+    return `${mStr}, ${d.getFullYear()}`;
   }
   return rawHosting;
 }
