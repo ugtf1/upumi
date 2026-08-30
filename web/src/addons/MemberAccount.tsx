@@ -296,6 +296,16 @@ export default function MemberAccount() {
     });
   }, [hostingSchedule, memberFullName, memberKey]);
 
+  const hostingDisplay = useMemo(() => {
+    const direct = memberProfile?.member?.hosting;
+    if (direct && direct !== "None") return direct;
+    if (memberHostingSchedule.length > 0) {
+      const first = memberHostingSchedule[0];
+      return `${MONTH_OPTIONS_LONG[first.month - 1]} ${first.year}`;
+    }
+    return "None";
+  }, [memberProfile, memberHostingSchedule]);
+
   // Summary cards — Total Paid sums all dues entries from both Transaction page and MemberView page
   const summaryCards = useMemo<SummaryCard[]>(() => {
     if (!memberProfile?.member) {
@@ -327,13 +337,6 @@ export default function MemberAccount() {
     const totalM = memberProfile.member.totalMeetings ?? 0;
     const pct = memberProfile.member.attendancePct ?? "0";
 
-    const directHosting = memberProfile?.member?.hosting;
-    let hostingDisplay = directHosting && directHosting !== "None" ? directHosting : "None";
-    if (hostingDisplay === "None" && memberHostingSchedule.length > 0) {
-      const firstSched = memberHostingSchedule[0];
-      hostingDisplay = `${MONTH_OPTIONS_LONG[firstSched.month - 1]} ${firstSched.year}`;
-    }
-
     return [
       { title: "My Balance", subtitle: "Current", value: formatCurrency(currentBalance), delta: "Current", trend: "up", icon: FiDollarSign },
       { title: "Total Paid", subtitle: "All Dues (Unified)", value: formatCurrency(unifiedTotalPaid), delta: "All Sources", trend: "up", icon: FiDollarSign },
@@ -341,7 +344,7 @@ export default function MemberAccount() {
       { title: "Meetings Attended", subtitle: `${pct}% Attendance Rate`, value: `${count} / ${totalM}`, delta: `${pct}%`, trend: "up", icon: FiUserCheck },
       { title: "Outstanding", subtitle: "Dues Balance", value: formatCurrency(outstanding), delta: outstandingDelta, trend: outstandingTrend, icon: FiDollarSign },
     ];
-  }, [memberProfile, allTxRows, memberHostingSchedule]);
+  }, [memberProfile, allTxRows, hostingDisplay]);
 
 
   // Build attendance map for selected year from live database records
@@ -536,6 +539,14 @@ export default function MemberAccount() {
                     <span className="member-account__profile-info-label">Joined</span>
                     <span className="member-account__profile-info-value">
                       {new Date(memberProfile.member.dateJoined).toLocaleDateString(undefined, { year: "numeric", month: "long" })}
+                    </span>
+                  </div>
+                )}
+                {hostingDisplay && hostingDisplay !== "None" && (
+                  <div className="member-account__profile-info-item">
+                    <span className="member-account__profile-info-label">Scheduled Hosting</span>
+                    <span className="member-account__profile-info-value" style={{ color: "#0369a1", fontWeight: 700 }}>
+                      {hostingDisplay}
                     </span>
                   </div>
                 )}

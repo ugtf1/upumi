@@ -612,18 +612,6 @@ export default function MemberPage() {
                     </div>
                   </div>
 
-                  <div className="member-page__raffle-card">
-                    <span>Raffle Tix</span>
-                    <div className="member-page__raffle-line">
-                      <small>UPUMI:</small>
-                      <strong>{formatCurrency(member.raffleUpumi)}</strong>
-                    </div>
-                    <div className="member-page__raffle-line">
-                      <small>UPUA:</small>
-                      <strong>{formatCurrency(member.raffleUpua)}</strong>
-                    </div>
-                  </div>
-
                   <div
                     className="member-page__action-wrap"
                     ref={openMenuId === member.id ? menuRef : null}
