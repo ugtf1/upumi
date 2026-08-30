@@ -194,19 +194,25 @@ export async function importWorkbookCsv(csvText: string, year: number) {
     importedMembers += 1;
 
     for (const [mName, mNum] of Object.entries(monthMap)) {
-      const presentVal = r[mName];
-      const present = presentVal ? String(presentVal).trim().toLowerCase() === 'present' : null;
-
       const duesKey1 = `Dues-${mName}`;
       const duesKey2 = mName === 'May' ? ' Dues-May ' : null;
       const duesPaid = moneyToNumber(r[duesKey1] ?? (duesKey2 ? r[duesKey2] : null));
 
-      await prisma.monthlyDue.upsert({
-        where: { memberRecordId_year_month: { memberRecordId: mr.id, year, month: mNum } },
-        update: { present, duesPaid },
-        create: { memberRecordId: mr.id, year, month: mNum, present, duesPaid },
-      });
-      duesRows += 1;
+      if (duesPaid && duesPaid > 0) {
+        const txDate = new Date(year, mNum - 1, 1);
+        const fullName = `${firstName ?? ''} ${lastName ?? ''}`.trim();
+        await prisma.transaction.create({
+          data: {
+            userId: user?.id ?? null,
+            fullName: fullName || user?.phone || 'Member',
+            title: 'Dues',
+            description: `Dues for ${mName} ${year}`,
+            amount: duesPaid,
+            date: txDate,
+          },
+        });
+        duesRows += 1;
+      }
     }
   }
 

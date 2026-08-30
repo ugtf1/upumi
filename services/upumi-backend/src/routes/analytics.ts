@@ -205,9 +205,7 @@ export async function analyticsRoutes(app: FastifyInstance) {
     const user = await prisma.user.findUnique({
       where: { id: String(userId) },
       include: {
-        memberRecord: {
-          include: { monthlyDues: { where: { year }, orderBy: { month: "asc" } } },
-        },
+        memberRecord: true,
       },
     });
 
@@ -228,21 +226,14 @@ export async function analyticsRoutes(app: FastifyInstance) {
         title: mr.title,
         joined: mr.joined,
       },
-      monthlyDues: mr.monthlyDues.map((d: any) => ({
-        year: d.year,
-        month: d.month,
-        present: d.present ?? null,
-        duesPaid: decimalToNumber(d.duesPaid),
-      })),
+      monthlyDues: [],
     };
   });
 
   app.get("/summary", { preHandler: [requireAuth] }, async (req: any) => {
     const year = toInt(req.query?.year, new Date().getFullYear());
 
-    const members = await prisma.memberRecord.findMany({
-      include: { monthlyDues: { where: { year } } },
-    });
+    const members = await prisma.memberRecord.findMany();
 
     const membershipMix: Record<string, number> = {};
     const duesByMonth = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, total: 0, paidCount: 0 }));
@@ -250,13 +241,19 @@ export async function analyticsRoutes(app: FastifyInstance) {
     for (const m of members) {
       const status = (m.status ?? "Unknown").trim() || "Unknown";
       membershipMix[status] = (membershipMix[status] ?? 0) + 1;
+    }
 
-      for (const d of m.monthlyDues) {
-        const idx = Math.max(1, Math.min(12, d.month)) - 1;
-        const amt = decimalToNumber(d.duesPaid);
-        if (amt != null) {
+    const txDues = await prisma.transaction.findMany({
+      where: { title: { contains: 'Dues', mode: 'insensitive' } },
+    });
+    for (const t of txDues) {
+      const d = new Date(t.date);
+      if (d.getFullYear() === year) {
+        const idx = d.getMonth();
+        const amt = Number(t.amount ?? 0);
+        if (amt > 0) {
           duesByMonth[idx].total += amt;
-          if (amt > 0) duesByMonth[idx].paidCount += 1;
+          duesByMonth[idx].paidCount += 1;
         }
       }
     }
@@ -419,41 +416,34 @@ export async function analyticsRoutes(app: FastifyInstance) {
       }
     }
 
-    // Fallback/merge source: monthlyDue table (dedupe against workbook rows)
-    const duesFromMonthlyDue = await prisma.monthlyDue.findMany({
+    // Fallback/merge source: Transaction table (title='Dues')
+    const txDues = await prisma.transaction.findMany({
       where: {
-        year,
-        month,
-        duesPaid: { gt: 0 as any },
+        title: { contains: 'Dues', mode: 'insensitive' },
+        amount: { gt: 0 },
       },
-      orderBy: { duesPaid: "desc" },
-      include: {
-        member: {
-          select: { id: true, firstName: true, lastName: true, status: true },
-        },
-      },
+      orderBy: { amount: 'desc' },
     });
-    for (const d of duesFromMonthlyDue) {
-      const amount = decimalToNumber(d.duesPaid) ?? 0;
-      if (amount <= 0) continue;
-      const last = String(d.member?.lastName ?? "").trim();
-      const first = String(d.member?.firstName ?? "").trim();
-      const key = `${last.toLowerCase()}|${first.toLowerCase()}`;
-      if (duesSeen.has(key)) continue;
-      duesSeen.add(key);
-      duesPayments.push({
-        id: d.id,
-        amount,
-        present: d.present ?? null,
-        member: d.member
-          ? {
-              id: d.member.id,
-              firstName: d.member.firstName,
-              lastName: d.member.lastName,
-              status: d.member.status,
-            }
-          : null,
-      });
+    for (const t of txDues) {
+      const d = new Date(t.date);
+      if (d.getFullYear() === year && (d.getMonth() + 1) === month) {
+        const amount = Number(t.amount ?? 0);
+        const name = (t.fullName || '').trim();
+        const key = name.toLowerCase();
+        if (duesSeen.has(key)) continue;
+        duesSeen.add(key);
+        duesPayments.push({
+          id: t.id,
+          amount,
+          present: null,
+          member: {
+            id: t.userId || t.id,
+            firstName: name.split(' ')[0] || null,
+            lastName: name.split(' ').slice(1).join(' ') || null,
+            status: 'Active',
+          },
+        });
+      }
     }
 
     return {
@@ -567,11 +557,13 @@ export async function analyticsRoutes(app: FastifyInstance) {
   app.get('/monthly', { preHandler: [requireAuth] }, async (req: any) => {
     const year = toInt(req.query?.year, new Date().getFullYear());
     const month = Math.max(1, Math.min(12, toInt(req.query?.month, new Date().getMonth() + 1)));
-    // Delegate to the existing monthly-report handler logic by re-querying.
-    const dues = await prisma.monthlyDue.findMany({
-      where: { year, month, duesPaid: { gt: 0 as any } },
-      orderBy: { duesPaid: 'desc' },
-      include: { member: { select: { id: true, firstName: true, lastName: true, status: true } } },
+    const txDues = await prisma.transaction.findMany({
+      where: { title: { contains: 'Dues', mode: 'insensitive' }, amount: { gt: 0 } },
+      orderBy: { amount: 'desc' },
+    });
+    const dues = txDues.filter((t) => {
+      const d = new Date(t.date);
+      return d.getFullYear() === year && (d.getMonth() + 1) === month;
     });
 
     return {
@@ -580,9 +572,9 @@ export async function analyticsRoutes(app: FastifyInstance) {
       periodLabel: `${monthNames[month - 1]} ${year}`,
       duesPayments: dues.map((d) => ({
         id: d.id,
-        amount: decimalToNumber(d.duesPaid) ?? 0,
-        present: d.present ?? null,
-        member: d.member ?? null,
+        amount: Number(d.amount ?? 0),
+        present: null,
+        member: { id: d.userId || d.id, firstName: (d.fullName || '').split(' ')[0], lastName: (d.fullName || '').split(' ').slice(1).join(' ') },
       })),
     };
   });

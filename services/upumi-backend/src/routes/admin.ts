@@ -350,13 +350,11 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
             address: true,
             dateJoined: true,
             voteRole: true,
-            monthlyDues: true,
             totalPaid: true,
             outstanding: true,
             status: true,
           },
         },
-        monthlyDues: { orderBy: [{ year: 'desc' }, { month: 'asc' }] },
       },
     });
 
@@ -386,7 +384,6 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
       const linkedRecord = await prisma.memberRecord.findFirst({
         where: { userId },
-        include: { monthlyDues: true },
       }).catch(() => null);
 
       const userFullName = `${user.fName ?? ''} ${user.lName ?? ''}`.trim().toLowerCase();
@@ -427,18 +424,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         attendanceCount: userPresentCount,
         totalMeetings: userTotalMeetings,
         memberKey: linkedRecord?.memberKey ?? `user.${user.id}`,
-        monthlyDues: (linkedRecord?.monthlyDues ?? []).map((due: any) => {
-          const attKey = `${due.year}-${due.month}`;
-          const presentInTable = userAttendanceMap.get(attKey) ?? false;
-          return {
-            id: due.id,
-            year: due.year,
-            month: due.month,
-            present: due.present === true || presentInTable,
-            duesPaid: decimalToNumber(due.duesPaid) ?? 0,
-            createdAt: due.createdAt,
-          };
-        }),
+        monthlyDues: [],
         rawJson: {},
       };
     }
@@ -500,24 +486,13 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       voter: strCell(row.voter) ?? strCell(row.user?.voteRole) ?? strCell(raw.Voter),
       goodStanding: strCell(row.goodStanding) ?? strCell(raw.GoodStanding),
       financialGoodStanding: finGoodStanding,
-      monthlyDuesAmount: decimalToNumber(row.user?.monthlyDues) ?? rawMoney(raw, ['Monthly Dues', 'monthlyDues']),
+      monthlyDuesAmount: rawMoney(raw, ['Monthly Dues', 'monthlyDues']) ?? 0,
       totalPaid: decimalToNumber(row.user?.totalPaid) ?? rawMoney(raw, ['Total', '2026 dues paid', '2025 dues paid']),
       outstanding: decimalToNumber(row.user?.outstanding) ?? rawMoney(raw, ['Balance', '2026 balance', '2025 balance']),
       whatsapp: strCell(row.whatsapp) ?? strCell(raw.Whatsapp ?? raw.WhatsApp),
       facebook: strCell(row.facebook) ?? strCell(raw.Facebook ?? raw.FaceBook),
       insurance: strCell(row.insurance) ?? strCell(raw.Insurance ?? raw['Insurance?']),
-      monthlyDues: row.monthlyDues.map((due: any) => {
-        const attKey = `${due.year}-${due.month}`;
-        const presentInTable = attendanceMap.get(attKey) ?? false;
-        return {
-          id: due.id,
-          year: due.year,
-          month: due.month,
-          present: due.present === true || presentInTable,
-          duesPaid: decimalToNumber(due.duesPaid) ?? 0,
-          createdAt: due.createdAt,
-        };
-      }),
+      monthlyDues: [],
       rawJson: sanitizeRawJson(raw),
       userId: row.userId,
       updatedAt: row.updatedAt,
@@ -1051,7 +1026,6 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   // re-submitting the same month overwrites rather than errors.
   app.post('/members/:id/monthly-dues', { preHandler: requireRole('ADMIN') }, async (req: any, reply) => {
     const id = String(req.params?.id ?? '');
-
     const Body = z.object({
       year: z.number().int().min(2000).max(2100),
       month: z.number().int().min(1).max(12),
@@ -1059,210 +1033,63 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       present: z.boolean().optional(),
     }).parse(req.body ?? {});
 
-    // Resolve the memberRecordId — handles both a real MemberRecord cuid and
-    // a 'user.<userId>' virtual id used for members who have no MemberRecord row.
-    let memberRecordId: string;
+    const targetUserId = id.startsWith('user.') ? id.slice('user.'.length) : id;
+    const user = await prisma.user.findUnique({ where: { id: targetUserId } }).catch(() => null);
+    const fullName = user ? `${user.fName ?? ''} ${user.lName ?? ''}`.trim() : 'Member';
 
-    if (id.startsWith('user.')) {
-      const userId = id.slice('user.'.length);
-      // Find or create a MemberRecord for this user so MonthlyDue has something to link to.
-      const existing = await prisma.memberRecord.findFirst({ where: { userId } });
-      if (existing) {
-        memberRecordId = existing.id;
-      } else {
-        const user = await prisma.user.findUnique({
-          where: { id: userId },
-          select: { id: true, fName: true, lName: true, phone: true, email: true, createdAt: true },
-        });
-        if (!user) return reply.code(404).send({ message: 'Member not found' });
-
-        const created = await prisma.memberRecord.create({
-          data: {
-            memberKey: `user.${user.id}`,
-            status: 'Member',
-            firstName: user.fName ?? null,
-            lastName: user.lName ?? null,
-            joined: user.createdAt.toISOString(),
-            phone: user.phone ?? null,
-            email: user.email ?? null,
-            userId: user.id,
-            rawJson: '{}',
-          } as any,
-        });
-        memberRecordId = created.id;
-      }
-    } else {
-      // Try as MemberRecord.id first (spreadsheet-imported members).
-      const existingRecord = await prisma.memberRecord.findUnique({ where: { id } });
-      if (existingRecord) {
-        memberRecordId = existingRecord.id;
-      } else {
-        // The id is a plain User.id — members added via the Add Member form.
-        // mapUserAsMember returns id: user.id without any 'user.' prefix.
-        const linkedRecord = await prisma.memberRecord.findFirst({ where: { userId: id } });
-        if (linkedRecord) {
-          memberRecordId = linkedRecord.id;
-        } else {
-          const user = await prisma.user.findUnique({
-            where: { id },
-            select: { id: true, fName: true, lName: true, phone: true, email: true, createdAt: true },
-          });
-          if (!user) return reply.code(404).send({ message: 'Member not found' });
-          const created = await prisma.memberRecord.create({
-            data: {
-              memberKey: `user.${user.id}`,
-              status: 'Member',
-              firstName: user.fName ?? null,
-              lastName: user.lName ?? null,
-              joined: user.createdAt.toISOString(),
-              phone: user.phone ?? null,
-              email: user.email ?? null,
-              userId: user.id,
-              rawJson: '{}',
-            } as any,
-          });
-          memberRecordId = created.id;
-        }
-      }
-    }
-
-    const due = await (prisma as any).monthlyDue.upsert({
-      where: {
-        memberRecordId_year_month: {
-          memberRecordId,
-          year: Body.year,
-          month: Body.month,
-        },
-      },
-      update: {
-        duesPaid: Body.duesPaid as any,
-        ...(Body.present !== undefined ? { present: Body.present } : {}),
-      },
-      create: {
-        memberRecordId,
-        year: Body.year,
-        month: Body.month,
-        duesPaid: Body.duesPaid as any,
-        ...(Body.present !== undefined ? { present: Body.present } : {}),
+    const txDate = new Date(Body.year, Body.month - 1, 1);
+    const tx = await prisma.transaction.create({
+      data: {
+        userId: user?.id ?? null,
+        fullName: fullName || 'Member',
+        title: 'Dues',
+        description: `Dues payment for ${Body.year}-${Body.month}`,
+        amount: Body.duesPaid,
+        date: txDate,
       },
     });
 
-    try {
-      const record = await prisma.memberRecord.findUnique({
-        where: { id: memberRecordId },
-        select: { userId: true, monthlyDues: { select: { duesPaid: true } } },
-      });
-      if (record?.userId) {
-        const totalPaid = record.monthlyDues.reduce((sum, d) => sum + Number(d.duesPaid ?? 0), 0);
-        const outstanding = Math.max(0, (record.monthlyDues.length * 20) - totalPaid);
-        await prisma.user.update({
-          where: { id: record.userId },
-          data: { totalPaid, outstanding },
-        }).catch(() => null);
-      }
-    } catch {
-      // Non-fatal sync error
-    }
-
     return {
-      id: due.id,
-      year: due.year,
-      month: due.month,
-      duesPaid: decimalToNumber(due.duesPaid) ?? 0,
-      present: due.present ?? null,
-      createdAt: due.createdAt,
+      id: tx.id,
+      year: Body.year,
+      month: Body.month,
+      duesPaid: Number(tx.amount),
+      present: Body.present ?? null,
+      createdAt: tx.createdAt,
     };
   });
 
-  // Delete a monthly due payment for a member.
-  app.delete('/members/:id/monthly-dues/:dueId', { preHandler: requireRole('ADMIN') }, async (req: any, reply) => {
+  app.delete('/members/:id/monthly-dues/:dueId', { preHandler: requireRole('ADMIN') }, async (req: any) => {
     const dueId = String(req.params?.dueId ?? '');
-    
-    const existing = await (prisma as any).monthlyDue.findUnique({
-      where: { id: dueId },
-    });
-    
-    if (!existing) {
-      return reply.code(404).send({ message: 'Payment record not found' });
-    }
-
-    const memberRecordId = existing.memberRecordId;
-
-    await (prisma as any).monthlyDue.delete({
-      where: { id: dueId },
-    });
-
-    if (memberRecordId) {
-      try {
-        const record = await prisma.memberRecord.findUnique({
-          where: { id: memberRecordId },
-          select: { userId: true, monthlyDues: { select: { duesPaid: true } } },
-        });
-        if (record?.userId) {
-          const totalPaid = record.monthlyDues.reduce((sum, d) => sum + Number(d.duesPaid ?? 0), 0);
-          const outstanding = Math.max(0, (record.monthlyDues.length * 20) - totalPaid);
-          await prisma.user.update({
-            where: { id: record.userId },
-            data: { totalPaid, outstanding },
-          }).catch(() => null);
-        }
-      } catch {
-        // Non-fatal sync error
-      }
-    }
-    
+    await prisma.transaction.delete({ where: { id: dueId } }).catch(() => null);
     return { ok: true };
   });
 
-  // Edit (PATCH) a specific monthly due payment row.
   app.patch('/members/:id/monthly-dues/:dueId', { preHandler: requireRole('ADMIN') }, async (req: any, reply) => {
     const dueId = String(req.params?.dueId ?? '');
-
     const Body = z.object({
       duesPaid: z.number().min(0).optional(),
       month: z.number().int().min(1).max(12).optional(),
       year: z.number().int().min(2000).max(2100).optional(),
     }).parse(req.body ?? {});
 
-    const existing = await (prisma as any).monthlyDue.findUnique({ where: { id: dueId } });
+    const existing = await prisma.transaction.findUnique({ where: { id: dueId } }).catch(() => null);
     if (!existing) return reply.code(404).send({ message: 'Payment record not found' });
 
-    const updated = await (prisma as any).monthlyDue.update({
+    const updated = await prisma.transaction.update({
       where: { id: dueId },
       data: {
-        ...(Body.duesPaid !== undefined ? { duesPaid: Body.duesPaid as any } : {}),
-        ...(Body.month !== undefined ? { month: Body.month } : {}),
-        ...(Body.year !== undefined ? { year: Body.year } : {}),
+        ...(Body.duesPaid !== undefined ? { amount: Body.duesPaid } : {}),
       },
     });
 
-    // Sync totalPaid / outstanding on the linked User
-    const memberRecordId = existing.memberRecordId;
-    if (memberRecordId) {
-      try {
-        const record = await prisma.memberRecord.findUnique({
-          where: { id: memberRecordId },
-          select: { userId: true, monthlyDues: { select: { duesPaid: true } } },
-        });
-        if (record?.userId) {
-          const totalPaid = record.monthlyDues.reduce((sum, d) => sum + Number(d.duesPaid ?? 0), 0);
-          const outstanding = Math.max(0, (record.monthlyDues.length * 20) - totalPaid);
-          await prisma.user.update({
-            where: { id: record.userId },
-            data: { totalPaid, outstanding },
-          }).catch(() => null);
-        }
-      } catch {
-        // Non-fatal sync error
-      }
-    }
-
+    const d = new Date(updated.date);
     return {
       id: updated.id,
-      year: updated.year,
-      month: updated.month,
-      duesPaid: decimalToNumber(updated.duesPaid) ?? 0,
-      present: updated.present ?? null,
+      year: d.getFullYear(),
+      month: d.getMonth() + 1,
+      duesPaid: Number(updated.amount),
+      present: null,
       createdAt: updated.createdAt,
     };
   });

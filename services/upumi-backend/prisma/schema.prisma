@@ -161,7 +161,7 @@ model MemberRecord {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  monthlyDues    MonthlyDue[]
+  monthlyDues    MonthlyDue[]   @ignore
   yearlyBalances MemberYearlyBalance[]
 }
 
@@ -184,6 +184,7 @@ model WorkbookRow {
   @@index([rowOrder])
 }
 
+/// @deprecated — table is being removed; do not use. Kept for migration only.
 model MonthlyDue {
   id             String       @id @default(cuid())
   memberRecordId String
@@ -197,6 +198,7 @@ model MonthlyDue {
   createdAt DateTime @default(now())
 
   @@unique([memberRecordId, year, month])
+  @@ignore
 }
 
 model Meeting {

@@ -11,7 +11,7 @@ const TABLES = {
   generalFinance: 'generalFinance',
   attendance: 'attendance',
   hostingSchedule: 'hostingSchedule',
-  dues: 'monthlyDue',
+  dues: 'transaction',
   collections: 'collection',
   transactions: 'transaction',
   expenses: 'expense',
@@ -216,33 +216,16 @@ async function listRows(table: TableName) {
 
   if (table === 'dues') {
     args.where = {
-      duesPaid: { gt: 0 },
-    };
-    args.include = {
-      member: {
-        select: {
-          firstName: true,
-          lastName: true,
-          email: true,
-          phone: true,
-          user: {
-            select: {
-              fName: true,
-              lName: true,
-              email: true,
-              phone: true,
-            },
-          },
-        },
-      },
+      title: { contains: 'Dues', mode: 'insensitive' },
     };
   }
 
   try {
     return await delegate.findMany(args);
   } catch (error) {
-    if (table === 'transactions' && isMissingTransactionDescriptionColumn(error)) {
+    if ((table === 'transactions' || table === 'dues') && isMissingTransactionDescriptionColumn(error)) {
       return delegate.findMany({
+        where: args.where,
         orderBy: { createdAt: 'desc' },
         select: transactionSelectWithoutDescription,
       });
@@ -258,59 +241,15 @@ async function listRows(table: TableName) {
   }
 }
 
-async function syncTransactionDuesToMonthlyDue(data: Record<string, any>) {
-  try {
-    const titleStr = String(data.title ?? '').toLowerCase();
-    if (!titleStr.includes('dues')) return;
-
-    const amount = Number(data.amount ?? 0);
-    if (amount <= 0) return;
-
-    const txDate = data.date ? new Date(data.date) : new Date();
-    const year = txDate.getFullYear();
-    const month = txDate.getMonth() + 1;
-
-    let memberRecordId: string | null = null;
-    if (data.userId) {
-      const mr = await prisma.memberRecord.findFirst({ where: { userId: data.userId } });
-      if (mr) memberRecordId = mr.id;
-    }
-    if (!memberRecordId && data.fullName) {
-      const normName = String(data.fullName).trim().toLowerCase();
-      const allMR = await prisma.memberRecord.findMany({ select: { id: true, firstName: true, lastName: true } });
-      const match = allMR.find((mr) => `${mr.firstName ?? ''} ${mr.lastName ?? ''}`.trim().toLowerCase() === normName);
-      if (match) memberRecordId = match.id;
-    }
-
-    if (!memberRecordId) return;
-
-    await prisma.monthlyDue.upsert({
-      where: {
-        memberRecordId_year_month: { memberRecordId, year, month },
-      },
-      update: { duesPaid: amount },
-      create: { memberRecordId, year, month, duesPaid: amount },
-    });
-  } catch {
-    // Best effort sync
-  }
-}
-
 async function createRow(table: TableName, data: Record<string, any>) {
   const delegate = prismaAny[TABLES[table]];
 
   try {
-    const created = await delegate.create({ data, ...(selectFor(table) ? { select: selectFor(table) } : {}) });
-    if (table === 'transactions') {
-      await syncTransactionDuesToMonthlyDue(data);
-    }
-    return created;
+    return await delegate.create({ data, ...(selectFor(table) ? { select: selectFor(table) } : {}) });
   } catch (error) {
-    if (table === 'transactions' && isMissingTransactionDescriptionColumn(error)) {
+    if ((table === 'transactions' || table === 'dues') && isMissingTransactionDescriptionColumn(error)) {
       const { description: _description, ...dataWithoutDescription } = data;
-      const created = await delegate.create({ data: dataWithoutDescription, select: transactionSelectWithoutDescription });
-      await syncTransactionDuesToMonthlyDue(dataWithoutDescription);
-      return created;
+      return await delegate.create({ data: dataWithoutDescription, select: transactionSelectWithoutDescription });
     }
     throw error;
   }
@@ -320,25 +259,19 @@ async function updateRow(table: TableName, id: string, data: Record<string, any>
   const delegate = prismaAny[TABLES[table]];
 
   try {
-    const updated = await delegate.update({
+    return await delegate.update({
       where: { id },
       data,
       ...(selectFor(table) ? { select: selectFor(table) } : {}),
     });
-    if (table === 'transactions') {
-      await syncTransactionDuesToMonthlyDue(updated);
-    }
-    return updated;
   } catch (error) {
-    if (table === 'transactions' && isMissingTransactionDescriptionColumn(error)) {
+    if ((table === 'transactions' || table === 'dues') && isMissingTransactionDescriptionColumn(error)) {
       const { description: _description, ...dataWithoutDescription } = data;
-      const updated = await delegate.update({
+      return await delegate.update({
         where: { id },
         data: dataWithoutDescription,
         select: transactionSelectWithoutDescription,
       });
-      await syncTransactionDuesToMonthlyDue(updated);
-      return updated;
     }
     throw error;
   }

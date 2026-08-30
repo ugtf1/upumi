@@ -58,14 +58,7 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
-        memberRecord: {
-          include: {
-            monthlyDues: {
-              where: { year: currentYear },
-              orderBy: { month: 'asc' },
-            },
-          },
-        },
+        memberRecord: true,
       },
     });
 
@@ -147,16 +140,8 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
         totalPaid: decimalToNumber(user.totalPaid),
         outstanding: decimalToNumber(user.outstanding),
       },
-      monthlyDues: mr.monthlyDues.map((d) => {
-        const attendedInTable = attendanceMap.get(d.month) ?? false;
-        const isPresent = d.present === true || attendedInTable;
-        return {
-          year: d.year,
-          month: d.month,
-          present: isPresent,
-          duesPaid: decimalToNumber(d.duesPaid),
-        };
-      }),
+      // MonthlyDue table removed — dues now come from Transaction table (title='Dues')
+      monthlyDues: [],
     };
   });
 
