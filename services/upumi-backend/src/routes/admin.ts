@@ -547,13 +547,24 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       crntPaid = decimalToNumber(user.totalPaid) ?? 0;
     }
 
-    // 2. Outstanding
-    let outstanding = 0;
-    if (record) {
-      outstanding = decimalToNumber(record.user?.outstanding) ?? rawMoney(raw, ['Balance', '2026 balance', '2025 balance', 'outstanding']) ?? 0;
-    } else if (user) {
-      outstanding = decimalToNumber(user.outstanding) ?? 0;
-    }
+    // 2. Outstanding: duesPaidThisYear - expectedDuesSoFar (currentMonth * 20)
+    // < 0 means owing (e.g. -40), == 0 means up to date (0), > 0 means excess left (e.g. 40)
+    const currentYearNum = new Date().getFullYear();
+    const currentMonthNum = new Date().getMonth() + 1;
+    const expectedDuesSoFar = currentMonthNum * 20;
+
+    const duesTxsThisYear = allUserTxs.filter((t) => {
+      const isDue = (t.title || '').toLowerCase().includes('due');
+      if (!isDue) return false;
+      const d = new Date(t.date);
+      return d.getFullYear() === currentYearNum;
+    });
+
+    const duesPaidThisYear = duesTxsThisYear.length > 0
+      ? duesTxsThisYear.reduce((sum, t) => sum + Number(t.amount ?? 0), 0)
+      : crntPaid;
+
+    const outstanding = duesPaidThisYear - expectedDuesSoFar;
 
     // 3. Previous year balance
     let prevYearBalance = 0;
@@ -565,13 +576,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       prevYearBalance = prevBalRow ? Number(prevBalRow.balance) : (rawMoney(raw, [`${prevYear} balance`, `${prevYear} Balance`, 'Balance']) ?? 0);
     }
 
-    // Formula:
-    //   prevYearBalance already carries its sign:
-    //     negative  → member owes that amount  → subtract it  (adding a negative)
-    //     positive  → member has excess         → add it
-    //   Both cases: balance = crntPaid - outstanding + prevYearBalance
-    //   e.g. crntPaid=120, outstanding=40, prevYearBalance=-240 → 120-40+(-240) = -160
-    const balance = crntPaid - outstanding + prevYearBalance;
+    const balance = outstanding + prevYearBalance;
 
     return {
       userId,

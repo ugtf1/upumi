@@ -150,7 +150,9 @@ function formatCurrencyDisplay(value: string): string {
 }
 
 function formatCurrencyAmount(value?: number | null): string {
-  return `$${Number(value ?? 0).toLocaleString()}`;
+  const num = Number(value ?? 0);
+  const sign = num < 0 ? "-" : "";
+  return `${sign}$${Math.abs(num).toLocaleString()}`;
 }
 
 function formatDateDisplay(value?: string | null): string {
@@ -1016,7 +1018,7 @@ export default function MemberViewPage() {
   const duesPaidThisYear = recentMemberTxRows
     .filter((row) => row.isDue && row.rawDate && new Date(row.rawDate).getFullYear() === currentYearNum)
     .reduce((sum, row) => sum + (row.rawAmount ?? 0), 0);
-  const computedOutstanding = Math.max(0, (currentMonthNum * 20) - duesPaidThisYear);
+  const computedOutstanding = duesPaidThisYear - (currentMonthNum * 20);
 
   const monthlyDuesDisplay = memberProfile.monthlyDues && memberProfile.monthlyDues !== "$0" && memberProfile.monthlyDues !== "0"
     ? memberProfile.monthlyDues
@@ -1027,7 +1029,11 @@ export default function MemberViewPage() {
     { label: "Total Paid", value: `$${totalPaidFromAllSources.toLocaleString()}`, tone: "success" },
     { label: "Scheduled Hosting", value: memberProfile.hosting || "None" },
     { label: "Attendance", value: memberProfile.attendance || "0 Meetings", tone: "success" },
-    { label: "Outstanding", value: `$${computedOutstanding.toLocaleString()}`, tone: "danger" },
+    {
+      label: "Outstanding",
+      value: formatCurrencyAmount(computedOutstanding),
+      tone: computedOutstanding < 0 ? "danger" : computedOutstanding > 0 ? "success" : undefined,
+    },
   ];
 
   return (

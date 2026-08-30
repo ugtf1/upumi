@@ -319,7 +319,9 @@ export default function MemberAccount() {
     const duesPaidThisYear = allTxRows
       .filter((r) => r.isDue && r.rawDate && new Date(r.rawDate).getFullYear() === currentYearNum)
       .reduce((sum, r) => sum + r.rawAmount, 0);
-    const outstanding = Math.max(0, (currentMonthNum * 20) - duesPaidThisYear);
+    const outstanding = duesPaidThisYear - (currentMonthNum * 20);
+    const outstandingDelta = outstanding < 0 ? "Owing" : outstanding > 0 ? "Excess" : "Settled";
+    const outstandingTrend = outstanding < 0 ? "down" : "up";
 
     const count = memberProfile.member.attendanceCount ?? 0;
     const totalM = memberProfile.member.totalMeetings ?? 0;
@@ -337,7 +339,7 @@ export default function MemberAccount() {
       { title: "Total Paid", subtitle: "All Dues (Unified)", value: formatCurrency(unifiedTotalPaid), delta: "All Sources", trend: "up", icon: FiDollarSign },
       { title: "Scheduled Hosting", subtitle: "Hosting Month", value: hostingDisplay, delta: "Schedule", trend: "up", icon: FiCalendar },
       { title: "Meetings Attended", subtitle: `${pct}% Attendance Rate`, value: `${count} / ${totalM}`, delta: `${pct}%`, trend: "up", icon: FiUserCheck },
-      { title: "Outstanding", subtitle: "Dues Balance", value: formatCurrency(outstanding), delta: "Balance", trend: "down", icon: FiDollarSign },
+      { title: "Outstanding", subtitle: "Dues Balance", value: formatCurrency(outstanding), delta: outstandingDelta, trend: outstandingTrend, icon: FiDollarSign },
     ];
   }, [memberProfile, allTxRows, memberHostingSchedule]);
 
