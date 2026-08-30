@@ -1177,29 +1177,6 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       create: { year: Body.year, month: Body.month, usersIn },
     });
 
-    // Also sync MonthlyDue table present flag if memberRecordId is available
-    if (memberRecordId) {
-      await prismaAny.monthlyDue.upsert({
-        where: {
-          memberRecordId_year_month: {
-            memberRecordId,
-            year: Body.year,
-            month: Body.month,
-          },
-        },
-        update: {
-          present: Body.status === 'present',
-        },
-        create: {
-          memberRecordId,
-          year: Body.year,
-          month: Body.month,
-          present: Body.status === 'present',
-          duesPaid: 0,
-        },
-      }).catch(() => null);
-    }
-
     // Recompute this member's attendancePct across ALL attendance records
     // and write it back to MemberRecord so GET /members is always current.
     if (memberRecordId) {
