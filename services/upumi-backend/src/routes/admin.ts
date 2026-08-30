@@ -205,10 +205,8 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       },
     });
 
-    const prevYear = new Date().getFullYear() - 1;
-    const yearlyBalances = await prismaAny.memberYearlyBalance.findMany({
-      where: { year: prevYear },
-      select: { memberRecordId: true, balance: true },
+    const allYearlyBalances = await prismaAny.memberYearlyBalance.findMany({
+      select: { memberRecordId: true, year: true, balance: true },
     }).catch(() => []);
 
     const hostingSchedules = await prisma.hostingSchedule.findMany({
@@ -288,15 +286,12 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       };
     }
 
-    const prevYearBalanceMap = new Map<string, number>();
-    for (const b of yearlyBalances) {
-      if (b.memberRecordId) prevYearBalanceMap.set(b.memberRecordId, Number(b.balance));
-    }
+    const currentMonthNum = new Date().getMonth() + 1;
+    const expectedDuesSoFar = currentMonthNum * 20;
 
     return [...rows.map((row) => {
       const mapped = mapMemberRecord(row);
       const raw = parseRawJson(row.rawJson);
-      const prevBal = prevYearBalanceMap.get(row.id) ?? rawMoney(raw, [`${prevYear} balance`, `${prevYear} Balance`, 'Balance']);
       const fullName = `${mapped.firstName ?? ''} ${mapped.lastName ?? ''}`.trim();
       const txTotals = calculateMemberTxTotals(mapped.userId, fullName, {
         crntPaid: mapped.crntPaid,
@@ -304,13 +299,37 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         raffleUpua: mapped.raffleUpua,
       });
 
+      // Sum all yearly balances
+      const memberYearlyRows = allYearlyBalances.filter((b: any) => b.memberRecordId === row.id);
+      let yearlyBalancesSum = 0;
+      if (memberYearlyRows.length > 0) {
+        yearlyBalancesSum = memberYearlyRows.reduce((sum: number, b: any) => sum + Number(b.balance ?? 0), 0);
+      } else {
+        let rawSum = 0;
+        let foundAny = false;
+        const currYear = new Date().getFullYear();
+        for (let y = 2020; y < currYear; y++) {
+          const val = rawMoney(raw, [`${y} balance`, `${y} Balance`, `${y} bal`, `${y} Bal`]);
+          if (val !== null && val !== undefined) {
+            rawSum += val;
+            foundAny = true;
+          }
+        }
+        yearlyBalancesSum = foundAny ? rawSum : (rawMoney(raw, ['Balance', 'balance']) ?? 0);
+      }
+
+      const outstanding = txTotals.crntPaid - expectedDuesSoFar;
+      const balance = yearlyBalancesSum + outstanding;
+
       return {
         ...mapped,
         hosting: formatHostingDate(mapped.hosting, fullName),
         crntPaid: txTotals.crntPaid,
+        outstanding,
+        balance,
         raffleUpumi: txTotals.raffleUpumi,
         raffleUpua: txTotals.raffleUpua,
-        financialGoodStanding: computeFinancialGoodStanding(prevBal, mapped.financialGoodStanding),
+        financialGoodStanding: computeFinancialGoodStanding(yearlyBalancesSum, mapped.financialGoodStanding),
       };
     }), ...userOnlyRows.map((userRow: any) => {
       const mapped = mapUserAsMember(userRow);
@@ -320,11 +339,15 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         raffleUpumi: mapped.raffleUpumi,
         raffleUpua: mapped.raffleUpua,
       });
+      const outstanding = txTotals.crntPaid - expectedDuesSoFar;
+      const balance = outstanding;
 
       return {
         ...mapped,
         hosting: formatHostingDate(mapped.hosting, fullName),
         crntPaid: txTotals.crntPaid,
+        outstanding,
+        balance,
         raffleUpumi: txTotals.raffleUpumi,
         raffleUpua: txTotals.raffleUpua,
       };
@@ -566,24 +589,46 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
     const outstanding = duesPaidThisYear - expectedDuesSoFar;
 
-    // 3. Previous year balance
-    let prevYearBalance = 0;
+    // 3. Sum ALL yearly balances (each already carries its sign:
+    //    negative = deficit/owed at year end, positive = excess at year end)
+    //    Example: 2023=-10, 2024=250, 2025=-240 → sum = -10+250-240 = 0
+    let yearlyBalancesSum = 0;
     if (record) {
-      const prevBalRow = await prismaAny.memberYearlyBalance.findFirst({
-        where: { memberRecordId: record.id, year: prevYear },
-        select: { balance: true },
-      }).catch(() => null);
-      prevYearBalance = prevBalRow ? Number(prevBalRow.balance) : (rawMoney(raw, [`${prevYear} balance`, `${prevYear} Balance`, 'Balance']) ?? 0);
+      const allYearlyBalances = await prismaAny.memberYearlyBalance.findMany({
+        where: { memberRecordId: record.id },
+        select: { year: true, balance: true },
+      }).catch(() => []);
+
+      yearlyBalancesSum = (allYearlyBalances as any[]).reduce(
+        (sum: number, row: any) => sum + Number(row.balance ?? 0), 0
+      );
+
+      // If no yearly balance rows exist, try raw JSON fallback
+      if (allYearlyBalances.length === 0) {
+        let rawSum = 0;
+        let foundAny = false;
+        for (let y = 2020; y <= currentYear - 1; y++) {
+          const val = rawMoney(raw, [`${y} balance`, `${y} Balance`, `${y} bal`, `${y} Bal`]);
+          if (val !== null && val !== undefined) {
+            rawSum += val;
+            foundAny = true;
+          }
+        }
+        yearlyBalancesSum = foundAny ? rawSum : (rawMoney(raw, ['Balance', 'balance']) ?? 0);
+      }
     }
 
-    const balance = outstanding + prevYearBalance;
+    // Balance = sum of all yearly balances + current outstanding
+    // e.g. yearlyBalancesSum=0, outstanding=-40 → balance = -40 (owes 40)
+    // e.g. yearlyBalancesSum=0, outstanding=40  → balance = 40  (excess 40)
+    const balance = yearlyBalancesSum + outstanding;
 
     return {
       userId,
       memberId: rawId,
       crntPaid,
       outstanding,
-      prevYearBalance,
+      yearlyBalancesSum,
       balance,
     };
   });
