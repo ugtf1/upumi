@@ -35,6 +35,7 @@ export type MemberDetailRecord = {
   totalPaid: string;
   outstanding: string;
   status: MemberStatus;
+  hosting?: string;
   paymentHistory: PaymentHistoryRow[];
 };
 

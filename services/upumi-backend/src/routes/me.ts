@@ -109,6 +109,25 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
     const totalMeetings = allAttendanceRows.length;
     const computedPct = totalMeetings > 0 ? String(Math.round((presentCount / totalMeetings) * 100)) : (mr.attendancePct ?? '0');
 
+    const hostingSchedules = await prisma.hostingSchedule.findMany({
+      select: { year: true, month: true, hostMember: true },
+    }).catch(() => []);
+
+    const MONTH_ABBRS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const fullNameStr = `${mr.firstName ?? ''} ${mr.lastName ?? ''}`.trim();
+    let hostingDate: string = (rawJson.Hosting as string) ?? (rawJson.hosting as string) ?? 'None';
+    if (fullNameStr && hostingSchedules.length > 0) {
+      const lowerName = fullNameStr.toLowerCase();
+      const sched = hostingSchedules.find((h) => {
+        const lowerHost = (h.hostMember || '').toLowerCase().trim();
+        return lowerHost && (lowerHost.includes(lowerName) || lowerName.includes(lowerHost));
+      });
+      if (sched && sched.year && sched.month) {
+        const mStr = MONTH_ABBRS[sched.month - 1] || 'Jan';
+        hostingDate = `${mStr}, ${sched.year}`;
+      }
+    }
+
     return {
       linked: {
         userId: user.id,
@@ -123,6 +142,7 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
         status: mr.status,
         title: mr.title,
         joined: mr.joined,
+        hosting: hostingDate,
         goodStanding: mr.goodStanding,
         financialGoodStanding: mr.financialGoodStanding,
         voter: mr.voter,

@@ -283,9 +283,9 @@
 .member-page__row {
   min-height: 112px;
   display: grid;
-  grid-template-columns: minmax(140px, 170px) minmax(190px, 230px) minmax(115px, 130px) 176px 115px 125px 36px;
+  grid-template-columns: minmax(130px, 160px) minmax(150px, 180px) minmax(100px, 115px) 145px 176px 115px 125px 36px;
   align-items: center;
-  column-gap: 20px;
+  column-gap: 14px;
   padding: 17px 20px 17px 24px;
   border-radius: 4px;
   background: #fff;
@@ -416,6 +416,45 @@
 
 .member-page__check--yellow {
   background: #f0c425;
+}
+
+.member-page__check--blue {
+  background: #0284c7;
+}
+
+.member-page__hosting-card {
+  width: 145px;
+  min-height: 71px;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  padding: 8px 11px 9px;
+  border-radius: 10px;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+
+  > span {
+    color: #0369a1;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+}
+
+.member-page__hosting-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+
+  strong {
+    color: #0369a1;
+    font-size: 0.92rem;
+    font-weight: 800;
+    line-height: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 
 .member-page__progress-row {

@@ -6,6 +6,7 @@ import {
   FiCheck,
   FiCheckCircle,
   FiCreditCard,
+  FiCalendar,
   FiEye,
   FiFilter,
   FiHome,
@@ -522,17 +523,27 @@ export default function MemberPage() {
                   <article className="member-page__row" key={member.id}>
                   <div className="member-page__identity">
                     <strong>{member.name}</strong>
-                    <span>Hosting - {member.hosting}</span>
+                    <span>{member.email}</span>
                   </div>
 
                   <div className="member-page__email">
-                    <strong>{member.email}</strong>
-                    <span>Balance - {formatCurrency(member.balance)}</span>
+                    <strong>Balance</strong>
+                    <span>{formatCurrency(member.balance)}</span>
                   </div>
 
                   <a className="member-page__phone" href={`tel:${member.phone.replace(/\s+/g, "")}`}>
                     {member.phone}
                   </a>
+
+                  <div className="member-page__hosting-card">
+                    <span>Scheduled Hosting</span>
+                    <div className="member-page__hosting-line">
+                      <span className="member-page__check member-page__check--blue">
+                        <FiCalendar size={14} />
+                      </span>
+                      <strong>{member.hosting || "None"}</strong>
+                    </div>
+                  </div>
 
                   {(() => {
                     const { presence, presentCount } = getMemberMonthlyAttendance(member.id);

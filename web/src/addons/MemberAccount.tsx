@@ -69,6 +69,8 @@ type MemberProfileResponse = {
     whatsapp?: string | null;
     facebook?: string | null;
     insurance?: string | null;
+    joined?: string | null;
+    hosting?: string | null;
     status?: string | null;
     dateJoined?: string | null;
     voteRole?: string | null;
@@ -284,12 +286,23 @@ export default function MemberAccount() {
     return allTxRows.slice(start, start + TX_PAGE_SIZE);
   }, [allTxRows, txPage]);
 
+  // Filter hosting records assigned to this member
+  const memberHostingSchedule = useMemo(() => {
+    return hostingSchedule.filter((h) => {
+      const hostLower = (h.hostMember || "").toLowerCase();
+      if (memberFullName && hostLower.includes(memberFullName)) return true;
+      if (memberKey && hostLower.includes((memberKey || "").toLowerCase())) return true;
+      return false;
+    });
+  }, [hostingSchedule, memberFullName, memberKey]);
+
   // Summary cards — Total Paid sums all dues entries from both Transaction page and MemberView page
   const summaryCards = useMemo<SummaryCard[]>(() => {
     if (!memberProfile?.member) {
       return [
         { title: "My Balance", subtitle: "Current", value: "...", delta: "loading", trend: "up", icon: FiDollarSign },
         { title: "Total Paid", subtitle: "Monthly Dues", value: "...", delta: "loading", trend: "up", icon: FiDollarSign },
+        { title: "Scheduled Hosting", subtitle: "Hosting Month", value: "...", delta: "loading", trend: "up", icon: FiCalendar },
         { title: "Meetings Attended", subtitle: "Database Attendance", value: "...", delta: "loading", trend: "up", icon: FiUserCheck },
         { title: "Outstanding", subtitle: "Due", value: "...", delta: "loading", trend: "down", icon: FiDollarSign },
       ];
@@ -312,13 +325,21 @@ export default function MemberAccount() {
     const totalM = memberProfile.member.totalMeetings ?? 0;
     const pct = memberProfile.member.attendancePct ?? "0";
 
+    const directHosting = memberProfile?.member?.hosting;
+    let hostingDisplay = directHosting && directHosting !== "None" ? directHosting : "None";
+    if (hostingDisplay === "None" && memberHostingSchedule.length > 0) {
+      const firstSched = memberHostingSchedule[0];
+      hostingDisplay = `${MONTH_OPTIONS_LONG[firstSched.month - 1]} ${firstSched.year}`;
+    }
+
     return [
       { title: "My Balance", subtitle: "Current", value: formatCurrency(currentBalance), delta: "Current", trend: "up", icon: FiDollarSign },
       { title: "Total Paid", subtitle: "All Dues (Unified)", value: formatCurrency(unifiedTotalPaid), delta: "All Sources", trend: "up", icon: FiDollarSign },
+      { title: "Scheduled Hosting", subtitle: "Hosting Month", value: hostingDisplay, delta: "Schedule", trend: "up", icon: FiCalendar },
       { title: "Meetings Attended", subtitle: `${pct}% Attendance Rate`, value: `${count} / ${totalM}`, delta: `${pct}%`, trend: "up", icon: FiUserCheck },
       { title: "Outstanding", subtitle: "Dues Balance", value: formatCurrency(outstanding), delta: "Balance", trend: "down", icon: FiDollarSign },
     ];
-  }, [memberProfile, allTxRows]);
+  }, [memberProfile, allTxRows, memberHostingSchedule]);
 
 
   // Build attendance map for selected year from live database records
@@ -336,16 +357,6 @@ export default function MemberAccount() {
     }
     return map;
   }, [attendanceRows, attendanceYear, memberUserId, memberRecordId, memberKey, memberFullName]);
-
-  // Filter hosting records assigned to this member
-  const memberHostingSchedule = useMemo(() => {
-    return hostingSchedule.filter((h) => {
-      const hostLower = (h.hostMember || "").toLowerCase();
-      if (memberFullName && hostLower.includes(memberFullName)) return true;
-      if (memberKey && hostLower.includes((memberKey || "").toLowerCase())) return true;
-      return false;
-    });
-  }, [hostingSchedule, memberFullName, memberKey]);
 
   const memberName = memberProfile?.member
     ? `${memberProfile.member.firstName || ""} ${memberProfile.member.lastName || ""}`.trim() || "Member"

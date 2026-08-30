@@ -111,6 +111,7 @@ type EditMemberFormState = {
   totalPaid: string;
   outstanding: string;
   status: string;
+  hosting?: string;
 };
 
 const VOTE_ROLE_OPTIONS = ["YES", "NO"] as const;
@@ -183,6 +184,7 @@ type ApiMemberDetail = {
   facebook?: string | null;
   insurance?: string | null;
   joined?: string | null;
+  hosting?: string | null;
   voter?: string | null;
   attendancePct?: string | null;
   attendanceCount?: number | null;
@@ -258,7 +260,7 @@ const EMPTY_PROFILE: MemberDetailRecord = {
   memberId: "", name: "", email: "", phoneNumber: "", address: "",
   dateJoined: "", attendance: "", voteRole: "NO",
   monthlyDues: "$0", totalPaid: "$0", outstanding: "$0",
-  status: "Inactive", paymentHistory: [],
+  status: "Inactive", paymentHistory: [], hosting: "None",
 };
 
 // Separate state for all Transaction rows (fetched org-wide and filtered by userId in UI)
@@ -409,6 +411,7 @@ export default function MemberViewPage() {
           totalPaid: formatCurrencyAmount(row.totalPaid),
           outstanding: formatCurrencyAmount(row.outstanding),
           status: String(row.status ?? "").trim().toLowerCase() === "active" ? "Active" : "Inactive",
+          hosting: row.hosting || "None",
           paymentHistory: [],
         };
         setMemberProfile(profile);
@@ -752,7 +755,7 @@ export default function MemberViewPage() {
 
   function editFieldHasError(field: keyof EditMemberFormState): boolean {
     return (editMemberTouched[field] === true || editMemberSubmitAttempted) &&
-      !editMemberForm[field].trim();
+      !String(editMemberForm[field] ?? '').trim();
   }
 
   function resetAddTransactionForm() {
@@ -1022,6 +1025,7 @@ export default function MemberViewPage() {
   const summaryCards: SummaryCard[] = [
     { label: "Monthly Dues", value: monthlyDuesDisplay },
     { label: "Total Paid", value: `$${totalPaidFromAllSources.toLocaleString()}`, tone: "success" },
+    { label: "Scheduled Hosting", value: memberProfile.hosting || "None" },
     { label: "Attendance", value: memberProfile.attendance || "0 Meetings", tone: "success" },
     { label: "Outstanding", value: `$${computedOutstanding.toLocaleString()}`, tone: "danger" },
   ];
