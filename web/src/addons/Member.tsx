@@ -52,11 +52,20 @@ type MemberListItem = {
   raffleUpua: number;
 };
 
-type AttendanceRow = {
+type HostingScheduleRow = {
   id: string;
   year: number;
   month: number;
-  usersIn: string;
+  hostMember: string;
+};
+
+type DuesTransactionRow = {
+  id: string;
+  userId?: string | null;
+  fullName?: string | null;
+  title: string;
+  amount: number;
+  date: string;
 };
 
 const MONTHS = [
@@ -167,7 +176,8 @@ export default function MemberPage() {
   const navigate = useNavigate();
   const [members, setMembers] = useState<MemberListItem[]>([]);
   const [membersLoading, setMembersLoading] = useState(true);
-  const [attendanceRows, setAttendanceRows] = useState<AttendanceRow[]>([]);
+  const [hostingSchedules, setHostingSchedules] = useState<HostingScheduleRow[]>([]);
+  const [duesTransactions, setDuesTransactions] = useState<DuesTransactionRow[]>([]);
   const [hoveredMemberId, setHoveredMemberId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -215,17 +225,6 @@ export default function MemberPage() {
     return () => { active = false; };
   }, []);
 
-  // Fetch all attendance records. Attendance percent and hover details are
-  // computed at render time from this data, so there's no race condition
-  // between the members fetch and the attendance fetch.
-  useEffect(() => {
-    let active = true;
-    apiGet<AttendanceRow[]>("/admin/database/attendance")
-      .then((rows) => { if (active) setAttendanceRows(rows); })
-      .catch(() => {});
-    return () => { active = false; };
-  }, []);
-
   // Close the action dropdown when the admin clicks anywhere outside it.
   useEffect(() => {
     if (!openMenuId) return undefined;
@@ -238,19 +237,62 @@ export default function MemberPage() {
     return () => document.removeEventListener("mousedown", onOutsideClick);
   }, [openMenuId]);
 
-  // Compute monthly attendance for a member from the live attendanceRows state.
-  // Returns the 12-month presence array AND the present count — both derived
-  // from the same data so the card label and hover popup are always in sync.
-  function getMemberMonthlyAttendance(memberId: string): { presence: boolean[]; presentCount: number } {
-    const thisYearRows = attendanceRows.filter((row) => row.year === CURRENT_YEAR);
-    const presence = MONTHS.map((_, index) => {
-      const monthNum = index + 1;
-      const row = thisYearRows.find((r) => r.month === monthNum);
-      if (!row) return false;
-      const ids = row.usersIn.split(",").map((s) => s.trim()).filter(Boolean);
-      return ids.includes(memberId);
+  // Fetch live hosting schedule from DB.
+  useEffect(() => {
+    let active = true;
+    apiGet<HostingScheduleRow[]>("/admin/database/hostingSchedules")
+      .then((rows) => { if (active) setHostingSchedules(rows); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+
+  // Fetch all dues transactions (title contains "due") to compute monthly dues payment presence.
+  useEffect(() => {
+    let active = true;
+    apiGet<DuesTransactionRow[]>("/admin/database/dues")
+      .then((rows) => {
+        if (active) setDuesTransactions(rows.filter((t) => (t.title || "").toLowerCase().includes("due")));
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+
+  // Compute which months in the current year a member has paid dues from the Transactions table.
+  // Returns a 12-entry boolean array and the count of months paid.
+  function getMemberDuesMonths(member: MemberListItem): { paidMonths: boolean[]; paidCount: number } {
+    const memberName = member.name.toLowerCase().trim();
+    const memberTxs = duesTransactions.filter((t) => {
+      if (t.userId && t.userId === member.id) return true;
+      const txName = (t.fullName || "").toLowerCase().trim();
+      if (txName && txName === memberName) return true;
+      return false;
     });
-    return { presence, presentCount: presence.filter(Boolean).length };
+
+    // Group dues transactions by month in current year
+    const paidMonths = MONTHS.map((_, index) => {
+      const monthNum = index + 1;
+      return memberTxs.some((t) => {
+        if (!t.date) return false;
+        const d = new Date(t.date);
+        return d.getFullYear() === CURRENT_YEAR && d.getMonth() + 1 === monthNum;
+      });
+    });
+    return { paidMonths, paidCount: paidMonths.filter(Boolean).length };
+  }
+
+  // Get live hosting schedule for a member from the hosting table.
+  function getMemberHosting(member: MemberListItem): string {
+    const MONTH_ABBRS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const memberName = member.name.toLowerCase().trim();
+    const sched = hostingSchedules.find((h) => {
+      const host = (h.hostMember || "").toLowerCase().trim();
+      return host && (host.includes(memberName) || memberName.includes(host));
+    });
+    if (sched && sched.year && sched.month) {
+      return `${MONTH_ABBRS[sched.month - 1]}, ${sched.year}`;
+    }
+    // Fallback to static member.hosting if no live schedule found
+    return member.hosting || "None";
   }
 
   function handleViewMember(member: MemberListItem) {
@@ -541,48 +583,48 @@ export default function MemberPage() {
                       <span className="member-page__check member-page__check--blue">
                         <FiCalendar size={14} />
                       </span>
-                      <strong>{member.hosting || "None"}</strong>
+                      <strong>{getMemberHosting(member)}</strong>
                     </div>
                   </div>
 
                   {(() => {
-                    const { presence, presentCount } = getMemberMonthlyAttendance(member.id);
-                    const attendancePercent = Math.min(100, presentCount * 10);
+                    const { paidMonths, paidCount } = getMemberDuesMonths(member);
+                    const paidPercent = Math.round((paidCount / 12) * 100);
                     return (
                       <div
                         className="member-page__attendance-card"
                         onMouseEnter={() => setHoveredMemberId(member.id)}
                         onMouseLeave={() => setHoveredMemberId(null)}
                       >
-                        <span className="member-page__attendance-title">Monthly Attendance</span>
+                        <span className="member-page__attendance-title">Dues Paid</span>
                         <div className="member-page__attendance-line">
                           <span className="member-page__check member-page__check--green">
                             <FiCheck size={15} />
                           </span>
-                          <strong>{presentCount}/12 Months</strong>
+                          <strong>{paidCount}/12 Months</strong>
                         </div>
                         <div className="member-page__progress-row">
                           <span className="member-page__progress-track">
-                            <span style={{ width: `${attendancePercent}%` }} />
+                            <span style={{ width: `${paidPercent}%` }} />
                           </span>
                         </div>
 
                         {hoveredMemberId === member.id && (
                           <div className="member-page__attendance-popup">
-                            <p className="member-page__attendance-popup-year">{CURRENT_YEAR}</p>
+                            <p className="member-page__attendance-popup-year">{CURRENT_YEAR} Dues</p>
                             <ul className="member-page__attendance-popup-list">
                               {MONTHS.map((monthName, index) => {
-                                const isPresent = presence[index];
+                                const isPaid = paidMonths[index];
                                 return (
                                   <li
                                     key={monthName}
                                     className={[
                                       "member-page__attendance-popup-row",
-                                      isPresent ? "is-present" : "is-absent",
+                                      isPaid ? "is-present" : "is-absent",
                                     ].join(" ")}
                                   >
                                     <span>{monthName}</span>
-                                    {isPresent
+                                    {isPaid
                                       ? <FiCheckCircle size={18} className="member-page__attendance-popup-icon member-page__attendance-popup-icon--present" />
                                       : <FiXCircle size={18} className="member-page__attendance-popup-icon member-page__attendance-popup-icon--absent" />
                                     }

@@ -297,12 +297,14 @@ export default function MemberAccount() {
   }, [hostingSchedule, memberFullName, memberKey]);
 
   const hostingDisplay = useMemo(() => {
-    const direct = memberProfile?.member?.hosting;
-    if (direct && direct !== "None") return direct;
+    // Prefer live schedule data from the hostingSchedule table
     if (memberHostingSchedule.length > 0) {
       const first = memberHostingSchedule[0];
       return `${MONTH_OPTIONS_LONG[first.month - 1]} ${first.year}`;
     }
+    // Fallback to static profile field
+    const direct = memberProfile?.member?.hosting;
+    if (direct && direct !== "None") return direct;
     return "None";
   }, [memberProfile, memberHostingSchedule]);
 
