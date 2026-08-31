@@ -59,13 +59,12 @@ type HostingScheduleRow = {
   hostMember: string;
 };
 
-type DuesTransactionRow = {
+
+type AttendanceApiRow = {
   id: string;
-  userId?: string | null;
-  fullName?: string | null;
-  title: string;
-  amount: number;
-  date: string;
+  year: number;
+  month: number;
+  usersIn?: string | null;
 };
 
 const MONTHS = [
@@ -177,7 +176,7 @@ export default function MemberPage() {
   const [members, setMembers] = useState<MemberListItem[]>([]);
   const [membersLoading, setMembersLoading] = useState(true);
   const [hostingSchedules, setHostingSchedules] = useState<HostingScheduleRow[]>([]);
-  const [duesTransactions, setDuesTransactions] = useState<DuesTransactionRow[]>([]);
+  const [attendanceRows, setAttendanceRows] = useState<AttendanceApiRow[]>([]);
   const [hoveredMemberId, setHoveredMemberId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -246,38 +245,40 @@ export default function MemberPage() {
     return () => { active = false; };
   }, []);
 
-  // Fetch all dues transactions (title contains "due") to compute monthly dues payment presence.
+
+  // Fetch live attendance records from database.
   useEffect(() => {
     let active = true;
-    apiGet<DuesTransactionRow[]>("/admin/database/dues")
-      .then((rows) => {
-        if (active) setDuesTransactions(rows.filter((t) => (t.title || "").toLowerCase().includes("due")));
-      })
+    apiGet<AttendanceApiRow[]>("/admin/database/attendance")
+      .then((rows) => { if (active) setAttendanceRows(rows || []); })
       .catch(() => {});
     return () => { active = false; };
   }, []);
 
-  // Compute which months in the current year a member has paid dues from the Transactions table.
-  // Returns a 12-entry boolean array and the count of months paid.
-  function getMemberDuesMonths(member: MemberListItem): { paidMonths: boolean[]; paidCount: number } {
+  // Compute attendance record for current year from live attendance database table.
+  function getMemberAttendanceMonths(member: MemberListItem): { presentMonths: boolean[]; presentCount: number } {
     const memberName = member.name.toLowerCase().trim();
-    const memberTxs = duesTransactions.filter((t) => {
-      if (t.userId && t.userId === member.id) return true;
-      const txName = (t.fullName || "").toLowerCase().trim();
-      if (txName && txName === memberName) return true;
-      return false;
+    const memberId = member.id.toLowerCase();
+    const displayMemberId = (member.memberId || "").toLowerCase();
+
+    const presentMonths = MONTHS.map((_, index) => {
+      const monthNum = index + 1;
+      const attRow = attendanceRows.find(
+        (r) => r.year === CURRENT_YEAR && r.month === monthNum
+      );
+      if (!attRow || !attRow.usersIn) return false;
+
+      const usersInList = attRow.usersIn.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+      return usersInList.some(
+        (u) =>
+          u === memberId ||
+          u === `user.${memberId}` ||
+          u === displayMemberId ||
+          (memberName.length > 0 && (u.includes(memberName) || memberName.includes(u)))
+      );
     });
 
-    // Group dues transactions by month in current year
-    const paidMonths = MONTHS.map((_, index) => {
-      const monthNum = index + 1;
-      return memberTxs.some((t) => {
-        if (!t.date) return false;
-        const d = new Date(t.date);
-        return d.getFullYear() === CURRENT_YEAR && d.getMonth() + 1 === monthNum;
-      });
-    });
-    return { paidMonths, paidCount: paidMonths.filter(Boolean).length };
+    return { presentMonths, presentCount: presentMonths.filter(Boolean).length };
   }
 
   // Get live hosting schedule for a member from the hosting table.
@@ -588,43 +589,43 @@ export default function MemberPage() {
                   </div>
 
                   {(() => {
-                    const { paidMonths, paidCount } = getMemberDuesMonths(member);
-                    const paidPercent = Math.round((paidCount / 12) * 100);
+                    const { presentMonths, presentCount } = getMemberAttendanceMonths(member);
+                    const presentPercent = Math.round((presentCount / 12) * 100);
                     return (
                       <div
                         className="member-page__attendance-card"
                         onMouseEnter={() => setHoveredMemberId(member.id)}
                         onMouseLeave={() => setHoveredMemberId(null)}
                       >
-                        <span className="member-page__attendance-title">Dues Paid</span>
+                        <span className="member-page__attendance-title">Monthly Attendance</span>
                         <div className="member-page__attendance-line">
                           <span className="member-page__check member-page__check--green">
                             <FiCheck size={15} />
                           </span>
-                          <strong>{paidCount}/12 Months</strong>
+                          <strong>{presentCount}/12 Meetings</strong>
                         </div>
                         <div className="member-page__progress-row">
                           <span className="member-page__progress-track">
-                            <span style={{ width: `${paidPercent}%` }} />
+                            <span style={{ width: `${presentPercent}%` }} />
                           </span>
                         </div>
 
                         {hoveredMemberId === member.id && (
                           <div className="member-page__attendance-popup">
-                            <p className="member-page__attendance-popup-year">{CURRENT_YEAR} Dues</p>
+                            <p className="member-page__attendance-popup-year">{CURRENT_YEAR} Attendance</p>
                             <ul className="member-page__attendance-popup-list">
                               {MONTHS.map((monthName, index) => {
-                                const isPaid = paidMonths[index];
+                                const isPresent = presentMonths[index];
                                 return (
                                   <li
                                     key={monthName}
                                     className={[
                                       "member-page__attendance-popup-row",
-                                      isPaid ? "is-present" : "is-absent",
+                                      isPresent ? "is-present" : "is-absent",
                                     ].join(" ")}
                                   >
                                     <span>{monthName}</span>
-                                    {isPaid
+                                    {isPresent
                                       ? <FiCheckCircle size={18} className="member-page__attendance-popup-icon member-page__attendance-popup-icon--present" />
                                       : <FiXCircle size={18} className="member-page__attendance-popup-icon member-page__attendance-popup-icon--absent" />
                                     }
