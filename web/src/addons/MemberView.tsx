@@ -223,6 +223,7 @@ type ApiMemberDetail = {
   status?: string | null;
   goodStanding?: string | null;
   financialGoodStanding?: string | null;
+  balance?: number | null;
   raffleUpumi?: number | null;
   raffleUpua?: number | null;
   monthlyDues?: ApiMonthlyDue[];
@@ -567,20 +568,20 @@ export default function MemberViewPage() {
 
 
   const computedFinancialGoodStanding = useMemo(() => {
-    const prevYear = new Date().getFullYear() - 1;
-    const prevBalRec = mybBalances.find((b) => b.year === prevYear);
-    if (prevBalRec && prevBalRec.balance !== null && prevBalRec.balance !== undefined && Number.isFinite(Number(prevBalRec.balance))) {
-      return Number(prevBalRec.balance) <= -240 ? "No" : "Yes";
+    const balNum = Number(memberRaw?.balance ?? (memberRaw as any)?.user?.balance ?? 0);
+    if (balNum !== null && balNum !== undefined && Number.isFinite(balNum)) {
+      return balNum <= -240 ? "No" : "Yes";
     }
     const val = memberRaw?.financialGoodStanding;
     if (val) {
       const v = String(val).trim().toLowerCase();
-      if (v === "yes" || v === "good" || v === "active" || v === "true" || v === "1") return "Yes";
       if (v === "no" || v === "bad" || v === "inactive" || v === "false" || v === "0") return "No";
-      return String(val);
+      if (v === "yes" || v === "good" || v === "active" || v === "true" || v === "1") return "Yes";
+      const num = Number(v.replace(/[^0-9.-]/g, ''));
+      if (Number.isFinite(num)) return num <= -240 ? "No" : "Yes";
     }
     return "Yes";
-  }, [mybBalances, memberRaw]);
+  }, [memberRaw]);
 
   useEffect(() => {
     if (!isEditMemberModalOpen && !isAddTransactionModalOpen) return undefined;

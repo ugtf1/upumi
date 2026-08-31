@@ -461,20 +461,20 @@ export default function MemberAccount() {
   ];
 
   const computedFinancialGoodStanding = useMemo(() => {
-    const prevYear = new Date().getFullYear() - 1;
-    const prevBalRec = mybBalances.find((b) => b.year === prevYear);
-    if (prevBalRec && prevBalRec.balance !== null && prevBalRec.balance !== undefined && Number.isFinite(Number(prevBalRec.balance))) {
-      return Number(prevBalRec.balance) <= -240 ? "No" : "Yes";
+    const curBal = liveBalance !== null ? liveBalance : Number(memberProfile?.member?.balance ?? 0);
+    if (curBal !== null && curBal !== undefined && Number.isFinite(curBal)) {
+      return curBal <= -240 ? "No" : "Yes";
     }
     const val = memberProfile?.member?.financialGoodStanding;
     if (val) {
       const v = String(val).trim().toLowerCase();
-      if (v === "yes" || v === "good" || v === "active" || v === "true" || v === "1") return "Yes";
       if (v === "no" || v === "bad" || v === "inactive" || v === "false" || v === "0") return "No";
-      return String(val);
+      if (v === "yes" || v === "good" || v === "active" || v === "true" || v === "1") return "Yes";
+      const num = Number(v.replace(/[^0-9.-]/g, ''));
+      if (Number.isFinite(num)) return num <= -240 ? "No" : "Yes";
     }
     return "Yes";
-  }, [mybBalances, memberProfile]);
+  }, [liveBalance, memberProfile]);
 
   return (
     <div className="member-account">

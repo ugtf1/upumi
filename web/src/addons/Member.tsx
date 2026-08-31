@@ -130,8 +130,8 @@ function mapApiMember(m: ApiMember): MemberListItem {
   const attendancePercent = Number.isNaN(pctRaw) ? 0 : Math.min(100, pctRaw);
   const presentMonths = Math.round(attendancePercent / 10);
   const voteRole = String(m.voter ?? "").trim().toUpperCase() === "YES" ? "Yes" : "No";
-  const rawFin = String(m.financialGoodStanding ?? m.goodStanding ?? "Yes").trim().toUpperCase();
-  const financialGoodStanding = rawFin === "NO" ? "No" : "Yes";
+  const rawBal = Number(m.balance ?? 0);
+  const financialGoodStanding = rawBal <= -240 ? "No" : (String(m.financialGoodStanding ?? m.goodStanding ?? "Yes").trim().toUpperCase() === "NO" ? "No" : "Yes");
 
   return {
     id: m.id,
@@ -214,7 +214,12 @@ export default function MemberPage() {
           prev.map((m, i) => {
             const result = balanceResults[i];
             if (result.status === "fulfilled") {
-              return { ...m, balance: Number(result.value.balance ?? 0) };
+              const liveBal = Number(result.value.balance ?? 0);
+              return {
+                ...m,
+                balance: liveBal,
+                financialGoodStanding: liveBal <= -240 ? "No" : "Yes",
+              };
             }
             return m;
           })
@@ -281,22 +286,25 @@ export default function MemberPage() {
     return { presentMonths, presentCount: presentMonths.filter(Boolean).length };
   }
 
+  function renderScheduledHosting(val: string | null | undefined): React.ReactNode {
+    if (!val || val === "None" || val === "-") {
+      return <span style={{ color: "#94a3b8", fontWeight: 400 }}>{val || "None"}</span>;
+    }
+    return (
+      <span style={{ color: "#e11d48", fontWeight: 800, textShadow: "0 0 1px rgba(225, 29, 72, 0.2)" }}>
+        {val}
+      </span>
+    );
+  }
+
   function renderValueWithMinusColor(
     val: string | number | null | undefined,
     extraStyle?: React.CSSProperties
   ): React.ReactNode {
     if (val === null || val === undefined) return null;
     const str = String(val);
-    const isMar2027 = str.includes("Mar, 2027") || str.includes("March, 2027") || str.includes("Mar 2027");
     const hasMinus = str.includes("-");
 
-    if (isMar2027) {
-      return (
-        <span style={{ color: "#e11d48", fontWeight: 800, textShadow: "0 0 1px rgba(225, 29, 72, 0.2)", ...extraStyle }}>
-          {str}
-        </span>
-      );
-    }
     if (hasMinus) {
       return (
         <span style={{ color: "#dc2626", fontWeight: 700, ...extraStyle }}>
@@ -614,7 +622,7 @@ export default function MemberPage() {
                       <span className="member-page__check member-page__check--blue">
                         <FiCalendar size={14} />
                       </span>
-                      <strong>{renderValueWithMinusColor(getMemberHosting(member))}</strong>
+                      <strong>{renderScheduledHosting(getMemberHosting(member))}</strong>
                     </div>
                   </div>
 

@@ -256,15 +256,16 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
       return value as Record<string, any>;
     }
 
-    function computeFinancialGoodStanding(prevYearBalance: number | null | undefined, fallbackValue?: string | null): string {
-      if (prevYearBalance !== null && prevYearBalance !== undefined && Number.isFinite(Number(prevYearBalance))) {
-        return Number(prevYearBalance) <= -240 ? "No" : "Yes";
+    function computeFinancialGoodStanding(balanceValue: number | null | undefined, fallbackValue?: string | null): string {
+      if (balanceValue !== null && balanceValue !== undefined && Number.isFinite(Number(balanceValue))) {
+        return Number(balanceValue) <= -240 ? "No" : "Yes";
       }
       if (fallbackValue) {
         const v = String(fallbackValue).trim().toLowerCase();
-        if (v === "yes" || v === "good" || v === "active" || v === "true" || v === "1") return "Yes";
         if (v === "no" || v === "bad" || v === "inactive" || v === "false" || v === "0") return "No";
-        return String(fallbackValue);
+        if (v === "yes" || v === "good" || v === "active" || v === "true" || v === "1") return "Yes";
+        const num = Number(v.replace(/[^0-9.-]/g, ''));
+        if (Number.isFinite(num)) return num <= -240 ? "No" : "Yes";
       }
       return "Yes";
     }
@@ -427,7 +428,7 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
         crntPaid: txTotals.crntPaid,
         raffleUpumi: txTotals.raffleUpumi,
         raffleUpua: txTotals.raffleUpua,
-        financialGoodStanding: computeFinancialGoodStanding(prevBal, mapped.financialGoodStanding),
+        financialGoodStanding: computeFinancialGoodStanding(mapped.balance, mapped.financialGoodStanding),
       };
     }), ...userOnlyRows.map((userRow: any) => {
       const mapped = mapUserAsMember(userRow);
@@ -444,6 +445,7 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
         crntPaid: txTotals.crntPaid,
         raffleUpumi: txTotals.raffleUpumi,
         raffleUpua: txTotals.raffleUpua,
+        financialGoodStanding: computeFinancialGoodStanding(mapped.balance, mapped.financialGoodStanding),
       };
     })].sort((a, b) => {
       const aName = `${a.lastName ?? ''} ${a.firstName ?? ''}`.trim();

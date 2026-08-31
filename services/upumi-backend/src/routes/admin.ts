@@ -81,15 +81,16 @@ function rawMoney(raw: Record<string, any>, keys: string[]): number | null {
   return null;
 }
 
-function computeFinancialGoodStanding(prevYearBalance: number | null | undefined, fallbackValue?: string | null): string {
-  if (prevYearBalance !== null && prevYearBalance !== undefined && Number.isFinite(Number(prevYearBalance))) {
-    return Number(prevYearBalance) <= -240 ? "No" : "Yes";
+function computeFinancialGoodStanding(balanceValue: number | null | undefined, fallbackValue?: string | null): string {
+  if (balanceValue !== null && balanceValue !== undefined && Number.isFinite(Number(balanceValue))) {
+    return Number(balanceValue) <= -240 ? "No" : "Yes";
   }
   if (fallbackValue) {
     const v = String(fallbackValue).trim().toLowerCase();
-    if (v === "yes" || v === "good" || v === "active" || v === "true" || v === "1") return "Yes";
     if (v === "no" || v === "bad" || v === "inactive" || v === "false" || v === "0") return "No";
-    return String(fallbackValue);
+    if (v === "yes" || v === "good" || v === "active" || v === "true" || v === "1") return "Yes";
+    const num = Number(v.replace(/[^0-9.-]/g, ''));
+    if (Number.isFinite(num)) return num <= -240 ? "No" : "Yes";
   }
   return "Yes";
 }
@@ -329,7 +330,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         balance,
         raffleUpumi: txTotals.raffleUpumi,
         raffleUpua: txTotals.raffleUpua,
-        financialGoodStanding: computeFinancialGoodStanding(yearlyBalancesSum, mapped.financialGoodStanding),
+        financialGoodStanding: computeFinancialGoodStanding(balance, mapped.financialGoodStanding),
       };
     }), ...userOnlyRows.map((userRow: any) => {
       const mapped = mapUserAsMember(userRow);
@@ -350,6 +351,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         balance,
         raffleUpumi: txTotals.raffleUpumi,
         raffleUpua: txTotals.raffleUpua,
+        financialGoodStanding: computeFinancialGoodStanding(balance, mapped.financialGoodStanding),
       };
     })].sort((a, b) => {
       const aName = `${a.lastName ?? ''} ${a.firstName ?? ''}`.trim();
@@ -480,16 +482,39 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const totalMeetings = attendanceRows.length;
-    const computedPct = totalMeetings > 0 ? String(Math.round((presentCount / totalMeetings) * 100)) : (strCell(row.attendancePct) ?? '0');
-
     const raw = parseRawJson(row.rawJson);
-    const prevYear = new Date().getFullYear() - 1;
-    const prevBalRow = await prismaAny.memberYearlyBalance.findFirst({
-      where: { memberRecordId: row.id, year: prevYear },
+    const computedPct = totalMeetings > 0 ? String(Math.round((presentCount / totalMeetings) * 100)) : (strCell(row.attendancePct) ?? '0');
+    const currentYearNum = new Date().getFullYear();
+    const currentMonthNum = new Date().getMonth() + 1;
+    const expectedDuesSoFar = currentMonthNum * 20;
+
+    const allUserTxs = await prisma.transaction.findMany({
+      where: {
+        OR: [
+          ...(row.userId ? [{ userId: row.userId }] : []),
+          { fullName: `${row.firstName ?? ''} ${row.lastName ?? ''}`.trim() },
+        ],
+      },
+    }).catch(() => []);
+
+    const duesTxsThisYear = allUserTxs.filter((t) => {
+      const isDue = (t.title || '').toLowerCase().includes('due');
+      if (!isDue) return false;
+      const d = new Date(t.date);
+      return d.getFullYear() === currentYearNum;
+    });
+
+    const duesPaidThisYear = duesTxsThisYear.reduce((sum, t) => sum + Number(t.amount ?? 0), 0);
+    const curOutstanding = duesPaidThisYear - expectedDuesSoFar;
+
+    const allYearlyBalances = await prismaAny.memberYearlyBalance.findMany({
+      where: { memberRecordId: row.id },
       select: { balance: true },
-    }).catch(() => null);
-    const prevBal = prevBalRow ? Number(prevBalRow.balance) : rawMoney(raw, [`${prevYear} balance`, `${prevYear} Balance`, 'Balance']);
-    const finGoodStanding = computeFinancialGoodStanding(prevBal, strCell(row.financialGoodStanding) ?? strCell(raw['Financial GoodStanding']));
+    }).catch(() => []);
+
+    const yearlyBalancesSum = (allYearlyBalances as any[]).reduce((sum, r) => sum + Number(r.balance ?? 0), 0);
+    const totalBalance = yearlyBalancesSum + curOutstanding;
+    const finGoodStanding = computeFinancialGoodStanding(totalBalance, strCell(row.financialGoodStanding) ?? strCell(raw['Financial GoodStanding']));
 
     const hostingSchedules = await prisma.hostingSchedule.findMany({
       select: { year: true, month: true, hostMember: true },
@@ -535,6 +560,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       voter: strCell(row.voter) ?? strCell(row.user?.voteRole) ?? strCell(raw.Voter),
       goodStanding: strCell(row.goodStanding) ?? strCell(raw.GoodStanding),
       financialGoodStanding: finGoodStanding,
+      balance: totalBalance,
       monthlyDuesAmount: rawMoney(raw, ['Monthly Dues', 'monthlyDues']) ?? 0,
       totalPaid: decimalToNumber(row.user?.totalPaid) ?? rawMoney(raw, ['Total', '2026 dues paid', '2025 dues paid']),
       outstanding: decimalToNumber(row.user?.outstanding) ?? rawMoney(raw, ['Balance', '2026 balance', '2025 balance']),

@@ -25,6 +25,7 @@ type RawMember = {
   status?: string | null;
   goodStanding?: string | null;
   financialGoodStanding?: string | null;
+  balance?: number | null;
   attendancePct?: string | null;
   monthlyDuesAmount?: number | null;
   totalPaid?: number | null;
@@ -150,7 +151,7 @@ export default function MemberFilterReportModal({ isOpen, onClose, memberSafe = 
           phone: m.phone || "-",
           status: statusLabel,
           goodStanding: normaliseLabel(m.goodStanding),
-          financialGoodStanding: normaliseLabel(m.financialGoodStanding),
+          financialGoodStanding: Number(m.balance ?? yearlyBalance ?? 0) <= -240 ? "No" : normaliseLabel(m.financialGoodStanding),
           yearlyBalance,
           outstanding: formatCurrency(outstandingRaw),
           outstandingRaw,
