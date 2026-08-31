@@ -1026,20 +1026,26 @@ export default function MemberViewPage() {
     ? memberProfile.monthlyDues
     : "$20";
 
-  const memberFirstLast = `${memberRaw.firstName ?? ""} ${memberRaw.lastName ?? ""}`.toLowerCase().trim();
+  const fnStr = (memberRaw.firstName || (memberRaw.user as any)?.fName || "").trim();
+  const lnStr = (memberRaw.lastName || (memberRaw.user as any)?.lName || "").trim();
+  const memberFirstLast = `${fnStr} ${lnStr}`.toLowerCase().trim();
+  const nameTokens = [fnStr.toLowerCase(), lnStr.toLowerCase()].filter((p) => p.length >= 2);
   const targetUserId = memberRaw.userId ?? memberRaw.user?.id ?? memberUserId ?? null;
 
   const hostingDisplay = useMemo(() => {
     const MONTH_ABBRS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const sched = hostingSchedule.find((h) => {
       const host = (h.hostMember || "").toLowerCase().trim();
-      return host && memberFirstLast && (host.includes(memberFirstLast) || memberFirstLast.includes(host));
+      if (!host) return false;
+      if (memberFirstLast && (host.includes(memberFirstLast) || memberFirstLast.includes(host))) return true;
+      if (nameTokens.length > 0 && nameTokens.every((t) => host.includes(t))) return true;
+      return false;
     });
     if (sched && sched.year && sched.month) {
       return `${MONTH_ABBRS[sched.month - 1]}, ${sched.year}`;
     }
     return memberRaw.hosting && memberRaw.hosting !== "None" ? memberRaw.hosting : "None";
-  }, [hostingSchedule, memberFirstLast, memberRaw.hosting]);
+  }, [hostingSchedule, memberFirstLast, nameTokens, memberRaw.hosting]);
 
   const raffleUpumiAmount = useMemo(() => {
     const fromRecord = Number(memberRaw.raffleUpumi ?? 0);
@@ -1371,7 +1377,10 @@ export default function MemberViewPage() {
             {(() => {
               const myHosting = hostingSchedule.filter((h) => {
                 const host = (h.hostMember || "").toLowerCase().trim();
-                return host && memberFirstLast && (host.includes(memberFirstLast) || memberFirstLast.includes(host));
+                if (!host) return false;
+                if (memberFirstLast && (host.includes(memberFirstLast) || memberFirstLast.includes(host))) return true;
+                if (nameTokens.length > 0 && nameTokens.every((t) => host.includes(t))) return true;
+                return false;
               });
               if (myHosting.length === 0) return null;
               return (

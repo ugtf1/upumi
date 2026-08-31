@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { requireRole } from '../services/auth.js';
+import { requireRole, requireAuth } from '../services/auth.js';
 import { prisma } from '../services/prisma.js';
 import { importWorkbookCsv, toSheetCsvExportUrl } from '../services/workbookImport.js';
 import { normalizePhone, phoneLookupCandidates } from '../services/phone.js';
@@ -491,6 +491,31 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const prevBal = prevBalRow ? Number(prevBalRow.balance) : rawMoney(raw, [`${prevYear} balance`, `${prevYear} Balance`, 'Balance']);
     const finGoodStanding = computeFinancialGoodStanding(prevBal, strCell(row.financialGoodStanding) ?? strCell(raw['Financial GoodStanding']));
 
+    const hostingSchedules = await prisma.hostingSchedule.findMany({
+      select: { year: true, month: true, hostMember: true },
+    }).catch(() => []);
+
+    const MONTH_ABBRS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const fnStr = strCell(row.firstName) ?? strCell(row.user?.fName) ?? strCell(raw.First) ?? "";
+    const lnStr = strCell(row.lastName) ?? strCell(row.user?.lName) ?? strCell(raw.Last) ?? "";
+    const fullNameStr = `${fnStr} ${lnStr}`.trim();
+    const nameTokens = [fnStr.toLowerCase(), lnStr.toLowerCase()].filter((p) => p.length >= 2);
+
+    let hostingDate: string = strCell(raw.Hosting) ?? strCell(raw.hosting) ?? 'None';
+    if (fullNameStr && hostingSchedules.length > 0) {
+      const sched = hostingSchedules.find((h) => {
+        const host = (h.hostMember || '').toLowerCase().trim();
+        if (!host) return false;
+        if (host.includes(fullNameStr.toLowerCase()) || fullNameStr.toLowerCase().includes(host)) return true;
+        if (nameTokens.length > 0 && nameTokens.every((token) => host.includes(token))) return true;
+        return false;
+      });
+      if (sched && sched.year && sched.month) {
+        const mStr = MONTH_ABBRS[sched.month - 1] || 'Jan';
+        hostingDate = `${mStr}, ${sched.year}`;
+      }
+    }
+
     return {
       id: row.id,
       memberKey: row.memberKey,
@@ -500,6 +525,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       firstName: strCell(row.firstName) ?? strCell(row.user?.fName) ?? strCell(raw.First),
       lastName: strCell(row.lastName) ?? strCell(row.user?.lName) ?? strCell(raw.Last),
       joined: strCell(row.joined) ?? strCell(raw.Joined) ?? row.user?.dateJoined ?? null,
+      hosting: hostingDate,
       phone: strCell(row.phone) ?? strCell(row.user?.phone) ?? strCell(raw.Phone),
       email: strCell(row.email) ?? strCell(row.user?.email) ?? strCell(raw.Email),
       address: strCell(row.user?.address) ?? strCell(raw.Address),
@@ -522,8 +548,8 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
-  // Balance: crnt. paid - outstanding - previous year balance (admin)
-  app.get('/members/:id/balance', { preHandler: requireRole('ADMIN') }, async (req: any, reply) => {
+  // Balance: crnt. paid - outstanding - previous year balance (admin/member)
+  app.get('/members/:id/balance', { preHandler: requireAuth }, async (req: any, reply) => {
     const rawId = String(req.params?.id ?? '');
 
     let record = await prisma.memberRecord.findFirst({

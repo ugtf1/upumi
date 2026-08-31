@@ -24,6 +24,7 @@ import {
   getHostingSchedule,
   getAllAttendanceReadOnly,
   getMemberYearlyBalances,
+  apiGet,
   type MemberYearlyBalanceApiRow,
 } from "./api";
 import MemberFilterReportModal from "./MemberFilterReportModal";
@@ -82,6 +83,7 @@ type MemberProfileResponse = {
     monthlyDuesAmount?: number | null;
     totalPaid?: number | null;
     outstanding?: number | null;
+    balance?: number | null;
   } | null;
   linked?: { userId?: string | null; memberRecordId?: string | null; memberKey?: string | null; displayMemberId?: string | null } | null;
   monthlyDues?: MonthlyDueRecord[];
@@ -139,6 +141,7 @@ export default function MemberAccount() {
   // Member profile for sidebar / summary cards
   const [memberProfile, setMemberProfile] = useState<MemberProfileResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [liveBalance, setLiveBalance] = useState<number | null>(null);
 
   // All-platform transaction rows (filtered strictly for this member)
   const [allTxRows, setAllTxRows] = useState<AllTransactionRow[]>([]);
@@ -193,6 +196,21 @@ export default function MemberAccount() {
   const memberFullName = memberProfile?.member
     ? `${memberProfile.member.firstName ?? ""} ${memberProfile.member.lastName ?? ""}`.toLowerCase().trim()
     : "";
+
+  // Fetch live calculated balance for this member (same balance logic as admin member page)
+  useEffect(() => {
+    let active = true;
+    const memberId = memberRecordId || memberUserId || memberKey;
+    if (!memberId) return;
+    apiGet<{ balance: number }>(`/admin/members/${memberId}/balance`)
+      .then((res) => {
+        if (active && res && typeof res.balance === "number") {
+          setLiveBalance(res.balance);
+        }
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [memberRecordId, memberUserId, memberKey]);
 
   useEffect(() => {
     let active = true;
@@ -250,21 +268,35 @@ export default function MemberAccount() {
             ? `${memberProfile.member.firstName ?? ""} ${memberProfile.member.lastName ?? ""}`.trim() || "Member"
             : "Member";
           return {
-            id: row.id,
-            date: row.createdAt
-              ? new Date(row.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-              : "-",
+            id: `due-${row.id}`,
+            date: `${monthName} ${row.year ?? new Date().getFullYear()}`,
             fullName,
-            title: `Monthly Dues \u2013 ${monthName} ${row.year ?? ""}`,
+            title: `Monthly Dues - ${monthName} ${row.year ?? new Date().getFullYear()}`,
             amount: `$${Number(row.duesPaid ?? 0).toLocaleString()}`,
             status: "Completed",
-            rawDate: row.createdAt || "",
+            rawDate: `${row.year ?? new Date().getFullYear()}-${String(row.month ?? 1).padStart(2, "0")}-01`,
             rawAmount: Number(row.duesPaid ?? 0),
             isDue: true,
           };
         });
 
-        const combined = [...txNorm, ...dueNorm].sort(
+        // 3. Deduplicate dues that exist in both transaction table and monthly_due table
+        const txMonthKeys = new Set(
+          txNorm
+            .filter((r) => r.isDue && r.rawDate)
+            .map((r) => {
+              const d = new Date(r.rawDate);
+              return `${d.getFullYear()}-${d.getMonth() + 1}`;
+            })
+        );
+
+        const filteredDues = dueNorm.filter((d) => {
+          const parts = d.rawDate.split("-");
+          const key = `${parts[0]}-${parseInt(parts[1], 10)}`;
+          return !txMonthKeys.has(key);
+        });
+
+        const combined = [...txNorm, ...filteredDues].sort(
           (a, b) => new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime()
         );
         setAllTxRows(combined);
@@ -288,13 +320,19 @@ export default function MemberAccount() {
 
   // Filter hosting records assigned to this member
   const memberHostingSchedule = useMemo(() => {
+    const fName = (memberProfile?.member?.firstName || "").toLowerCase().trim();
+    const lName = (memberProfile?.member?.lastName || "").toLowerCase().trim();
+    const nameTokens = [fName, lName].filter((p) => p.length >= 2);
+
     return hostingSchedule.filter((h) => {
-      const hostLower = (h.hostMember || "").toLowerCase();
-      if (memberFullName && hostLower.includes(memberFullName)) return true;
+      const hostLower = (h.hostMember || "").toLowerCase().trim();
+      if (!hostLower) return false;
+      if (memberFullName && (hostLower.includes(memberFullName) || memberFullName.includes(hostLower))) return true;
+      if (nameTokens.length > 0 && nameTokens.every((t) => hostLower.includes(t))) return true;
       if (memberKey && hostLower.includes((memberKey || "").toLowerCase())) return true;
       return false;
     });
-  }, [hostingSchedule, memberFullName, memberKey]);
+  }, [hostingSchedule, memberFullName, memberKey, memberProfile]);
 
   const hostingDisplay = useMemo(() => {
     // Prefer live schedule data from the hostingSchedule table
@@ -319,8 +357,11 @@ export default function MemberAccount() {
         { title: "Outstanding", subtitle: "Due", value: "...", delta: "loading", trend: "down", icon: FiDollarSign },
       ];
     }
-    const dues = memberProfile.monthlyDues || [];
-    const currentBalance = dues.length > 0 ? dues[dues.length - 1].duesPaid ?? 0 : 0;
+    const currentBalance = liveBalance !== null
+      ? liveBalance
+      : (memberProfile.member.balance ?? 0);
+    const balanceDelta = currentBalance < 0 ? "Owed" : currentBalance > 0 ? "Excess" : "Settled";
+    const balanceTrend = currentBalance < 0 ? "down" : "up";
 
     const unifiedTotalPaid = allTxRows
       .filter((r) => r.isDue)
@@ -340,13 +381,13 @@ export default function MemberAccount() {
     const pct = memberProfile.member.attendancePct ?? "0";
 
     return [
-      { title: "My Balance", subtitle: "Current", value: formatCurrency(currentBalance), delta: "Current", trend: "up", icon: FiDollarSign },
+      { title: "My Balance", subtitle: "Current", value: formatCurrency(currentBalance), delta: balanceDelta, trend: balanceTrend, icon: FiDollarSign },
       { title: "Total Paid", subtitle: "All Dues (Unified)", value: formatCurrency(unifiedTotalPaid), delta: "All Sources", trend: "up", icon: FiDollarSign },
       { title: "Scheduled Hosting", subtitle: "Hosting Month", value: hostingDisplay, delta: "Schedule", trend: "up", icon: FiCalendar },
       { title: "Meetings Attended", subtitle: `${pct}% Attendance Rate`, value: `${count} / ${totalM}`, delta: `${pct}%`, trend: "up", icon: FiUserCheck },
       { title: "Outstanding", subtitle: "Dues Balance", value: formatCurrency(outstanding), delta: outstandingDelta, trend: outstandingTrend, icon: FiDollarSign },
     ];
-  }, [memberProfile, allTxRows, hostingDisplay]);
+  }, [memberProfile, liveBalance, allTxRows, hostingDisplay]);
 
 
   // Build attendance map for selected year from live database records
