@@ -40,6 +40,19 @@ jobs:
         with:
           project_id: ${{ env.PROJECT_ID }}
 
+      - name: Pre-pull base images (with retry)
+        run: |
+          for image in node:22-slim nginx:alpine; do
+            for i in 1 2 3 4 5; do
+              if docker pull "$image"; then
+                echo "✅ Pulled $image"
+                break
+              fi
+              echo "Retry $i/5 for $image..."
+              sleep $((i * 10))
+            done
+          done
+
       - name: Build and Push WEB Docker Image
         id: build_web
         run: |
@@ -98,6 +111,19 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ env.PROJECT_ID }}
+
+      - name: Pre-pull base images (with retry)
+        run: |
+          for image in node:22-bookworm-slim; do
+            for i in 1 2 3 4 5; do
+              if docker pull "$image"; then
+                echo "✅ Pulled $image"
+                break
+              fi
+              echo "Retry $i/5 for $image..."
+              sleep $((i * 10))
+            done
+          done
 
       - name: Build and Push API Docker Image
         id: build_api
