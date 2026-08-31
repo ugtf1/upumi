@@ -75,6 +75,53 @@ async function fullNameForUser(userId: string) {
   return [user.fName, user.lName].filter(Boolean).join(' ') || user.phone;
 }
 
+async function resolveMemberRecordId(rawId: string): Promise<string> {
+  // 1. Direct match on MemberRecord.id
+  const direct = await prisma.memberRecord.findUnique({
+    where: { id: rawId },
+    select: { id: true },
+  }).catch(() => null);
+  if (direct) return direct.id;
+
+  // 2. Match on userId or memberKey
+  const byUserOrKey = await prisma.memberRecord.findFirst({
+    where: {
+      OR: [
+        { userId: rawId },
+        { memberKey: rawId },
+        { memberKey: `user.${rawId}` },
+      ],
+    },
+    select: { id: true },
+  }).catch(() => null);
+  if (byUserOrKey) return byUserOrKey.id;
+
+  // 3. If rawId is a User.id, create or link a MemberRecord for that User
+  const user = await prisma.user.findUnique({
+    where: { id: rawId },
+  }).catch(() => null);
+
+  if (user) {
+    const created = await prisma.memberRecord.create({
+      data: {
+        userId: user.id,
+        memberKey: `user.${user.id}`,
+        firstName: user.fName ?? '',
+        lastName: user.lName ?? '',
+        email: user.email ?? '',
+        phone: user.phone ?? '',
+        joined: user.dateJoined ? String(user.dateJoined) : null,
+        status: user.status ?? 'Active',
+        rawJson: JSON.stringify({}),
+      },
+      select: { id: true },
+    });
+    return created.id;
+  }
+
+  return rawId;
+}
+
 async function sanitizeData(table: TableName, body: any, partial = false) {
   const present = (key: string) => Object.prototype.hasOwnProperty.call(body, key);
   const pick = (key: string, convert = (v: any) => v) =>
@@ -163,15 +210,20 @@ async function sanitizeData(table: TableName, body: any, partial = false) {
         ...pick('year', Number),
         ...pick('balance', money),
       };
-    case 'memberYearlyBalances':
+    case 'memberYearlyBalances': {
       if (!partial) {
         z.object({ memberRecordId: z.string().min(1), year: z.number() }).parse(body);
       }
+      let memberRecordId = body.memberRecordId ? String(body.memberRecordId) : undefined;
+      if (memberRecordId) {
+        memberRecordId = await resolveMemberRecordId(memberRecordId);
+      }
       return {
-        ...pick('memberRecordId', String),
+        ...(memberRecordId ? { memberRecordId } : {}),
         ...pick('year', Number),
         ...pick('balance', money),
       };
+    }
     default:
       return {};
   }
@@ -243,6 +295,21 @@ async function listRows(table: TableName) {
 
 async function createRow(table: TableName, data: Record<string, any>) {
   const delegate = prismaAny[TABLES[table]];
+
+  if (table === 'memberYearlyBalances' && data.memberRecordId && data.year != null) {
+    return await delegate.upsert({
+      where: {
+        memberRecordId_year: {
+          memberRecordId: data.memberRecordId,
+          year: data.year,
+        },
+      },
+      update: {
+        balance: data.balance ?? 0,
+      },
+      create: data,
+    });
+  }
 
   try {
     return await delegate.create({ data, ...(selectFor(table) ? { select: selectFor(table) } : {}) });
