@@ -197,6 +197,8 @@ type ApiMemberDetail = {
   status?: string | null;
   goodStanding?: string | null;
   financialGoodStanding?: string | null;
+  raffleUpumi?: number | null;
+  raffleUpua?: number | null;
   monthlyDues?: ApiMonthlyDue[];
   userId?: string | null;
   user?: { id: string } | null;
@@ -438,7 +440,7 @@ export default function MemberViewPage() {
         if (active) setTxLoading(false);
       });
 
-    const hostingPromise = apiGet<{ id: string; year: number; month: number; hostMember: string }[]>("/admin/database/hosting-schedule")
+    const hostingPromise = apiGet<{ id: string; year: number; month: number; hostMember: string }[]>("/admin/database/hostingSchedules")
       .then((rows) => {
         if (!active) return;
         // Filter to rows where this member's name appears
@@ -1024,10 +1026,53 @@ export default function MemberViewPage() {
     ? memberProfile.monthlyDues
     : "$20";
 
+  const memberFirstLast = `${memberRaw.firstName ?? ""} ${memberRaw.lastName ?? ""}`.toLowerCase().trim();
+  const targetUserId = memberRaw.userId ?? memberRaw.user?.id ?? memberUserId ?? null;
+
+  const hostingDisplay = useMemo(() => {
+    const MONTH_ABBRS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const sched = hostingSchedule.find((h) => {
+      const host = (h.hostMember || "").toLowerCase().trim();
+      return host && memberFirstLast && (host.includes(memberFirstLast) || memberFirstLast.includes(host));
+    });
+    if (sched && sched.year && sched.month) {
+      return `${MONTH_ABBRS[sched.month - 1]}, ${sched.year}`;
+    }
+    return memberRaw.hosting && memberRaw.hosting !== "None" ? memberRaw.hosting : "None";
+  }, [hostingSchedule, memberFirstLast, memberRaw.hosting]);
+
+  const raffleUpumiAmount = useMemo(() => {
+    const fromRecord = Number(memberRaw.raffleUpumi ?? 0);
+    const fromTxs = rawTransactions
+      .filter((tx) => {
+        const titleClean = (tx.title || "").toLowerCase();
+        if (!titleClean.includes("raffle") || titleClean.includes("upua")) return false;
+        if (targetUserId && tx.userId && tx.userId === targetUserId) return true;
+        const txName = (tx.fullName || "").toLowerCase().trim();
+        return memberFirstLast && txName && (txName.includes(memberFirstLast) || memberFirstLast.includes(txName));
+      })
+      .reduce((sum, tx) => sum + Number(tx.amount ?? 0), 0);
+    return Math.max(fromRecord, fromTxs);
+  }, [memberRaw.raffleUpumi, rawTransactions, targetUserId, memberFirstLast]);
+
+  const raffleUpuaAmount = useMemo(() => {
+    const fromRecord = Number(memberRaw.raffleUpua ?? 0);
+    const fromTxs = rawTransactions
+      .filter((tx) => {
+        const titleClean = (tx.title || "").toLowerCase();
+        if (!titleClean.includes("raffle") || !titleClean.includes("upua")) return false;
+        if (targetUserId && tx.userId && tx.userId === targetUserId) return true;
+        const txName = (tx.fullName || "").toLowerCase().trim();
+        return memberFirstLast && txName && (txName.includes(memberFirstLast) || memberFirstLast.includes(txName));
+      })
+      .reduce((sum, tx) => sum + Number(tx.amount ?? 0), 0);
+    return Math.max(fromRecord, fromTxs);
+  }, [memberRaw.raffleUpua, rawTransactions, targetUserId, memberFirstLast]);
+
   const summaryCards: SummaryCard[] = [
     { label: "Monthly Dues", value: monthlyDuesDisplay },
     { label: "Total Paid", value: `$${totalPaidFromAllSources.toLocaleString()}`, tone: "success" },
-    { label: "Scheduled Hosting", value: memberProfile.hosting || "None" },
+    { label: "Scheduled Hosting", value: hostingDisplay },
     { label: "Attendance", value: memberProfile.attendance || "0 Meetings", tone: "success" },
     {
       label: "Outstanding",
@@ -1226,6 +1271,14 @@ export default function MemberViewPage() {
                 <span className="member-view-page__info-label">Insurance</span>
                 <span className="member-view-page__info-value">{memberRaw.insurance || "—"}</span>
               </div>
+              <div className="member-view-page__info-item">
+                <span className="member-view-page__info-label">Raffle (UPUMI Fundraiser)</span>
+                <span className="member-view-page__info-value">${raffleUpumiAmount.toLocaleString()}</span>
+              </div>
+              <div className="member-view-page__info-item">
+                <span className="member-view-page__info-label">Raffle (UPUA Convention)</span>
+                <span className="member-view-page__info-value">${raffleUpuaAmount.toLocaleString()}</span>
+              </div>
             </div>
 
             {/* ── Attendance Month Grid ─────────────────────────────── */}
@@ -1316,8 +1369,10 @@ export default function MemberViewPage() {
 
             {/* ── Hosting Schedule ──────────────────────────────────── */}
             {(() => {
-              const memberFirstLast = `${memberRaw.firstName ?? ""} ${memberRaw.lastName ?? ""}`.toLowerCase().trim();
-              const myHosting = hostingSchedule.filter(h => h.hostMember.toLowerCase().includes(memberFirstLast) && memberFirstLast.length > 0);
+              const myHosting = hostingSchedule.filter((h) => {
+                const host = (h.hostMember || "").toLowerCase().trim();
+                return host && memberFirstLast && (host.includes(memberFirstLast) || memberFirstLast.includes(host));
+              });
               if (myHosting.length === 0) return null;
               return (
                 <>
@@ -1333,6 +1388,23 @@ export default function MemberViewPage() {
                 </>
               );
             })()}
+
+            {/* ── Raffle Tickets ────────────────────────────────────── */}
+            {(raffleUpumiAmount > 0 || raffleUpuaAmount > 0) && (
+              <>
+                <div className="member-view-page__section-divider"><span>Raffle Tickets</span></div>
+                <div className="member-view-page__hosting-list">
+                  <div className="member-view-page__hosting-item">
+                    <FiCreditCard size={15} />
+                    <span>UPUMI Fundraiser Raffle: <strong>${raffleUpumiAmount.toLocaleString()}</strong></span>
+                  </div>
+                  <div className="member-view-page__hosting-item">
+                    <FiCreditCard size={15} />
+                    <span>UPUA Convention Raffle: <strong>${raffleUpuaAmount.toLocaleString()}</strong></span>
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* ── Member Yearly Balance ────────────────────────────────────── */}
             {(() => {
