@@ -281,13 +281,43 @@ export default function MemberPage() {
     return { presentMonths, presentCount: presentMonths.filter(Boolean).length };
   }
 
+  function renderValueWithMinusColor(
+    val: string | number | null | undefined,
+    extraStyle?: React.CSSProperties
+  ): React.ReactNode {
+    if (val === null || val === undefined) return null;
+    const str = String(val);
+    const isMar2027 = str.includes("Mar, 2027") || str.includes("March, 2027") || str.includes("Mar 2027");
+    const hasMinus = str.includes("-");
+
+    if (isMar2027) {
+      return (
+        <span style={{ color: "#e11d48", fontWeight: 800, textShadow: "0 0 1px rgba(225, 29, 72, 0.2)", ...extraStyle }}>
+          {str}
+        </span>
+      );
+    }
+    if (hasMinus) {
+      return (
+        <span style={{ color: "#dc2626", fontWeight: 700, ...extraStyle }}>
+          {str}
+        </span>
+      );
+    }
+    return extraStyle ? <span style={extraStyle}>{str}</span> : str;
+  }
+
   // Get live hosting schedule for a member from the hosting table.
   function getMemberHosting(member: MemberListItem): string {
     const MONTH_ABBRS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const memberName = member.name.toLowerCase().trim();
+    const nameTokens = memberName.split(/\s+/).filter((p) => p.length >= 2);
     const sched = hostingSchedules.find((h) => {
       const host = (h.hostMember || "").toLowerCase().trim();
-      return host && (host.includes(memberName) || memberName.includes(host));
+      if (!host) return false;
+      if (host.includes(memberName) || memberName.includes(host)) return true;
+      if (nameTokens.length > 0 && nameTokens.every((t) => host.includes(t))) return true;
+      return false;
     });
     if (sched && sched.year && sched.month) {
       return `${MONTH_ABBRS[sched.month - 1]}, ${sched.year}`;
@@ -571,7 +601,7 @@ export default function MemberPage() {
 
                   <div className="member-page__email">
                     <strong>Balance</strong>
-                    <span>{formatCurrency(member.balance)}</span>
+                    <span>{renderValueWithMinusColor(formatCurrency(member.balance))}</span>
                   </div>
 
                   <a className="member-page__phone" href={`tel:${member.phone.replace(/\s+/g, "")}`}>
@@ -584,7 +614,7 @@ export default function MemberPage() {
                       <span className="member-page__check member-page__check--blue">
                         <FiCalendar size={14} />
                       </span>
-                      <strong>{getMemberHosting(member)}</strong>
+                      <strong>{renderValueWithMinusColor(getMemberHosting(member))}</strong>
                     </div>
                   </div>
 

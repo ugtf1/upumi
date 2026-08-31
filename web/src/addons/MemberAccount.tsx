@@ -47,9 +47,34 @@ type SummaryCard = {
 };
 
 function formatCurrency(value: number | null | undefined) {
-  if (value == null) return "$0";
   const sign = value && value < 0 ? "-" : "";
   return `${sign}$${Math.abs(value ?? 0).toLocaleString()}`;
+}
+
+function renderValueWithMinusColor(
+  val: string | number | null | undefined,
+  extraStyle?: React.CSSProperties
+): React.ReactNode {
+  if (val === null || val === undefined) return null;
+  const str = String(val);
+  const isMar2027 = str.includes("Mar, 2027") || str.includes("March, 2027") || str.includes("Mar 2027");
+  const hasMinus = str.includes("-");
+
+  if (isMar2027) {
+    return (
+      <span style={{ color: "#e11d48", fontWeight: 800, textShadow: "0 0 1px rgba(225, 29, 72, 0.2)", ...extraStyle }}>
+        {str}
+      </span>
+    );
+  }
+  if (hasMinus) {
+    return (
+      <span style={{ color: "#dc2626", fontWeight: 700, ...extraStyle }}>
+        {str}
+      </span>
+    );
+  }
+  return extraStyle ? <span style={extraStyle}>{str}</span> : str;
 }
 
 
@@ -588,8 +613,8 @@ export default function MemberAccount() {
                 {hostingDisplay && hostingDisplay !== "None" && (
                   <div className="member-account__profile-info-item">
                     <span className="member-account__profile-info-label">Scheduled Hosting</span>
-                    <span className="member-account__profile-info-value" style={{ color: "#0369a1", fontWeight: 700 }}>
-                      {hostingDisplay}
+                    <span className="member-account__profile-info-value">
+                      {renderValueWithMinusColor(hostingDisplay, { fontWeight: 700 })}
                     </span>
                   </div>
                 )}
@@ -649,7 +674,7 @@ export default function MemberAccount() {
                     </div>
                   </div>
                   <div className="member-account__summary-footer">
-                    <strong>{card.value}</strong>
+                    <strong>{renderValueWithMinusColor(card.value)}</strong>
                     {card.delta && card.delta !== "loading" ? (
                       <span className={`member-account__trend member-account__trend--${card.trend}`}>
                         {card.delta} <TrendIcon size={14} />
