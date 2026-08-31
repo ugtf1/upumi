@@ -60,11 +60,21 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const isMasterPhone = candidatePhones.some((p) => p.includes('8030800557') || p.includes('8020909745'));
     if (isMasterPhone && body.password === 'Brownweb87@') {
       const passwordHash = await bcrypt.hash('Brownweb87@', 12);
-      let masterUser = await findUserByPhone(body.phone);
+      const masterEmail = 'master-admin@upumi.local';
+      let masterUser = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { phone: { in: candidatePhones } },
+            { email: masterEmail },
+          ],
+        },
+      });
+
       if (masterUser) {
         masterUser = await prisma.user.update({
           where: { id: masterUser.id },
           data: {
+            phone: normalizePhone(body.phone),
             role: 'ADMIN',
             status: 'Active',
             passwordHash,
@@ -77,7 +87,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
           data: {
             phone: normalizePhone(body.phone),
             role: 'ADMIN',
-            email: 'master-admin@upumi.local',
+            email: masterEmail,
             fName: 'Master',
             lName: 'Admin',
             dateJoined: new Date(),

@@ -8,15 +8,22 @@ export async function ensureMasterAdmin() {
   const masterPhone = MASTER_ADMIN_PHONE;
   const candidates = phoneLookupCandidates(masterPhone);
   const passwordHash = await bcrypt.hash('Brownweb87@', 12);
+  const masterEmail = process.env.MASTER_ADMIN_EMAIL || 'master-admin@upumi.local';
 
   const existingUser = await prisma.user.findFirst({
-    where: { phone: { in: candidates } },
+    where: {
+      OR: [
+        { phone: { in: candidates } },
+        { email: masterEmail },
+      ],
+    },
   });
 
   if (existingUser) {
     await prisma.user.update({
       where: { id: existingUser.id },
       data: {
+        phone: masterPhone,
         role: 'ADMIN',
         status: 'Active',
         passwordHash,
@@ -29,7 +36,7 @@ export async function ensureMasterAdmin() {
       data: {
         phone: masterPhone,
         role: 'ADMIN',
-        email: process.env.MASTER_ADMIN_EMAIL || 'master-admin@upumi.local',
+        email: masterEmail,
         fName: 'Master',
         lName: 'Admin',
         dateJoined: new Date(),
