@@ -118,9 +118,13 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
     let hostingDate: string = (rawJson.Hosting as string) ?? (rawJson.hosting as string) ?? 'None';
     if (fullNameStr && hostingSchedules.length > 0) {
       const lowerName = fullNameStr.toLowerCase();
+      const tokens = lowerName.split(/\s+/).filter((p) => p.length >= 2);
       const sched = hostingSchedules.find((h) => {
         const lowerHost = (h.hostMember || '').toLowerCase().trim();
-        return lowerHost && (lowerHost.includes(lowerName) || lowerName.includes(lowerHost));
+        if (!lowerHost) return false;
+        if (lowerHost.includes(lowerName) || lowerName.includes(lowerHost)) return true;
+        if (tokens.length > 0 && tokens.every((t) => lowerHost.includes(t))) return true;
+        return false;
       });
       if (sched && sched.year && sched.month) {
         const mStr = MONTH_ABBRS[sched.month - 1] || 'Jan';
@@ -342,9 +346,13 @@ export const meRoutes: FastifyPluginAsync = async (app) => {
     function formatHostingDate(rawHosting?: string | null, fullName?: string): string {
       if (fullName && hostingSchedules.length > 0) {
         const lowerName = fullName.toLowerCase().trim();
+        const tokens = lowerName.split(/\s+/).filter((p) => p.length >= 2);
         const sched = hostingSchedules.find((h) => {
           const lowerHost = (h.hostMember || '').toLowerCase().trim();
-          return lowerHost && (lowerHost.includes(lowerName) || lowerName.includes(lowerHost));
+          if (!lowerHost) return false;
+          if (lowerHost.includes(lowerName) || lowerName.includes(lowerHost)) return true;
+          if (tokens.length > 0 && tokens.every((t) => lowerHost.includes(t))) return true;
+          return false;
         });
         if (sched && sched.year && sched.month) {
           const mStr = MONTH_ABBRS[sched.month - 1] || 'Jan';

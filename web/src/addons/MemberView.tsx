@@ -155,22 +155,28 @@ function formatCurrencyAmount(value?: number | null): string {
   return `${sign}$${Math.abs(num).toLocaleString()}`;
 }
 
+function renderScheduledHosting(
+  val: string | null | undefined,
+  extraStyle?: React.CSSProperties
+): React.ReactNode {
+  if (!val || val === "None" || val === "-") {
+    return <span style={{ color: "#94a3b8", fontWeight: 400, ...extraStyle }}>{val || "None"}</span>;
+  }
+  return (
+    <span style={{ color: "#e11d48", fontWeight: 800, textShadow: "0 0 1px rgba(225, 29, 72, 0.2)", ...extraStyle }}>
+      {val}
+    </span>
+  );
+}
+
 function renderValueWithMinusColor(
   val: string | number | null | undefined,
   extraStyle?: React.CSSProperties
 ): React.ReactNode {
   if (val === null || val === undefined) return null;
   const str = String(val);
-  const isMar2027 = str.includes("Mar, 2027") || str.includes("March, 2027") || str.includes("Mar 2027");
   const hasMinus = str.includes("-");
 
-  if (isMar2027) {
-    return (
-      <span style={{ color: "#e11d48", fontWeight: 800, textShadow: "0 0 1px rgba(225, 29, 72, 0.2)", ...extraStyle }}>
-        {str}
-      </span>
-    );
-  }
   if (hasMinus) {
     return (
       <span style={{ color: "#dc2626", fontWeight: 700, ...extraStyle }}>
@@ -1264,7 +1270,11 @@ export default function MemberViewPage() {
                 {summaryCards.map((card) => (
                   <div key={card.label} className="member-view-page__summary-card">
                     <span>{card.label}</span>
-                    <strong className={card.tone ? `is-${card.tone}` : ""}>{renderValueWithMinusColor(card.value)}</strong>
+                    <strong className={card.tone ? `is-${card.tone}` : ""}>
+                      {card.label === "Scheduled Hosting"
+                        ? renderScheduledHosting(card.value)
+                        : renderValueWithMinusColor(card.value)}
+                    </strong>
                   </div>
                 ))}
               </div>

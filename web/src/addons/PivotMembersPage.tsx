@@ -29,6 +29,17 @@ function money(v: number | null | undefined) {
   return `${sign}$${Math.abs(v).toLocaleString()}`;
 }
 
+function renderScheduledHosting(val: string | null | undefined) {
+  if (!val || val === "None" || val === "-" || val === "—") {
+    return <span style={{ color: "#94a3b8", fontWeight: 400 }}>{val || "—"}</span>;
+  }
+  return (
+    <span style={{ color: "#e11d48", fontWeight: 800, textShadow: "0 0 1px rgba(225, 29, 72, 0.2)" }}>
+      {val}
+    </span>
+  );
+}
+
 export default function PivotMembersPage() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [rows, setRows] = useState<PivotRow[]>([]);
@@ -205,7 +216,7 @@ export default function PivotMembersPage() {
                           const negative = (r.balanceYear ?? 0) < 0;
                           return (
                             <tr key={r.id}>
-                              <td style={td}>{r.hosting ?? "—"}</td>
+                              <td style={td}>{renderScheduledHosting(r.hosting)}</td>
                               <td style={td}>
                                 <button
                                   type="button"
