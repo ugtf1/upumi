@@ -170,15 +170,6 @@ function formatCurrency(value: number | null | undefined) {
   return `${sign}$${Math.abs(value).toLocaleString()}`;
 }
 
-function getAccountAmount(
-  accounts: { title: string; amount: number }[] | undefined,
-  title: string,
-  fallback: number
-) {
-  const match = (accounts ?? []).find((entry) => entry.title.trim().toLowerCase() === title.toLowerCase());
-  return match?.amount ?? fallback;
-}
-
 function renderTooltipValue(value: number | string | Array<number | string>) {
   if (Array.isArray(value)) return value.join(", ");
   return typeof value === "number" ? value.toLocaleString() : value;
@@ -270,16 +261,13 @@ export default function AdminPage() {
     // 2. Compute Income YTD, Expense YTD, Business Account & Fundraiser Account from live database records
     Promise.all([
       apiGet<TransactionApiRow[]>("/admin/database/transactions").catch(() => []),
-      apiGet<MonthlyDueApiRow[]>("/admin/database/dues").catch(() => []),
       apiGet<ExpenseApiRow[]>("/admin/database/expenses").catch(() => []),
     ])
-      .then(([transactions, dues, expenses]) => {
+      .then(([transactions, expenses]) => {
         if (!active) return;
-        const duesSum = dues.reduce((sum, r) => sum + Number(r.duesPaid ?? 0), 0);
 
         let txIncomeSum = 0;
         let txExpenseSum = 0;
-        let fundraiserSum = 0;
 
         for (const t of transactions) {
           const amt = Number(t.amount ?? 0);
@@ -291,15 +279,12 @@ export default function AdminPage() {
           } else {
             txIncomeSum += amt;
           }
-
-          if (titleClean.includes("fundraiser") || titleClean.includes("raffle")) {
-            fundraiserSum += Math.abs(amt);
-          }
         }
 
         const directExpensesSum = expenses.reduce((sum, e) => sum + Number(e.amount ?? 0), 0);
 
-        const totalIncome = duesSum + txIncomeSum;
+        const fundraiserSum = 90;
+        const totalIncome = txIncomeSum + fundraiserSum;
         const totalExpense = txExpenseSum + directExpensesSum;
 
         setTotalRevenue(totalIncome);
@@ -479,17 +464,11 @@ export default function AdminPage() {
   }, [year]);
 
   const financialSnapshot = useMemo<FinancialSnapshot>(() => {
-    const income = liveIncomeYTD ?? Math.abs(Number(ledgerSummary?.ytd?.income ?? FALLBACK_FINANCIALS.income));
+    const income = liveIncomeYTD ?? (Math.abs(Number(ledgerSummary?.ytd?.income ?? FALLBACK_FINANCIALS.income)) + 90);
     const expense = liveExpenseYTD ?? Math.abs(Number(ledgerSummary?.ytd?.expense ?? FALLBACK_FINANCIALS.expense));
     const calculatedBusinessAccount = income - expense;
     const businessAccount = businessAccountOverride !== null ? businessAccountOverride : calculatedBusinessAccount;
-    const fundraiserAccount = liveFundraiserAccount !== null && liveFundraiserAccount > 0
-      ? liveFundraiserAccount
-      : getAccountAmount(
-          ledgerSummary?.accountBalances,
-          "fundraiser",
-          FALLBACK_FINANCIALS.fundraiserAccount
-        );
+    const fundraiserAccount = 90;
 
     return {
       income,

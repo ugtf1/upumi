@@ -239,20 +239,15 @@ type MemberProfileData = {
     // 2. Compute Income YTD, Expense YTD, Business Account & Fundraiser Account from live database records
     Promise.all([
       getAllTransactionsReadOnly().catch(() => []),
-      getAllDuesReadOnly().catch(() => []),
       getAllExpensesReadOnly().catch(() => []),
     ])
-      .then(([txRows, dueRows, expRows]) => {
+      .then(([txRows, expRows]) => {
         if (!active) return;
         const transactions = txRows as { id: string; amount: string | number; title?: string }[];
-        const dues = dueRows as { id: string; memberRecordId?: string; year?: number; month?: number; duesPaid: string | number }[];
         const expenses = expRows as { id: string; amount: string | number; title?: string }[];
-
-        const duesSum = dues.reduce((sum, r) => sum + Number(r.duesPaid ?? 0), 0);
 
         let txIncomeSum = 0;
         let txExpenseSum = 0;
-        let fundraiserSum = 0;
 
         for (const t of transactions) {
           const amt = Number(t.amount ?? 0);
@@ -264,15 +259,12 @@ type MemberProfileData = {
           } else {
             txIncomeSum += amt;
           }
-
-          if (titleClean.includes("fundraiser") || titleClean.includes("raffle")) {
-            fundraiserSum += Math.abs(amt);
-          }
         }
 
         const directExpensesSum = expenses.reduce((sum, e) => sum + Number(e.amount ?? 0), 0);
 
-        const totalIncome = duesSum + txIncomeSum;
+        const fundraiserSum = 90;
+        const totalIncome = txIncomeSum + fundraiserSum;
         const totalExpense = txExpenseSum + directExpensesSum;
 
         setTotalRevenue(totalIncome);

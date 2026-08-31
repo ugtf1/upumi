@@ -115,21 +115,6 @@ const TRANSACTION_TITLE_OPTIONS = [
   "Others",
 ];
 
-const MONTH_OPTIONS = [
-  { value: 1, label: "January" },
-  { value: 2, label: "February" },
-  { value: 3, label: "March" },
-  { value: 4, label: "April" },
-  { value: 5, label: "May" },
-  { value: 6, label: "June" },
-  { value: 7, label: "July" },
-  { value: 8, label: "August" },
-  { value: 9, label: "September" },
-  { value: 10, label: "October" },
-  { value: 11, label: "November" },
-  { value: 12, label: "December" },
-];
-
 // YEAR_OPTIONS removed (previously [2024, 2025, 2026, 2027]) — unused variable eliminated to satisfy lint rules
 
 export default function TransactionPage() {
@@ -267,61 +252,36 @@ export default function TransactionPage() {
     setTxLoading(true);
     setTxError(null);
 
-    Promise.all([
-      apiGet<TransactionApiRow[]>("/admin/database/transactions"),
-      apiGet<any[]>("/admin/database/dues"),
-    ])
-      .then(([txRows, dueRows]) => {
+    apiGet<TransactionApiRow[]>("/admin/database/transactions")
+      .then((txRows) => {
         if (!active) return;
 
-        const txNormalized: TransactionRow[] = txRows.map((row) => ({
-          id: row.id,
-          date: new Date(row.date).toLocaleDateString("en-GB", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-          }),
-          fullName: row.fullName,
-          title: row.title,
-          description: row.description ?? "",
-          amount: `$${Number(row.amount).toLocaleString()}`,
-          status: "Completed",
-          rawDate: row.date,
-          rawAmount: Number(row.amount),
-          userId: row.userId ?? undefined,
-          isDue: false,
-        }));
-
-        const dueNormalized: TransactionRow[] = dueRows.map((row) => {
-          const monthName = MONTH_OPTIONS.find((m) => m.value === row.month)?.label ?? String(row.month);
-          const fullName = row.member
-            ? [row.member.firstName, row.member.lastName].filter(Boolean).join(" ") || row.member.email || row.member.phone || "Unnamed member"
-            : "Unnamed member";
-
+        const txNormalized: TransactionRow[] = txRows.map((row) => {
+          const isDue = (row.title || "").toLowerCase().includes("due");
           return {
             id: row.id,
-            date: new Date(row.createdAt).toLocaleDateString("en-GB", {
+            date: new Date(row.date).toLocaleDateString("en-GB", {
               day: "2-digit",
               month: "short",
               year: "numeric",
             }),
-            fullName,
-            title: `Monthly Dues - ${monthName} ${row.year}`,
-            description: `Dues payment for ${monthName} ${row.year}`,
-            amount: `$${Number(row.duesPaid).toLocaleString()}`,
+            fullName: row.fullName,
+            title: row.title,
+            description: row.description ?? "",
+            amount: `$${Number(row.amount).toLocaleString()}`,
             status: "Completed",
-            rawDate: row.createdAt,
-            rawAmount: Number(row.duesPaid),
-            isDue: true,
-            memberRecordId: row.memberRecordId,
+            rawDate: row.date,
+            rawAmount: Number(row.amount),
+            userId: row.userId ?? undefined,
+            isDue,
           };
         });
 
-        const combined = [...txNormalized, ...dueNormalized].sort(
+        const sorted = txNormalized.sort(
           (a, b) => new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime()
         );
 
-        setTransactionRows(combined);
+        setTransactionRows(sorted);
       })
       .catch((error: Error) => {
         if (!active) return;
