@@ -64,6 +64,7 @@ async function main() {
   await app.register(adminRoutes, { prefix: '/api/admin' });
   await app.register(adminDatabaseRoutes, { prefix: '/api/admin/database' });
   await app.register(memberDatabaseRoutes, { prefix: '/api/members/database' });
+  await app.register(memberDatabaseRoutes, { prefix: '/members/database' });
   await app.register(meetingRoutes, { prefix: '/api/admin' });
   await app.register(memberMeetingRoutes, { prefix: '/api/members' });
 
@@ -93,9 +94,9 @@ try {
     decorateReply: true,
   });
 
-  // ---- SPA fallback: never return HTML for /api/* ----
+  // ---- SPA fallback: never return HTML for /api/* or /members/* ----
   app.setNotFoundHandler(async (req, reply) => {
-    if (req.url.startsWith('/api/')) {
+    if (req.url.startsWith('/api/') || req.url.startsWith('/members/')) {
       return reply.code(404).send({ error: 'Not Found' });
     }
     return reply.type('text/html').sendFile('index.html');

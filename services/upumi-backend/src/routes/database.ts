@@ -381,7 +381,446 @@ export const adminDatabaseRoutes: FastifyPluginAsync = async (app) => {
   });
 };
 
+function parseRawJson(raw: unknown): Record<string, any> {
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw as Record<string, any>;
+  if (typeof raw !== 'string') return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, any>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function strCell(value: unknown): string | null {
+  const text = String(value ?? '').trim();
+  return text || null;
+}
+
+function rawMoney(raw: Record<string, any>, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = raw[key];
+    if (value === null || value === undefined || value === '') continue;
+    const numeric = Number(String(value).replace(/[^0-9.-]/g, ''));
+    if (Number.isFinite(numeric)) return numeric;
+  }
+  return null;
+}
+
+function computeFinancialGoodStanding(balanceValue: number | null | undefined, fallbackValue?: string | null): string {
+  if (balanceValue !== null && balanceValue !== undefined && Number.isFinite(Number(balanceValue))) {
+    return Number(balanceValue) <= -240 ? 'No' : 'Yes';
+  }
+  if (fallbackValue) {
+    const v = String(fallbackValue).trim().toLowerCase();
+    if (v === 'no' || v === 'bad' || v === 'inactive' || v === 'false' || v === '0') return 'No';
+    if (v === 'yes' || v === 'good' || v === 'active' || v === 'true' || v === '1') return 'Yes';
+    const num = Number(v.replace(/[^0-9.-]/g, ''));
+    if (Number.isFinite(num)) return num <= -240 ? 'No' : 'Yes';
+  }
+  return 'Yes';
+}
+
+async function searchMembers(queryTerm?: string) {
+  const currentYearNum = new Date().getFullYear();
+  const currentMonthNum = new Date().getMonth() + 1;
+  const expectedDuesSoFar = currentMonthNum * 20;
+
+  const rows = await prisma.memberRecord.findMany({
+    orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+    select: {
+      id: true,
+      memberKey: true,
+      status: true,
+      title: true,
+      firstName: true,
+      lastName: true,
+      joined: true,
+      phone: true,
+      email: true,
+      goodStanding: true,
+      financialGoodStanding: true,
+      voter: true,
+      attendancePct: true,
+      rawJson: true,
+      userId: true,
+      user: {
+        select: {
+          id: true,
+          phone: true,
+          email: true,
+          fName: true,
+          lName: true,
+          status: true,
+          dateJoined: true,
+          voteRole: true,
+        },
+      },
+    },
+  });
+
+  const userOnlyRows = await prismaAny.user.findMany({
+    where: {
+      role: 'MEMBER',
+      memberRecord: { is: null },
+    },
+    orderBy: [{ lName: 'asc' }, { fName: 'asc' }],
+    select: {
+      id: true,
+      phone: true,
+      email: true,
+      fName: true,
+      lName: true,
+      status: true,
+      dateJoined: true,
+      voteRole: true,
+    },
+  });
+
+  const allYearlyBalances = await prismaAny.memberYearlyBalance.findMany({
+    select: { memberRecordId: true, year: true, balance: true },
+  }).catch(() => []);
+
+  const hostingSchedules = await prisma.hostingSchedule.findMany({
+    select: { year: true, month: true, hostMember: true },
+  }).catch(() => []);
+
+  const allTransactions = await prisma.transaction.findMany({
+    select: { userId: true, fullName: true, title: true, amount: true },
+  }).catch(() => []);
+
+  const MONTH_ABBRS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  function formatHostingDate(rawHosting?: string | null, fullName?: string): string {
+    if (fullName && hostingSchedules.length > 0) {
+      const lowerName = fullName.toLowerCase().trim();
+      const tokens = lowerName.split(/\s+/).filter((p: string) => p.length >= 2);
+      const sched = hostingSchedules.find((h: any) => {
+        const lowerHost = (h.hostMember || '').toLowerCase().trim();
+        if (!lowerHost) return false;
+        if (lowerHost.includes(lowerName) || lowerName.includes(lowerHost)) return true;
+        if (tokens.length > 0 && tokens.every((t: string) => lowerHost.includes(t))) return true;
+        return false;
+      });
+      if (sched && sched.year && sched.month) {
+        const mStr = MONTH_ABBRS[sched.month - 1] || 'Jan';
+        return `${mStr}, ${sched.year}`;
+      }
+    }
+    if (!rawHosting || rawHosting === '-' || rawHosting === 'None') return 'None';
+    if (rawHosting.includes(',') && !rawHosting.includes('-')) return rawHosting;
+    const d = new Date(rawHosting);
+    if (!Number.isNaN(d.getTime())) {
+      const mStr = MONTH_ABBRS[d.getMonth()];
+      return `${mStr}, ${d.getFullYear()}`;
+    }
+    return rawHosting;
+  }
+
+  function calculateMemberTxTotals(userId: string | null | undefined, fullName: string) {
+    const lowerName = fullName.toLowerCase().trim();
+    const userTxs = allTransactions.filter((t: any) => {
+      if (userId && t.userId === userId) return true;
+      if (t.fullName && lowerName && t.fullName.toLowerCase().trim() === lowerName) return true;
+      return false;
+    });
+
+    let duesSum = 0;
+    for (const t of userTxs) {
+      const amt = Number(t.amount ?? 0);
+      const title = (t.title || '').toLowerCase().trim();
+      if (title.includes('due')) duesSum += amt;
+    }
+    return { crntPaid: duesSum };
+  }
+
+  const mappedMemberRecords = rows.map((row: any) => {
+    const raw = parseRawJson(row.rawJson);
+    const firstName = strCell(row.firstName) ?? strCell(row.user?.fName) ?? strCell(raw.First) ?? '';
+    const lastName = strCell(row.lastName) ?? strCell(row.user?.lName) ?? strCell(raw.Last) ?? '';
+    const fullName = `${firstName} ${lastName}`.trim();
+    const phone = strCell(row.phone) ?? strCell(row.user?.phone) ?? strCell(raw.Phone) ?? null;
+    const email = strCell(row.email) ?? strCell(row.user?.email) ?? strCell(raw.Email) ?? null;
+    const status = strCell(row.status) ?? strCell(row.user?.status) ?? 'Active';
+    const voter = strCell(row.voter) ?? strCell(row.user?.voteRole) ?? strCell(raw.Voter) ?? 'No';
+    const joined = strCell(row.joined) ?? strCell(raw.Joined) ?? (row.user?.dateJoined ? new Date(row.user.dateJoined).toISOString().slice(0, 10) : null);
+    const attendancePct = strCell(row.attendancePct) ?? strCell(raw.AttendancePct) ?? '0%';
+
+    const txTotals = calculateMemberTxTotals(row.userId, fullName);
+    const memberBalances = allYearlyBalances.filter((b: any) => b.memberRecordId === row.id);
+    let yearlyBalancesSum = 0;
+    if (memberBalances.length > 0) {
+      yearlyBalancesSum = memberBalances.reduce((acc: number, b: any) => acc + Number(b.balance ?? 0), 0);
+    } else {
+      yearlyBalancesSum = rawMoney(raw, ['2026 balance', '2025 balance', '2024 balance', 'balance', 'Balance']) ?? 0;
+    }
+
+    const outstanding = txTotals.crntPaid - expectedDuesSoFar;
+    const balance = yearlyBalancesSum + outstanding;
+    const financialGoodStanding = computeFinancialGoodStanding(balance, strCell(row.financialGoodStanding) ?? strCell(raw['Financial Good Standing']));
+    const goodStanding = strCell(row.goodStanding) ?? strCell(raw['Good Standing']) ?? financialGoodStanding;
+    const hosting = formatHostingDate(strCell(raw.Hosting) ?? strCell(raw.hosting), fullName);
+
+    return {
+      id: row.id,
+      memberId: row.memberKey || row.id,
+      name: fullName || email || phone || 'Unnamed Member',
+      firstName,
+      lastName,
+      email,
+      phone,
+      status,
+      goodStanding,
+      financialGoodStanding,
+      voter,
+      attendancePct,
+      hosting,
+      balance: `$${balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      balanceRaw: balance,
+      outstanding: `$${outstanding.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      outstandingRaw: outstanding,
+      dateJoined: joined,
+    };
+  });
+
+  const mappedUserOnly = userOnlyRows.map((user: any) => {
+    const firstName = user.fName ?? '';
+    const lastName = user.lName ?? '';
+    const fullName = `${firstName} ${lastName}`.trim();
+    const phone = user.phone ?? null;
+    const email = user.email ?? null;
+    const status = user.status ?? 'Active';
+    const voter = user.voteRole ?? 'No';
+    const joined = user.dateJoined ? new Date(user.dateJoined).toISOString().slice(0, 10) : null;
+    const txTotals = calculateMemberTxTotals(user.id, fullName);
+    const outstanding = txTotals.crntPaid - expectedDuesSoFar;
+    const balance = outstanding;
+    const financialGoodStanding = computeFinancialGoodStanding(balance);
+    const hosting = formatHostingDate(null, fullName);
+
+    return {
+      id: user.id,
+      memberId: user.id,
+      name: fullName || email || phone || 'Unnamed Member',
+      firstName,
+      lastName,
+      email,
+      phone,
+      status,
+      goodStanding: financialGoodStanding,
+      financialGoodStanding,
+      voter,
+      attendancePct: '0%',
+      hosting,
+      balance: `$${balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      balanceRaw: balance,
+      outstanding: `$${outstanding.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      outstandingRaw: outstanding,
+      dateJoined: joined,
+    };
+  });
+
+  const allMembers = [...mappedMemberRecords, ...mappedUserOnly];
+
+  if (!queryTerm || !queryTerm.trim() || queryTerm.trim().toLowerCase() === 'all') {
+    return allMembers;
+  }
+
+  const q = queryTerm.trim().toLowerCase();
+  const tokens = q.split(/\s+/).filter(Boolean);
+
+  return allMembers.filter((m) => {
+    const haystack = [
+      m.name,
+      m.firstName,
+      m.lastName,
+      m.email ?? '',
+      m.phone ?? '',
+      m.status,
+      m.memberId,
+      m.goodStanding,
+      m.financialGoodStanding,
+      m.hosting,
+    ].join(' ').toLowerCase();
+
+    return tokens.every((token) => haystack.includes(token));
+  });
+}
+
+async function getAttendanceHistory(memberId?: string, eventId?: string) {
+  const attendanceRows = await prisma.attendance.findMany({
+    orderBy: [{ year: 'asc' }, { month: 'asc' }],
+  });
+
+  const MONTH_NAMES = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  if (memberId && memberId.trim()) {
+    const rawMemberId = memberId.trim();
+    const lowerMemberId = rawMemberId.toLowerCase();
+
+    const memberRecord = await prisma.memberRecord.findFirst({
+      where: {
+        OR: [
+          { id: rawMemberId },
+          { memberKey: rawMemberId },
+          { userId: rawMemberId },
+          { firstName: { equals: rawMemberId, mode: 'insensitive' } },
+          { lastName: { equals: rawMemberId, mode: 'insensitive' } },
+        ],
+      },
+      include: { user: true },
+    }).catch(() => null);
+
+    const candidateIds: string[] = [lowerMemberId];
+    let memberName = '';
+    let displayId = rawMemberId;
+    let memberObj: any = null;
+
+    if (memberRecord) {
+      displayId = memberRecord.memberKey || memberRecord.id;
+      const fn = memberRecord.firstName || memberRecord.user?.fName || '';
+      const ln = memberRecord.lastName || memberRecord.user?.lName || '';
+      memberName = `${fn} ${ln}`.trim().toLowerCase();
+      candidateIds.push(memberRecord.id.toLowerCase());
+      candidateIds.push(memberRecord.memberKey.toLowerCase());
+      if (memberRecord.userId) candidateIds.push(memberRecord.userId.toLowerCase());
+      if (memberRecord.user?.id) candidateIds.push(memberRecord.user.id.toLowerCase());
+      memberObj = {
+        id: memberRecord.id,
+        memberId: displayId,
+        name: `${fn} ${ln}`.trim() || displayId,
+        email: memberRecord.email || memberRecord.user?.email || null,
+        phone: memberRecord.phone || memberRecord.user?.phone || null,
+        status: memberRecord.status || memberRecord.user?.status || 'Active',
+      };
+    } else {
+      const user = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { id: rawMemberId },
+            { phone: rawMemberId },
+            { email: rawMemberId },
+            { fName: { equals: rawMemberId, mode: 'insensitive' } },
+            { lName: { equals: rawMemberId, mode: 'insensitive' } },
+          ],
+        },
+      }).catch(() => null);
+
+      if (user) {
+        displayId = user.id;
+        memberName = `${user.fName ?? ''} ${user.lName ?? ''}`.trim().toLowerCase();
+        candidateIds.push(user.id.toLowerCase());
+        memberObj = {
+          id: user.id,
+          memberId: user.id,
+          name: `${user.fName ?? ''} ${user.lName ?? ''}`.trim() || user.phone,
+          email: user.email,
+          phone: user.phone,
+          status: user.status,
+        };
+      } else {
+        memberName = lowerMemberId;
+      }
+    }
+
+    let rowsToInspect = attendanceRows;
+    if (eventId && eventId.trim()) {
+      const evLower = eventId.trim().toLowerCase();
+      rowsToInspect = rowsToInspect.filter((att) => {
+        const matchId = att.id.toLowerCase() === evLower;
+        const matchYm = `${att.year}-${att.month}` === evLower || `${att.year}-${String(att.month).padStart(2, '0')}` === evLower;
+        const mName = (MONTH_NAMES[att.month - 1] || '').toLowerCase();
+        const matchName = evLower.includes(mName) && evLower.includes(String(att.year));
+        return matchId || matchYm || matchName;
+      });
+    }
+
+    let attendedCount = 0;
+    const history = rowsToInspect.map((att) => {
+      const usersInList = String(att.usersIn ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+      const attended =
+        candidateIds.some((cid) => usersInList.includes(cid)) ||
+        (memberName.length > 0 && usersInList.some((u) => u.includes(memberName) || memberName.includes(u)));
+      if (attended) attendedCount++;
+
+      return {
+        eventId: att.id,
+        year: att.year,
+        month: att.month,
+        monthName: MONTH_NAMES[att.month - 1] || `Month ${att.month}`,
+        meetingDate: `${MONTH_NAMES[att.month - 1] || att.month} ${att.year}`,
+        attended,
+        totalAttendees: usersInList.length,
+      };
+    });
+
+    const total = rowsToInspect.length;
+    const pct = total > 0 ? `${Math.round((attendedCount / total) * 100)}%` : '0%';
+
+    return {
+      member: memberObj || { memberId: displayId, name: memberName || displayId },
+      totalMeetings: total,
+      meetingsAttended: attendedCount,
+      attendanceRate: pct,
+      history,
+    };
+  }
+
+  if (eventId && eventId.trim()) {
+    const evLower = eventId.trim().toLowerCase();
+    const matched = attendanceRows.filter((att) => {
+      const matchId = att.id.toLowerCase() === evLower;
+      const matchYm = `${att.year}-${att.month}` === evLower || `${att.year}-${String(att.month).padStart(2, '0')}` === evLower;
+      const mName = (MONTH_NAMES[att.month - 1] || '').toLowerCase();
+      const matchName = evLower.includes(mName) && evLower.includes(String(att.year));
+      return matchId || matchYm || matchName;
+    });
+
+    return matched.map((att) => {
+      const usersInList = String(att.usersIn ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+      return {
+        eventId: att.id,
+        year: att.year,
+        month: att.month,
+        monthName: MONTH_NAMES[att.month - 1] || `Month ${att.month}`,
+        meetingDate: `${MONTH_NAMES[att.month - 1] || att.month} ${att.year}`,
+        totalAttendees: usersInList.length,
+        attendees: usersInList,
+      };
+    });
+  }
+
+  return attendanceRows.map((att) => {
+    const usersInList = String(att.usersIn ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+    return {
+      eventId: att.id,
+      year: att.year,
+      month: att.month,
+      monthName: MONTH_NAMES[att.month - 1] || `Month ${att.month}`,
+      meetingDate: `${MONTH_NAMES[att.month - 1] || att.month} ${att.year}`,
+      totalAttendees: usersInList.length,
+    };
+  });
+}
+
 export const memberDatabaseRoutes: FastifyPluginAsync = async (app) => {
+  // Search members endpoint (used by AI assistant and integrations)
+  app.get('/search', { preHandler: requireAuth }, async (req: any) => {
+    const q = req.query?.q ? String(req.query.q) : '';
+    return searchMembers(q);
+  });
+
+  // Attendance history endpoint (used by AI assistant and integrations)
+  app.get('/attendance', { preHandler: requireAuth }, async (req: any) => {
+    const memberId = req.query?.memberId ? String(req.query.memberId) : undefined;
+    const eventId = req.query?.eventId ? String(req.query.eventId) : undefined;
+    return getAttendanceHistory(memberId, eventId);
+  });
+
   app.get('/:table', { preHandler: requireAuth }, async (req: any, reply) => {
     const { table } = TableParamSchema.parse(req.params);
 
@@ -401,3 +840,4 @@ export const memberDatabaseRoutes: FastifyPluginAsync = async (app) => {
     return listRows(table);
   });
 };
+
